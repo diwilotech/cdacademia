@@ -1,0 +1,20 @@
+name = "cdacademia"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# "/", "/login" y "/admin" pasan primero por el Worker (redirige según haya sesión o no).
+run_worker_first = ["/", "/login", "/admin", "/admin.html"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "control-de-academia-db"
+database_id = "REEMPLAZAR_CON_EL_ID_DE_D1"   # wrangler d1 create control-de-academia-db
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "cdacademia-files"             # wrangler r2 bucket create cdacademia-files
+
+# Secreto: wrangler secret put SETUP_KEY  (para crear negocios con POST /api/setup)

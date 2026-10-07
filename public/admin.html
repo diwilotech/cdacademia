@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Academia · Gestión de estudiantes</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/admin.css" rel="stylesheet">
+<!-- El Worker incrusta aquí window.__BOOT__ (estado del negocio) antes de que cargue admin.js -->
+</head>
+<body>
+<div class="d-flex">
+
+  <!-- ===== Barra lateral ===== -->
+  <aside class="sidebar p-3 d-flex flex-column gap-1">
+    <div class="d-flex align-items-center gap-2 mb-4 px-1">
+      <div class="brand-logo"><i class="bi bi-brush"></i></div>
+      <div>
+        <div class="fw-bold lh-1" id="lblNegocio">Studio</div>
+        <small class="text-muted" id="lblRubro">Maquillaje</small>
+      </div>
+    </div>
+    <nav class="nav flex-column gap-1" id="menu">
+      <a class="nav-link active" href="#" data-ir="inicio"><i class="bi bi-grid-1x2"></i> Inicio</a>
+      <a class="nav-link" href="#" data-ir="estudiantes"><i class="bi bi-people"></i> <span data-term="Estudiantes">Estudiantes</span></a>
+      <a class="nav-link" href="#" data-ir="cursos"><i class="bi bi-journal-bookmark"></i> Cursos</a>
+      <a class="nav-link" href="#" data-ir="reposiciones"><i class="bi bi-arrow-repeat"></i> Reposiciones <span class="badge rounded-pill bg-marca-suave text-marca ms-auto" id="badgeRepo" hidden></span></a>
+      <a class="nav-link" href="#" data-ir="cuotas"><i class="bi bi-calendar-check"></i> Cuotas <span class="badge rounded-pill text-bg-danger ms-auto" id="badgeVencidas" hidden></span></a>
+      <a class="nav-link" href="#" data-ir="pagos"><i class="bi bi-cash-coin"></i> Pagos y recibos</a>
+      <a class="nav-link" href="#" data-ir="marketing"><i class="bi bi-megaphone"></i> Marketing <span class="badge rounded-pill bg-marca-suave text-marca ms-auto" id="badgeMkt" hidden></span></a>
+      <a class="nav-link" href="#" data-ir="config"><i class="bi bi-gear"></i> Configuración</a>
+    </nav>
+    <div class="mt-auto px-1 small">
+      <div class="text-muted mb-1" id="lblSync"><i class="bi bi-cloud-check"></i> Sincronizado</div>
+      <div class="text-muted text-truncate" id="lblUsuario"></div>
+      <a href="#" class="text-marca" onclick="cerrarSesion(event)"><i class="bi bi-box-arrow-left"></i> Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <main class="flex-grow-1" style="min-width:0">
+    <!-- Barra superior móvil -->
+    <nav class="navbar bg-white border-bottom d-lg-none px-3">
+      <span class="navbar-brand display-font" id="lblNegocioM">Studio</span>
+      <select class="form-select form-select-sm w-auto" id="menuMovil">
+        <option value="inicio">Inicio</option><option value="estudiantes">Estudiantes</option>
+        <option value="cursos">Cursos</option><option value="reposiciones">Reposiciones</option><option value="cuotas">Cuotas</option><option value="pagos">Pagos</option><option value="marketing">Marketing</option><option value="config">Configuración</option>
+      </select>
+    </nav>
+
+    <div class="container-fluid p-3 p-lg-4" style="max-width:1200px">
+
+      <!-- ===== INICIO ===== -->
+      <section data-vista="inicio" class="activa">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+          <div><h1 class="h2 mb-0">Resumen</h1><small class="text-muted" id="hoy"></small></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="abrirEstudiante()"><i class="bi bi-person-plus"></i> Nuevo <span data-term="estudiante">estudiante</span></button>
+            <button class="btn btn-marca" onclick="abrirPago()"><i class="bi bi-receipt"></i> Registrar pago</button>
+          </div>
+        </div>
+        <div class="row g-3 mb-4" id="stats"></div>
+        <div id="clasesHoy" class="mb-4"></div>
+        <div class="row g-3">
+          <div class="col-lg-7">
+            <div class="card h-100"><div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Cuotas vencidas y de los próximos 7 días</h2>
+                <button class="btn btn-sm btn-link text-marca p-0" onclick="ir('cuotas')">Ver todas</button>
+              </div>
+              <div id="pendientes"></div>
+            </div></div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card h-100"><div class="card-body">
+              <h2 class="h5 mb-3">Últimos pagos</h2>
+              <div id="ultimosPagos"></div>
+            </div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ESTUDIANTES ===== -->
+      <section data-vista="estudiantes">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <h1 class="h2 mb-0" data-term="Estudiantes">Estudiantes</h1>
+          <div class="d-flex gap-2">
+            <div class="input-group"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+              <input class="form-control" id="buscarEst" placeholder="Buscar por nombre, documento o teléfono"></div>
+            <button class="btn btn-marca text-nowrap" onclick="abrirEstudiante()"><i class="bi bi-plus-lg"></i> Nuevo</button>
+          </div>
+        </div>
+        <div class="card"><div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Nombre</th><th>Contacto</th><th>Cursos</th><th class="text-end">Saldo</th><th></th></tr></thead>
+            <tbody id="tablaEst"></tbody>
+          </table>
+        </div></div>
+      </section>
+
+      <!-- ===== CURSOS ===== -->
+      <section data-vista="cursos">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <h1 class="h2 mb-0">Cursos</h1>
+          <button class="btn btn-marca" onclick="abrirCurso()"><i class="bi bi-plus-lg"></i> Nuevo curso</button>
+        </div>
+        <div class="row g-3" id="gridCursos"></div>
+      </section>
+
+      <!-- ===== DETALLE CURSO / PLAN DE ESTUDIO ===== -->
+      <section data-vista="curso">
+        <button class="btn btn-link text-marca px-0 mb-2" onclick="ir('cursos')"><i class="bi bi-arrow-left"></i> Volver a cursos</button>
+        <div id="detalleCurso"></div>
+      </section>
+
+      <!-- ===== CUOTAS ===== -->
+      <section data-vista="cuotas">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <h1 class="h2 mb-0">Cuotas</h1>
+          <div class="d-flex flex-wrap gap-2" id="filtrosCuotas">
+            <button class="btn btn-sm btn-outline-secondary chip-filtro active" data-f="cobrar">Por cobrar</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="vencida">Vencidas</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="semana">Esta semana</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="pagada">Pagadas</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="todas">Todas</button>
+          </div>
+        </div>
+        <div class="row g-3 mb-3" id="statsCuotas"></div>
+        <div class="card"><div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Vence</th><th data-term="Estudiante">Estudiante</th><th>Curso</th><th>Cuota</th><th class="text-end">Valor</th><th class="text-end">Falta</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tablaCuotas"></tbody>
+          </table>
+        </div></div>
+      </section>
+
+      <!-- ===== PAGOS ===== -->
+      <section data-vista="pagos">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <h1 class="h2 mb-0">Pagos y recibos</h1>
+          <button class="btn btn-marca" onclick="abrirPago()"><i class="bi bi-plus-lg"></i> Registrar pago</button>
+        </div>
+        <div class="card"><div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Recibo</th><th>Fecha</th><th data-term="Estudiante">Estudiante</th><th>Curso</th><th>Método</th><th class="text-end">Valor</th><th></th></tr></thead>
+            <tbody id="tablaPagos"></tbody>
+          </table>
+        </div></div>
+      </section>
+
+      <!-- ===== REPOSICIONES ===== -->
+      <section data-vista="reposiciones">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div><h1 class="h2 mb-0">Reposiciones</h1><small class="text-muted">Cada falla se repone con el tema de la clase perdida. Con excusa médica no se cobra.</small></div>
+          <button class="btn btn-marca" onclick="abrirEspacio(null)"><i class="bi bi-calendar-plus"></i> Nuevo espacio</button>
+        </div>
+        <div id="avisoTemas"></div>
+        <div class="row g-3 mb-3" id="statsRepo"></div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div class="d-flex align-items-center gap-2">
+            <h2 class="h5 mb-0">Disponibilidad</h2>
+            <div class="btn-group btn-group-sm ms-2">
+              <button class="btn btn-outline-secondary" onclick="moverSemana(-1)" title="Semana anterior"><i class="bi bi-chevron-left"></i></button>
+              <button class="btn btn-outline-secondary" onclick="moverSemana(0)">Hoy</button>
+              <button class="btn btn-outline-secondary" onclick="moverSemana(1)" title="Semana siguiente"><i class="bi bi-chevron-right"></i></button>
+            </div>
+            <span class="small fw-semibold tabular" id="semanaLbl"></span>
+          </div>
+          <div class="leyenda"><span><span class="ev ev-clase d-inline-block p-0" style="width:14px;height:14px"></span> Clase del curso</span><span><span class="ev ev-esp d-inline-block p-0" style="width:14px;height:14px"></span> Espacio de reposición</span><span>Toca <b class="text-marca">+</b> en un día para abrir un espacio</span></div>
+        </div>
+        <div class="semana mb-4" id="semanaRepo"></div>
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+          <h2 class="h5 mb-0">Clases por reponer</h2>
+          <div class="d-flex flex-wrap gap-2" id="filtrosRepo">
+            <button class="btn btn-sm btn-outline-secondary chip-filtro active" data-f="pendiente">Por agendar</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="agendada">Agendadas</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="cobrar">Por cobrar</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="hecha">Repuestas</button>
+            <button class="btn btn-sm btn-outline-secondary chip-filtro" data-f="todas">Todas</button>
+          </div>
+        </div>
+        <div class="card" id="listaRepo"></div>
+      </section>
+
+      <!-- ===== MARKETING ===== -->
+      <section data-vista="marketing">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div><h1 class="h2 mb-0">Marketing</h1><small class="text-muted">Publicaciones de Instagram, links de rastreo y resultados por campaña</small></div>
+          <button class="btn btn-marca" onclick="abrirAnuncio()"><i class="bi bi-plus-lg"></i> Nueva publicación</button>
+        </div>
+        <div class="row g-3 mb-4" id="statsMkt"></div>
+        <div class="d-flex justify-content-between align-items-end mb-2"><h2 class="h5 mb-0">Para publicar</h2><small class="text-muted">Descarga la imagen, copia el texto y pon el link donde indica cada una</small></div>
+        <div class="row g-3 mb-4" id="colaMkt"></div>
+        <h2 class="h5 mb-2">Campañas y resultados</h2>
+        <div class="card"><div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Código</th><th>Publicación</th><th>Estado</th><th class="text-center">Mensajes</th><th class="text-center" data-term="Estudiantes">Estudiantes</th><th class="text-end">Conversión</th><th class="text-end">Ingresos</th><th></th></tr></thead>
+            <tbody id="tablaMkt"></tbody>
+          </table>
+        </div></div>
+        <p class="small text-muted mt-2 mb-0"><i class="bi bi-info-circle"></i> Cuando llegue un WhatsApp con "(Ref: CÓDIGO)", suma un mensaje con <b>+1</b>. Al inscribir a la persona, elige esa campaña en "¿Cómo nos conoció?".</p>
+      </section>
+
+      <!-- ===== EDITOR DE PUBLICACIÓN ===== -->
+      <section data-vista="anuncio">
+        <button class="btn btn-link text-marca px-0 mb-2" onclick="ir('marketing')"><i class="bi bi-arrow-left"></i> Volver a marketing</button>
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div style="min-width:0"><span class="badge bg-marca-suave text-marca mb-1" id="adCodigoBadge"></span><h1 class="h2 mb-0 text-truncate" id="adTitulo">Nueva publicación</h1></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="descargarEditor()"><i class="bi bi-download"></i> Descargar imagen</button>
+            <button class="btn btn-marca" onclick="guardarAnuncio()"><i class="bi bi-check2"></i> Guardar</button>
+          </div>
+        </div>
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="sticky-lg-top" style="top:16px">
+              <div class="lienzo-wrap"><canvas id="lienzo" width="1080" height="1350"></canvas></div>
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small mt-2">
+                <span class="text-muted tabular" id="lienzoInfo"></span>
+                <div class="form-check form-switch mb-0" id="guiasWrap"><input class="form-check-input" type="checkbox" id="adGuias" checked><label class="form-check-label" for="adGuias">Ver zonas que tapa Instagram</label></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6 d-flex flex-column gap-3">
+            <div class="paso"><h2><span class="n">1</span> Diseño</h2>
+              <div class="row g-2">
+                <div class="col-md-6"><label class="form-label small" for="adCurso">Curso</label><select class="form-select" id="adCurso"></select></div>
+                <div class="col-md-6"><label class="form-label small" for="adNombre">Nombre de la campaña</label><input class="form-control" id="adNombre"></div>
+                <div class="col-12"><span class="form-label small d-block mb-1">Formato</span><div class="btn-group w-100" role="group" id="adFormatos"></div></div>
+                <div class="col-12"><span class="form-label small d-block mb-1">Plantilla</span><div class="row g-2" id="adPlantillas"></div></div>
+                <div class="col-12"><span class="form-label small d-block mb-1">Color</span><div class="btn-group" role="group" id="adEstilos"></div></div>
+              </div>
+            </div>
+            <div class="paso"><h2><span class="n">2</span> Fotos</h2>
+              <div class="d-flex flex-column gap-2" id="adFotos"></div>
+              <small class="text-muted d-block mt-2">Usa fotos verticales y bien iluminadas. Arrastra la foto aquí o tócala para elegirla.</small>
+            </div>
+            <div class="paso"><h2><span class="n">3</span> Textos de la imagen
+              <button type="button" class="btn btn-sm btn-link text-marca ms-auto p-0" onclick="textosDesdeCurso()"><i class="bi bi-arrow-repeat"></i> Usar datos del curso</button></h2>
+              <div class="row g-2">
+                <div class="col-8"><label class="form-label small" for="adEtiqueta">Etiqueta</label><input class="form-control" id="adEtiqueta" data-t="etiqueta" maxlength="32"></div>
+                <div class="col-4" id="adBadgeWrap"><label class="form-label small" for="adBadge">Cupos</label><input class="form-control" id="adBadge" data-t="badge" maxlength="3"></div>
+                <div class="col-12"><label class="form-label small" for="adTit">Título</label><input class="form-control" id="adTit" data-t="titulo" maxlength="60"></div>
+                <div class="col-12"><label class="form-label small" for="adL1">Línea 1</label><input class="form-control" id="adL1" data-t="linea1" maxlength="70"></div>
+                <div class="col-12"><label class="form-label small" for="adL2">Línea 2</label><input class="form-control" id="adL2" data-t="linea2" maxlength="70"></div>
+                <div class="col-12"><label class="form-label small" for="adCta">Botón</label><input class="form-control" id="adCta" data-t="cta" maxlength="40"></div>
+              </div>
+            </div>
+            <div class="paso"><h2><span class="n">4</span> Texto para la publicación</h2>
+              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <div class="btn-group btn-group-sm" role="group" id="adTonos"></div>
+                <button type="button" class="btn btn-sm ia-badge" onclick="generarTexto()"><i class="bi bi-stars"></i> Generar texto</button>
+              </div>
+              <textarea class="form-control" id="adCaption" rows="9"></textarea>
+              <div class="d-flex justify-content-between mt-1"><span class="contador" id="adContador"></span>
+                <button type="button" class="btn btn-sm btn-link text-marca p-0" onclick="copiar($('#adCaption').value,'Texto copiado')"><i class="bi bi-clipboard"></i> Copiar texto</button></div>
+            </div>
+            <div class="paso"><h2><span class="n">5</span> Link de rastreo</h2>
+              <div class="row g-2">
+                <div class="col-md-6"><label class="form-label small" for="adTipo">Dónde se publica</label><select class="form-select" id="adTipo"></select></div>
+                <div class="col-md-6"><label class="form-label small" for="adCodigo">Código de la campaña</label><input class="form-control text-uppercase tabular" id="adCodigo" maxlength="16"></div>
+                <div class="col-12"><span class="form-label small d-block mb-1">A dónde lleva</span>
+                  <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="adDestino" id="adDestWa" value="whatsapp"><label class="btn btn-sm btn-outline-secondary" for="adDestWa"><i class="bi bi-whatsapp"></i> WhatsApp</label>
+                    <input type="radio" class="btn-check" name="adDestino" id="adDestWeb" value="web"><label class="btn btn-sm btn-outline-secondary" for="adDestWeb"><i class="bi bi-globe2"></i> Página web</label>
+                  </div></div>
+                <div class="col-12" id="adUrlWrap"><label class="form-label small" for="adUrl">Página de destino</label><input type="url" class="form-control" id="adUrl" placeholder="https://tusitio.com/cursos"></div>
+                <div class="col-12"><label class="form-label small" for="adLink">Link para publicar</label>
+                  <div class="input-group"><input class="form-control link-out" id="adLink" readonly><button type="button" class="btn btn-marca" onclick="copiar($('#adLink').value,'Link copiado')"><i class="bi bi-clipboard"></i></button></div>
+                  <div class="small mt-1" id="adDonde"></div></div>
+                <div class="col-12"><div class="bg-marca-suave rounded p-2 small" id="adRastreo"></div></div>
+              </div>
+            </div>
+            <div class="paso"><h2><span class="n">6</span> Quién la publica</h2>
+              <div class="row g-2">
+                <div class="col-md-5"><label class="form-label small" for="adResp">Responsable</label><input class="form-control" id="adResp" list="listaResp" placeholder="Ej: Laura (redes)"><datalist id="listaResp"></datalist></div>
+                <div class="col-md-4"><label class="form-label small" for="adFecha">Publicar el</label><input type="date" class="form-control" id="adFecha"></div>
+                <div class="col-md-3"><label class="form-label small" for="adEstado">Estado</label><select class="form-select" id="adEstado"><option value="borrador">Borrador</option><option value="lista">Lista</option><option value="publicada">Publicada</option></select></div>
+              </div>
+              <div class="d-flex justify-content-between mt-3">
+                <button type="button" class="btn btn-sm btn-outline-danger" id="adEliminar" onclick="eliminarAnuncio(this)"><i class="bi bi-trash"></i> Eliminar</button>
+                <button type="button" class="btn btn-marca" onclick="guardarAnuncio()"><i class="bi bi-check2"></i> Guardar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CONFIGURACIÓN ===== -->
+      <section data-vista="config">
+        <h1 class="h2 mb-3">Configuración</h1>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="card"><div class="card-body">
+              <h2 class="h5">Negocio</h2>
+              <form id="formConfig" class="row g-2">
+                <div class="col-12"><label class="form-label small" for="cfgNombre">Nombre del negocio</label><input class="form-control" id="cfgNombre" required></div>
+                <div class="col-6"><label class="form-label small" for="cfgNit">NIT / Documento</label><input class="form-control" id="cfgNit"></div>
+                <div class="col-6"><label class="form-label small" for="cfgTel">Teléfono</label><input class="form-control" id="cfgTel"></div>
+                <div class="col-12"><label class="form-label small" for="cfgDir">Dirección</label><input class="form-control" id="cfgDir"></div>
+                <div class="col-6"><label class="form-label small" for="cfgColor">Color de marca</label><input type="color" class="form-control form-control-color w-100" id="cfgColor"></div>
+                <div class="col-6"><label class="form-label small" for="cfgRecibo">Formato de recibo</label>
+                  <select class="form-select" id="cfgRecibo"><option value="ticket">Ticket 80 mm (POS)</option><option value="carta">Hoja carta</option></select></div>
+                <div class="col-12"><label class="form-label small" for="cfgPie">Pie del recibo</label><input class="form-control" id="cfgPie"></div>
+                <div class="col-4"><label class="form-label small" for="cfgEscala">Escala de notas</label><input type="number" step="0.1" min="1" class="form-control" id="cfgEscala"></div>
+                <div class="col-4"><label class="form-label small" for="cfgNotaMin">Nota para aprobar</label><input type="number" step="0.1" min="0" class="form-control" id="cfgNotaMin"></div>
+                <div class="col-4"><label class="form-label small" for="cfgAsisMin">Asistencia mínima %</label><input type="number" min="0" max="100" class="form-control" id="cfgAsisMin"></div>
+                <div class="col-6"><label class="form-label small" for="cfgRepo">Valor de una reposición</label><input type="number" min="0" step="1000" class="form-control" id="cfgRepo"><small class="text-muted">Con excusa médica no se cobra.</small></div>
+                <div class="col-6"><label class="form-label small" for="cfgRepoV">Valor reposición virtual</label><input type="number" min="0" step="1000" class="form-control" id="cfgRepoV"></div>
+                <div class="col-6"><label class="form-label small" for="cfgHorasV">Horas para verla desde que abre el link</label><input type="number" min="1" max="168" class="form-control" id="cfgHorasV"></div>
+                <div class="col-6"><label class="form-label small" for="cfgDominio">Dirección de la app (para los links)</label><input class="form-control" id="cfgDominio" placeholder="https://cursos.tuestudio.com"></div>
+                <div class="col-12 mt-3"><h3 class="h6 mb-0">Redes sociales</h3></div>
+                <div class="col-6"><label class="form-label small" for="cfgIg">Usuario de Instagram</label><input class="form-control" id="cfgIg" placeholder="@tuestudio"></div>
+                <div class="col-6"><label class="form-label small" for="cfgWeb">Página web</label><input type="url" class="form-control" id="cfgWeb" placeholder="https://"></div>
+                <div class="col-12"><span class="form-label small d-block">Logo para las publicaciones (PNG con fondo transparente)</span>
+                  <div class="d-flex align-items-center gap-2"><div id="cfgLogoPrev" class="rounded border d-grid" style="width:64px;height:64px;place-items:center;background:#3a2a33"></div>
+                  <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-image"></i> Subir logo<input type="file" accept="image/png,image/jpeg,image/webp" hidden onchange="subirLogo(this)"></label>
+                  <button type="button" class="btn btn-sm btn-link text-danger" onclick="quitarLogo()">Quitar</button></div></div>
+                <div class="col-12 mt-3"><button class="btn btn-marca">Guardar cambios</button></div>
+              </form>
+            </div></div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card mb-3"><div class="card-body">
+              <h2 class="h5">Área / rubro</h2>
+              <p class="small text-muted">Cambia los nombres que usa la app y el icono. Los datos no se pierden.</p>
+              <div class="row g-2">
+                <div class="col-12"><label class="form-label small" for="cfgRubro">Plantilla</label>
+                  <select class="form-select" id="cfgRubro"></select></div>
+                <div class="col-6"><label class="form-label small" for="cfgTermS">Cómo llamas a un alumno</label><input class="form-control" id="cfgTermS"></div>
+                <div class="col-6"><label class="form-label small" for="cfgTermP">En plural</label><input class="form-control" id="cfgTermP"></div>
+              </div>
+              <button class="btn btn-outline-secondary mt-3" onclick="guardarRubro()">Aplicar rubro</button>
+            </div></div>
+            <div class="card"><div class="card-body">
+              <h2 class="h5">Copia de seguridad</h2>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-outline-secondary" onclick="exportar()"><i class="bi bi-download"></i> Exportar JSON</button>
+                <label class="btn btn-outline-secondary mb-0"><i class="bi bi-upload"></i> Importar JSON<input type="file" accept=".json" hidden onchange="importar(this)"></label>
+                <button class="btn btn-outline-danger" onclick="reiniciar()"><i class="bi bi-arrow-counterclockwise"></i> Cargar datos de ejemplo</button>
+              </div>
+            </div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Modal estudiante ===== -->
+<div class="modal fade" id="mEst" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formEst">
+  <div class="modal-header"><h2 class="modal-title h5" id="tEst">Estudiante</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <input type="hidden" id="estId">
+    <div class="col-md-6"><label class="form-label small" for="estNombre">Nombre completo</label><input class="form-control" id="estNombre" required></div>
+    <div class="col-md-6"><label class="form-label small" for="estDoc">Documento</label><input class="form-control" id="estDoc"></div>
+    <div class="col-md-6"><label class="form-label small" for="estTel">WhatsApp</label><input class="form-control" id="estTel"></div>
+    <div class="col-md-6"><label class="form-label small" for="estEmail">Correo</label><input type="email" class="form-control" id="estEmail"></div>
+    <div class="col-md-8"><label class="form-label small" for="estNotas">Notas</label><textarea class="form-control" id="estNotas" rows="1"></textarea></div>
+    <div class="col-md-4"><label class="form-label small" for="estOrigen">¿Cómo nos conoció?</label><select class="form-select" id="estOrigen"></select></div>
+    <div class="col-12 mt-3"><h3 class="h6">Inscribir en curso</h3></div>
+    <div class="col-md-6"><label class="form-label small" for="estCurso">Curso</label><select class="form-select" id="estCurso"><option value="">— Ninguno por ahora —</option></select></div>
+    <div class="col-md-3"><label class="form-label small" for="estValor">Valor acordado</label><input type="number" class="form-control" id="estValor" min="0"></div>
+    <div class="col-md-3"><label class="form-label small" for="estDesc">Descuento</label><input type="number" class="form-control" id="estDesc" min="0" value="0"></div>
+    <div class="col-12" id="bloqueCuotasEst" hidden>
+      <div class="bg-marca-suave rounded p-3 mt-2">
+        <div class="row g-2" data-cuotas="est"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar</button></div>
+</form></div></div>
+
+<!-- ===== Modal ficha estudiante ===== -->
+<div class="modal fade" id="mFicha" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h2 class="modal-title h5" id="tFicha"></h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body" id="cuerpoFicha"></div>
+</div></div></div>
+
+<!-- ===== Modal plan de cuotas (inscripción existente) ===== -->
+<div class="modal fade" id="mCuotas" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formCuotas">
+  <div class="modal-header"><h2 class="modal-title h5" id="tCuotas">Plan de cuotas</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="cuoInsc">
+    <div class="small mb-3 tabular" id="cuoResumen"></div>
+    <div class="row g-2" data-cuotas="mod"></div>
+    <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle"></i> Los pagos ya registrados se conservan y se vuelven a abonar a las nuevas cuotas en orden.</p>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar plan</button></div>
+</form></div></div>
+
+<!-- ===== Modal clase ===== -->
+<div class="modal fade" id="mClase" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formClase">
+  <div class="modal-header"><h2 class="modal-title h5" id="tClase">Clase</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <input type="hidden" id="claN">
+    <div class="col-12"><label class="form-label small" for="claTema">Tema</label><input class="form-control" id="claTema" placeholder="Ej: Teoría del color y círculo cromático"></div>
+    <div class="col-12"><label class="form-label small" for="claDetalle">Contenido</label><textarea class="form-control" id="claDetalle" rows="2" placeholder="Subtemas, separados por coma"></textarea></div>
+    <div class="col-12"><span class="form-label small d-block mb-1">Metodología</span><div class="d-flex flex-wrap gap-1" id="claMetodos"></div></div>
+    <div class="col-12"><label class="form-label small" for="claMateriales">Materiales</label><input class="form-control" id="claMateriales" placeholder="Separados por coma: brochas, bases, esponjas…"></div>
+    <div class="col-6"><label class="form-label small" for="claFecha">Fecha</label><input type="date" class="form-control" id="claFecha"></div>
+    <div class="col-6 d-flex align-items-end"><small class="text-muted" id="claFechaNota">Cámbiala solo si la clase se reprograma.</small></div>
+    <div class="col-12"><label class="form-label small" for="claObs">Observaciones de la docente</label><textarea class="form-control" id="claObs" rows="2"></textarea></div>
+    <div class="col-12"><div class="border rounded p-2">
+      <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="claVirtual"><label class="form-check-label small fw-semibold" for="claVirtual">Se puede reponer viendo la grabación</label></div>
+      <small class="text-muted d-block mb-2">Úsalo para clases teóricas. Las prácticas en modelo se reponen presencial.</small>
+      <label class="form-label small" for="claVideo">Grabación (ID del video en Cloudflare Stream)</label>
+      <input class="form-control form-control-sm" id="claVideo" placeholder="Se llena solo al subir la grabación; mientras tanto puedes pegar el ID">
+    </div></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light me-auto" data-bs-dismiss="modal">Cancelar</button>
+    <button type="button" class="btn btn-outline-secondary" id="claAsis"><i class="bi bi-check2-square"></i> Tomar asistencia</button>
+    <button class="btn btn-marca">Guardar</button></div>
+</form></div></div>
+
+<!-- ===== Modal evaluaciones ===== -->
+<div class="modal fade" id="mEvals" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formEvals">
+  <div class="modal-header"><h2 class="modal-title h5">Evaluaciones del curso</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="small text-muted mb-2">Nombre, porcentaje y clase en la que se hace.</div>
+    <div id="listaEvals" class="d-flex flex-column gap-2"></div>
+    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addEval"><i class="bi bi-plus-lg"></i> Agregar evaluación</button>
+    <div class="small mt-3 tabular" id="sumaPesos"></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar</button></div>
+</form></div></div>
+
+<!-- ===== Modal espacio de reposición ===== -->
+<div class="modal fade" id="mEsp" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formEsp">
+  <div class="modal-header"><h2 class="modal-title h5" id="tEsp">Espacio de reposición</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="espId">
+    <div class="row g-2">
+      <div class="col-md-4"><label class="form-label small" for="espFecha">Fecha</label><input type="date" class="form-control" id="espFecha" required></div>
+      <div class="col-6 col-md-4"><label class="form-label small" for="espIni">Desde</label><input type="time" class="form-control" id="espIni" required></div>
+      <div class="col-6 col-md-4"><label class="form-label small" for="espFin">Hasta</label><input type="time" class="form-control" id="espFin" required></div>
+      <div class="col-md-6"><label class="form-label small" for="espDocente">Docente</label><input class="form-control" id="espDocente" list="listaDocentes2"><datalist id="listaDocentes2"></datalist></div>
+      <div class="col-6 col-md-3"><label class="form-label small" for="espCupos">Cupos</label><input type="number" min="1" max="30" class="form-control" id="espCupos" value="4"></div>
+      <div class="col-6 col-md-3"><label class="form-label small" for="espNotas">Lugar / nota</label><input class="form-control" id="espNotas" placeholder="Sala 2"></div>
+      <div class="col-md-6"><label class="form-label small" for="espCurso">Curso</label><select class="form-select" id="espCurso"></select></div>
+      <div class="col-md-6"><label class="form-label small" for="espClase">Tema del espacio</label><select class="form-select" id="espClase"></select></div>
+      <div class="col-12" id="espRepetirWrap"><div class="d-flex align-items-center gap-2 small">
+        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="espRepetir"><label class="form-check-label" for="espRepetir">Repetir cada semana</label></div>
+        <input type="number" min="2" max="26" value="4" class="form-control form-control-sm" style="width:70px" id="espSemanas" aria-label="Número de semanas"><span class="text-muted">semanas</span></div></div>
+    </div>
+    <div id="espDetalle" class="mt-3"></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-danger me-auto" id="espEliminar" onclick="eliminarEspacio(this)"><i class="bi bi-trash"></i> Eliminar</button>
+    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button><button class="btn btn-marca">Guardar espacio</button></div>
+</form></div></div>
+
+<!-- ===== Modal agendar reposición ===== -->
+<div class="modal fade" id="mAgendar" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formAgendar">
+  <div class="modal-header"><h2 class="modal-title h5">Agendar reposición</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div id="agInfo" class="mb-3"></div>
+    <div class="small fw-semibold mb-1">Espacios disponibles</div>
+    <div id="agLista" class="d-flex flex-column gap-2"></div>
+    <button type="button" class="btn btn-sm btn-link text-marca px-0 mt-2" id="agNuevo"><i class="bi bi-calendar-plus"></i> Abrir un espacio nuevo para esta clase</button>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Agendar</button></div>
+</form></div></div>
+
+<!-- ===== Modal reposición virtual ===== -->
+<div class="modal fade" id="mVirtual" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h2 class="modal-title h5"><i class="bi bi-camera-video"></i> Reposición virtual</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><div class="row g-3">
+    <div class="col-md-6">
+      <div id="viInfo" class="mb-2"></div>
+      <label class="form-label small" for="viLink">Link único de la alumna</label>
+      <div class="input-group input-group-sm mb-2"><input class="form-control link-out" id="viLink" readonly><button type="button" class="btn btn-outline-secondary" onclick="copiar($('#viLink').value,'Link copiado')"><i class="bi bi-clipboard"></i></button></div>
+      <ul class="small ps-3 mb-2" id="viReglas"></ul>
+      <div id="viEstado" class="small"></div>
+    </div>
+    <div class="col-md-6">
+      <div class="small fw-semibold mb-1">Así lo ve ella</div>
+      <div class="reproductor"><div class="play"><i class="bi bi-play-circle"></i></div><span class="marca-agua" id="viMarca"></span><div class="barra-v"><i></i></div></div>
+      <small class="text-muted d-block mt-1">Su nombre y cédula se mueven sobre el video. Si graba la pantalla y la comparte, se sabe quién fue.</small>
+    </div>
+  </div>
+  <div class="alert alert-light border small mt-3 mb-0"><i class="bi bi-plug"></i> <b>Falta el servidor:</b> este link abre el video cuando la app esté montada en el Worker con Cloudflare Stream. Mientras tanto, marca "Repuso" a mano cuando ella confirme que la vio.</div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light me-auto" data-bs-dismiss="modal">Cerrar</button>
+    <button type="button" class="btn btn-outline-secondary" id="viNuevo"><i class="bi bi-arrow-repeat"></i> Generar link nuevo</button>
+    <a class="btn btn-success" id="viWa" target="_blank"><i class="bi bi-whatsapp"></i> Enviar por WhatsApp</a></div>
+</div></div></div>
+
+<!-- ===== Modal cobrar reposición ===== -->
+<div class="modal fade" id="mCobroRepo" tabindex="-1"><div class="modal-dialog modal-sm"><form class="modal-content" id="formCobroRepo">
+  <div class="modal-header"><h2 class="modal-title h5">Cobrar reposición</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div id="crInfo" class="small mb-2"></div>
+    <label class="form-label small" for="crValor">Valor</label><input type="number" min="1" class="form-control mb-2" id="crValor" required>
+    <label class="form-label small" for="crMetodo">Método</label>
+    <select class="form-select mb-2" id="crMetodo"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Daviplata</option><option>Tarjeta</option></select>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="crImprimir" checked><label class="form-check-label small" for="crImprimir">Imprimir recibo</label></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-marca w-100"><i class="bi bi-printer"></i> Registrar pago</button></div>
+</form></div></div>
+
+<!-- ===== Modal curso ===== -->
+<div class="modal fade" id="mCurso" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formCurso">
+  <div class="modal-header"><h2 class="modal-title h5">Curso</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <input type="hidden" id="curId">
+    <div class="col-md-8"><label class="form-label small" for="curNombre">Nombre del curso</label><input class="form-control" id="curNombre" required></div>
+    <div class="col-md-4"><label class="form-label small" for="curPrecio">Precio</label><input type="number" class="form-control" id="curPrecio" min="0" required></div>
+    <div class="col-md-4"><label class="form-label small" for="curNivel">Nivel</label><select class="form-select" id="curNivel"><option>Básico</option><option>Intermedio</option><option>Avanzado</option><option>Profesional</option></select></div>
+    <div class="col-md-8"><label class="form-label small" for="curDocente">Docente</label><input class="form-control" id="curDocente" list="listaDocentes" placeholder="Nombre de la docente"><datalist id="listaDocentes"></datalist></div>
+
+    <div class="col-12 mt-3"><h3 class="h6 mb-0">Grupo y horario</h3></div>
+    <div class="col-md-4"><label class="form-label small" for="curJornada">Jornada</label>
+      <select class="form-select" id="curJornada"><option>Mañana</option><option>Tarde</option><option>Noche</option><option>Sabatina</option><option>Dominical</option></select></div>
+    <div class="col-6 col-md-4"><label class="form-label small" for="curHoraIni">Hora inicio</label><input type="time" class="form-control" id="curHoraIni" value="09:00"></div>
+    <div class="col-6 col-md-4"><label class="form-label small" for="curHoraFin">Hora fin</label><input type="time" class="form-control" id="curHoraFin" value="12:00"></div>
+    <div class="col-12"><span class="form-label small d-block mb-1">Días de clase</span>
+      <div class="btn-group flex-wrap" role="group" id="curDias"></div></div>
+    <div class="col-6 col-md-4"><label class="form-label small" for="curInicio">Primera clase</label><input type="date" class="form-control" id="curInicio"></div>
+    <div class="col-6 col-md-4"><label class="form-label small" for="curNumClases">N.º de clases</label><input type="number" min="1" max="200" class="form-control" id="curNumClases" value="16"></div>
+    <div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
+    <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>
+    <div class="col-12"><label class="form-label small" for="curDesc">Descripción</label><textarea class="form-control" id="curDesc" rows="2"></textarea></div>
+
+    <div class="col-12 mt-3 d-flex justify-content-between align-items-center">
+      <h3 class="h6 mb-0">Plan de estudio</h3>
+      <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-file-earmark-arrow-up"></i> Subir .txt / .md<input type="file" accept=".txt,.md" hidden onchange="cargarPlanArchivo(this)"></label>
+    </div>
+    <div class="col-12">
+      <textarea class="form-control font-monospace small" id="curPlanTexto" rows="8" placeholder="Pega aquí el plan de estudio tal como lo tengas. Ej:&#10;Módulo 1: Teoría del color (4h)&#10;- Círculo cromático&#10;- Subtonos de piel&#10;Módulo 2: Preparación de la piel..."></textarea>
+      <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+        <button type="button" class="btn btn-sm ia-badge" onclick="organizarPlanIA()"><i class="bi bi-stars"></i> Organizar con IA</button>
+        <small class="text-muted" id="iaEstado">Convierte el texto en módulos con temas y horas.</small>
+      </div>
+      <div id="previewPlan" class="mt-3"></div>
+    </div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar curso</button></div>
+</form></div></div>
+
+<!-- ===== Modal pago ===== -->
+<div class="modal fade" id="mPago" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formPago">
+  <div class="modal-header"><h2 class="modal-title h5">Registrar pago</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <div class="col-12"><label class="form-label small" for="pagoInsc">Estudiante y curso</label><select class="form-select" id="pagoInsc" required></select></div>
+    <div class="col-12"><div class="bg-marca-suave rounded p-2 small tabular" id="pagoSaldo">Selecciona una inscripción</div></div>
+    <div class="col-12" id="pagoAtajos"></div>
+    <div class="col-6"><label class="form-label small" for="pagoValor">Valor</label><input type="number" class="form-control" id="pagoValor" min="1" required></div>
+    <div class="col-6"><label class="form-label small" for="pagoMetodo">Método</label>
+      <select class="form-select" id="pagoMetodo"><option>Efectivo</option><option>Transferencia</option><option>Nequi</option><option>Daviplata</option><option>Tarjeta</option></select></div>
+    <div class="col-12"><label class="form-label small" for="pagoConcepto">Concepto</label><input class="form-control" id="pagoConcepto" placeholder="Abono, matrícula, cuota 1..."></div>
+    <div class="form-check col-12 ms-2 mt-2"><input class="form-check-input" type="checkbox" id="pagoImprimir" checked><label class="form-check-label small" for="pagoImprimir">Imprimir recibo al guardar</label></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca"><i class="bi bi-printer"></i> Guardar pago</button></div>
+</form></div></div>
+
+<div id="areaRecibo"></div>
+<div class="toast-container position-fixed bottom-0 end-0 p-3"><div class="toast text-bg-dark" id="toast"><div class="toast-body" id="toastTxt"></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/admin-core.js"></script>
+<script src="/admin-curso.js"></script>
+<script src="/admin-marketing.js"></script>
+<script src="/admin-reposiciones.js"></script>
+<script src="/admin-boot.js"></script>
+</body>
+</html>

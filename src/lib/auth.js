@@ -1,6 +1,6 @@
-import { first, run, uid, nowIso } from "./db.js";
+import { first, run, nowIso } from "./db.js";
 import { unauthorized } from "./http.js";
-import { sha256Hex, timingSafeEqual } from "./password.js";
+import { sha256Hex, timingSafeEqual, randomToken } from "./password.js";
 
 const SESSION_DAYS = 30;
 const COOKIE = "cda_session";
@@ -15,11 +15,16 @@ export const sessionCookie = (token) =>
   `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`;
 export const clearSessionCookie = () => `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 
+// Hoy en Colombia (UTC-5), 'YYYY-MM-DD'
+export const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+export const isExpired = (paidUntil) => !!paidUntil && paidUntil < todayBogota();
+
+// Crea la sesión: la cookie lleva el token y la base solo su SHA-256.
 export async function createSession(env, userId, businessId) {
-  const token = uid();
+  const token = randomToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
   await run(env, `INSERT INTO sessions (id, user_id, business_id, expires_at) VALUES (?,?,?,?)`,
-    token, userId, businessId, expiresAt);
+    await sha256Hex(token), userId, businessId, expiresAt);
   return token;
 }
 
@@ -27,12 +32,14 @@ export async function createSession(env, userId, businessId) {
 export async function currentSession(request, env) {
   const token = getCookie(request, COOKIE);
   if (!token) return null;
-  return first(env,
-    `SELECT s.id, s.business_id, u.id AS user_id, u.email, u.name, u.role, b.name AS business_name, b.slug
+  const s = await first(env,
+    `SELECT s.id, s.business_id, u.id AS user_id, u.email, u.name, u.role, b.name AS business_name, b.slug, b.paid_until
      FROM sessions s
      JOIN users u ON u.id = s.user_id AND u.active = 1
      JOIN businesses b ON b.id = s.business_id
-     WHERE s.id = ? AND s.expires_at > ?`, token, nowIso());
+     WHERE s.id = ? AND s.expires_at > ?`, await sha256Hex(token), nowIso());
+  if (s) s.read_only = isExpired(s.paid_until);
+  return s;
 }
 
 // Middleware de /staff/*: exige sesión y deja ctx.user / ctx.businessId. null = sigue adelante.
@@ -44,8 +51,10 @@ export async function requireStaff(request, env, ctx) {
   return null;
 }
 
-export async function requireSetupKey(request, env) {
+// Diwilo Web se autentica con "Authorization: Bearer PLATFORM_KEY" (mismo secreto en todas las apps).
+export async function requirePlatform(request, env) {
+  const key = env.PLATFORM_KEY;
   const auth = request.headers.get("authorization") || "";
-  if (!env.SETUP_KEY || !timingSafeEqual(await sha256Hex(auth), await sha256Hex(`Bearer ${env.SETUP_KEY}`))) return unauthorized();
+  if (!key || !timingSafeEqual(await sha256Hex(auth), await sha256Hex(`Bearer ${key}`))) return unauthorized();
   return null;
 }

@@ -2,19 +2,33 @@ name = "cdacademia"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 
+# Solo se publica en el dominio propio. Diwilo Web llega por service binding, sin pasar por el dominio.
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "cdacademia.diwilo.com", custom_domain = true }]
+
+# Conserva las variables cargadas en el dashboard en cada deploy.
+keep_vars = true
+
+# En Workers Builds (WORKERS_CI=1) aplica las migraciones de D1 pendientes antes de desplegar.
+[build]
+command = "sh -c 'if [ -n \"$WORKERS_CI\" ]; then npx wrangler d1 migrations apply control-de-academia-db --remote; fi'"
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
-# "/", "/login" y "/admin" pasan primero por el Worker (redirige según haya sesión o no).
+# "/", "/login" y "/admin" pasan primero por el Worker (sirve el login o el panel con el estado incrustado).
 run_worker_first = ["/", "/login", "/admin", "/admin.html"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "control-de-academia-db"
 database_id = "3cad86e3-cbc8-4e0c-b69b-8367c63f4b65"
+migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "FILES"
-bucket_name = "cdacademia-files"             # wrangler r2 bucket create cdacademia-files
+bucket_name = "cdacademia-files"
 
-# Secreto: wrangler secret put SETUP_KEY  (para crear negocios con POST /api/setup)
+# Secretos (wrangler secret put <NOMBRE>), no van en el repo:
+#   PLATFORM_KEY   clave compartida con Diwilo Web (crea negocios, usuarios y maneja suscripciones)

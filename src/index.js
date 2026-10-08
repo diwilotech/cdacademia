@@ -1,11 +1,13 @@
 import { Router } from "./lib/router.js";
-import { notFound, unauthorized } from "./lib/http.js";
+import { notFound, unauthorized, error } from "./lib/http.js";
 import { requireStaff, currentSession } from "./lib/auth.js";
+import { registerPlatform } from "./routes/platform.js";
 import { registerAuth } from "./routes/auth.js";
 import { registerState } from "./routes/state.js";
 import { registerFiles } from "./routes/files.js";
 
 const router = new Router();
+registerPlatform(router); // primero: /api/platform/* no debe caer en otras rutas
 registerAuth(router);
 registerState(router);
 registerFiles(router);
@@ -18,7 +20,7 @@ async function servirAdmin(request, env, session) {
   const url = new URL(request.url); url.pathname = "/admin"; // los assets resuelven /admin -> admin.html (pedir .html redirige)
   const res = await env.ASSETS.fetch(new Request(url, request));
   const row = await env.DB.prepare(`SELECT data, version FROM app_state WHERE business_id = ?`).bind(session.business_id).first();
-  const boot = { estado: row ? JSON.parse(row.data) : null, version: row?.version || 0, negocio: session.business_name, usuario: session.name };
+  const boot = { estado: row ? JSON.parse(row.data) : null, version: row?.version || 0, negocio: session.business_name, usuario: session.name, readOnly: session.read_only, paidUntil: session.paid_until };
   return new HTMLRewriter()
     .on("head", { element(el) { el.append(`<script>window.__BOOT__=${inline(boot)};</script>`, { html: true }); } })
     .transform(new Response(res.body, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }));
@@ -33,9 +35,8 @@ export default {
       const s = await currentSession(request, env);
       return s ? servirAdmin(request, env, s) : Response.redirect(new URL("/", url), 302);
     }
-    // Login en la raíz; si ya hay sesión, directo al panel
+    // Login en la raíz (la página manda al panel si ya hay sesión y no trae #invite)
     if (path === "/" || path === "/login") {
-      if (await currentSession(request, env)) return Response.redirect(new URL("/admin", url), 302);
       url.pathname = "/"; // el binding de assets sirve index.html en "/" sin volver a pasar por el Worker
       return env.ASSETS.fetch(new Request(url, request));
     }
@@ -52,6 +53,8 @@ export default {
       if (denied) return denied;
       // Defensa CSRF: las escrituras solo se aceptan con la cabecera propia del front
       if (request.method !== "GET" && request.headers.get("x-requested-with") !== "cda") return unauthorized();
+      // Suscripción vencida: solo lectura
+      if (request.method !== "GET" && ctx.user.read_only) return error("La suscripción del negocio está vencida: solo lectura.", 402);
     }
     try {
       return await match.handler(request, env, ctx);

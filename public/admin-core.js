@@ -173,6 +173,7 @@ function estadoSync(e, msg){
 function guardar(){
   if(!BOOT){ try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){} return; }
   if(_bloqueado) return;
+  if(BOOT.readOnly){ estadoSync('error','Suscripción vencida: solo lectura'); return; }
   _sucio=true; estadoSync('pend'); clearTimeout(_tSync); _tSync=setTimeout(sincronizar,700);
 }
 async function sincronizar(){
@@ -183,6 +184,7 @@ async function sincronizar(){
     const d=await r.json().catch(()=>({}));
     if(r.ok){ VERSION=d.version; if(!_sucio) estadoSync('ok'); }
     else if(r.status===401){ location.href='/'; }
+    else if(r.status===402){ _bloqueado=true; document.getElementById('barraVencida').hidden=false; estadoSync('error', d.error); }
     else { if(r.status===409) _bloqueado=true; estadoSync('error', d.error); }
   }catch(e){ _sucio=true; estadoSync('error','Sin conexión; reintentando…'); _tSync=setTimeout(sincronizar,5000); }
   _enVuelo=false;

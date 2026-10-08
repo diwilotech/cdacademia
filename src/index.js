@@ -1,3 +1,5 @@
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { platformCall } from "./lib/platform-rpc.js";
 import { Router } from "./lib/router.js";
 import { notFound, unauthorized, error } from "./lib/http.js";
 import { requireStaff, currentSession } from "./lib/auth.js";
@@ -26,7 +28,7 @@ async function servirAdmin(request, env, session) {
     .transform(new Response(res.body, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }));
 }
 
-export default {
+const worker = {
   async fetch(request, env) {
     const url = new URL(request.url), path = url.pathname;
 
@@ -64,3 +66,11 @@ export default {
     }
   },
 };
+export default worker;
+
+// Diwilo Web administra esta app por RPC (service binding con entrypoint "Platform"), sin clave compartida.
+export class Platform extends WorkerEntrypoint {
+  call(method, path, body, origin) {
+    return platformCall(worker, this.env, this.ctx, method, path, body, origin);
+  }
+}

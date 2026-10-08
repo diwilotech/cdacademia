@@ -31,4 +31,4 @@ binding = "FILES"
 bucket_name = "cdacademia-files"
 
 # Secretos (wrangler secret put <NOMBRE>), no van en el repo:
-#   PLATFORM_KEY   clave compartida con Diwilo Web (crea negocios, usuarios y maneja suscripciones)
+#   (Diwilo Web entra por RPC, export class Platform: no necesita clave)

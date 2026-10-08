@@ -23,7 +23,7 @@ invitaciones `#invite=` (crear/restablecer), bloqueo 5/15, solo lectura con 402 
 | R2 | `cdacademia-files` |
 | Repo | https://github.com/diwilotech/cdacademia (push a `main` = deploy) |
 | Cuenta Cloudflare | Diwilo Account · `add05706f955a450e7d0c9680cc33ba4` |
-| Secreto `PLATFORM_KEY` | **Pendiente de poner** en este Worker, con el mismo valor que Diwilo Web: `npx wrangler secret put PLATFORM_KEY` |
+| Conexión con Diwilo | RPC por service binding (`entrypoint: "Platform"`). No usa `PLATFORM_KEY` |
 
 **Usuarios:** no hay ninguno. Se crean desde Diwilo Web → Negocios → app Academia.
 

@@ -190,6 +190,47 @@ async function sincronizar(){
   _enVuelo=false;
 }
 window.addEventListener('beforeunload',e=>{ if(_enVuelo || _sucio){ e.preventDefault(); e.returnValue=''; } });
+// Ventana "Cambiar contraseña" (misma en todas las apps de Diwilo). enviar(actual, nueva) devuelve un error o nada.
+function abrirCambioClave(enviar) {
+  let d = document.getElementById('dlgClave');
+  if (!d) {
+    d = document.createElement('dialog');
+    d.id = 'dlgClave';
+    d.style.cssText = 'border:0;border-radius:14px;padding:22px;max-width:360px;width:calc(100% - 32px);box-shadow:0 20px 50px rgba(0,0,0,.25)';
+    d.innerHTML = '<form class="d-grid gap-2">' +
+      '<h2 class="h5 mb-1">Cambiar contraseña</h2>' +
+      '<input class="form-control" type="password" name="current" placeholder="Contraseña actual" autocomplete="current-password" required>' +
+      '<input class="form-control" type="password" name="password" placeholder="Nueva contraseña (mínimo 8)" minlength="8" maxlength="200" autocomplete="new-password" required>' +
+      '<input class="form-control" type="password" name="confirm" placeholder="Repite la nueva contraseña" minlength="8" maxlength="200" autocomplete="new-password" required>' +
+      '<div class="small text-danger" data-err></div>' +
+      '<div class="d-flex gap-2 justify-content-end mt-1"><button type="button" class="btn btn-light" data-cancel>Cancelar</button><button class="btn btn-primary" data-ok>Guardar</button></div>' +
+      '</form>';
+    document.body.appendChild(d);
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+  }
+  const f = d.querySelector('form'), err = d.querySelector('[data-err]'), ok = d.querySelector('[data-ok]');
+  f.reset(); err.textContent = '';
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    if (f.password.value !== f.confirm.value) { err.textContent = 'Las contraseñas nuevas no coinciden'; return; }
+    ok.disabled = true;
+    try {
+      const msg = await enviar(f.current.value, f.password.value);
+      if (msg) err.textContent = msg;
+      else { d.close(); alert('Contraseña actualizada. Se cerraron tus otras sesiones abiertas.'); }
+    } catch (_) { err.textContent = 'No se pudo conectar. Intenta de nuevo.'; }
+    finally { ok.disabled = false; }
+  };
+  d.showModal();
+}
+function cambiarClave(ev){
+  ev?.preventDefault();
+  abrirCambioClave(async (current, password) => {
+    const r = await fetch('/api/auth/password', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'cda' }, body: JSON.stringify({ current, password }) });
+    if (r.ok) return null;
+    return (await r.json().catch(() => ({}))).error || 'No se pudo cambiar la contraseña';
+  });
+}
 async function cerrarSesion(ev){
   ev?.preventDefault();
   try{ await fetch('/api/logout',{method:'POST',headers:{'x-requested-with':'cda'}}); }catch(e){}

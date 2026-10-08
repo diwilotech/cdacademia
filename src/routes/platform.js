@@ -3,7 +3,7 @@ import { first, all, uid } from "../lib/db.js";
 import { sha256Hex, randomToken } from "../lib/password.js";
 import { requirePlatform, isExpired } from "../lib/auth.js";
 
-// API de plataforma para Diwilo Web (Authorization: Bearer PLATFORM_KEY). Sin cookies ni CSRF.
+// API de plataforma para Diwilo Web: solo por RPC (ver lib/platform-rpc.js). Sin cookies ni CSRF.
 const ROLES = ["owner", "admin", "staff"];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -102,6 +102,22 @@ export function registerPlatform(router) {
         .bind(id, ctx.params.id, mail, String(name || "").trim().slice(0, 120) || mail, rol, hash).run();
     }
     return json({ id, invite_path: inviteTo(token) });
+  }));
+
+  // Cambia solo el rol (permisos), sin link nuevo ni tocar la contraseña. 'owner' pasa la propiedad
+  // (el propietario anterior queda como administrador).
+  router.patch("/api/platform/businesses/:id/users/:userId", guard(async (request, env, ctx) => {
+    const { role } = await readJson(request);
+    if (!ROLES.includes(role)) return error("Rol no válido");
+    const u = await first(env, `SELECT id, role FROM users WHERE id = ? AND business_id = ?`, ctx.params.userId, ctx.params.id);
+    if (!u) return error("El usuario no pertenece a este negocio", 404);
+    if (u.role === role) return json({ ok: true, role });
+    if (u.role === "owner") return error("Es el propietario: para cambiarlo, asigna otro propietario", 409);
+    await env.DB.batch([
+      ...(role === "owner" ? [env.DB.prepare(`UPDATE users SET role = 'admin' WHERE business_id = ? AND role = 'owner'`).bind(ctx.params.id)] : []),
+      env.DB.prepare(`UPDATE users SET role = ? WHERE id = ?`).bind(role, u.id),
+    ]);
+    return json({ ok: true, role });
   }));
 
   router.delete("/api/platform/businesses/:id/users/:userId", guard(async (request, env, ctx) => {

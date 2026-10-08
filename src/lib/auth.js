@@ -1,6 +1,7 @@
 import { first, run, nowIso } from "./db.js";
 import { unauthorized } from "./http.js";
-import { sha256Hex, timingSafeEqual, randomToken } from "./password.js";
+import { isPlatformCall } from "./platform-rpc.js";
+import { sha256Hex, randomToken } from "./password.js";
 
 const SESSION_DAYS = 30;
 const COOKIE = "cda_session";
@@ -51,10 +52,7 @@ export async function requireStaff(request, env, ctx) {
   return null;
 }
 
-// Diwilo Web se autentica con "Authorization: Bearer PLATFORM_KEY" (mismo secreto en todas las apps).
-export async function requirePlatform(request, env) {
-  const key = env.PLATFORM_KEY;
-  const auth = request.headers.get("authorization") || "";
-  if (!key || !timingSafeEqual(await sha256Hex(auth), await sha256Hex(`Bearer ${key}`))) return unauthorized();
-  return null;
+// Diwilo Web entra solo por RPC (Platform.call, ver platform-rpc.js); desde internet /api/platform da 401.
+export async function requirePlatform(request) {
+  return isPlatformCall(request) ? null : unauthorized();
 }

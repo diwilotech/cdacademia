@@ -67,6 +67,23 @@ export function registerAuth(router) {
     return json({ ok: true }, { headers: { "set-cookie": sessionCookie(session) } });
   });
 
+  // Cambiar la contraseña desde el panel (sirve aunque la suscripción esté vencida). Cierra las demás sesiones.
+  router.post("/api/auth/password", async (request, env) => {
+    if (request.headers.get("x-requested-with") !== "cda") return error("Solicitud no permitida", 403);
+    const s = await currentSession(request, env);
+    if (!s) return error("Inicia sesión", 401);
+    const { current, password } = await readJson(request);
+    const u = await first(env, `SELECT id, password_hash, password_salt FROM users WHERE id = ?`, s.user_id);
+    if (!(await verifyPassword(String(current || ""), u.password_salt, u.password_hash))) return error("La contraseña actual no es correcta", 401);
+    if (!validatePassword(password)) return error("La contraseña debe tener mínimo 8 caracteres");
+    const salt = randomSalt();
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE users SET password_hash = ?, password_salt = ?, invite_hash = NULL WHERE id = ?`).bind(await hashPassword(String(password), salt), salt, u.id),
+      env.DB.prepare(`DELETE FROM sessions WHERE user_id = ? AND id <> ?`).bind(u.id, s.id),
+    ]);
+    return json({ ok: true });
+  });
+
   router.get("/staff/me", async (request, env) => {
     const s = await currentSession(request, env);
     return s ? json({ email: s.email, name: s.name, role: s.role, negocio: s.business_name, readOnly: s.read_only, paidUntil: s.paid_until })

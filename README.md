@@ -14,7 +14,7 @@ Un solo Cloudflare Worker (API + frontend), D1 multi-tenant (`business_id`), R2 
 No hay registro público ni super admin propio. En `diwilo.com/admin → Negocios` se crea el negocio y el dueño;
 Diwilo devuelve un link `https://cdacademia.diwilo.com/#invite=…` para crear la contraseña (mín. 8).
 Mismo link = restablecer contraseña. Contrato en `Diwilo Web Admin/PROMPT-INTEGRACION-APPS.md`.
-- `/api/platform/*` (Bearer `PLATFORM_KEY`): negocios, usuarios y `paid_until`.
+- `/api/platform/*`: negocios, usuarios, roles y `paid_until`. Solo por RPC desde Diwilo (`export class Platform`, sin clave).
 - Suscripción vencida (`paid_until` < hoy en Colombia): solo lectura; escrituras `402`.
 
 ## Puesta en marcha
@@ -23,9 +23,8 @@ npm install
 npx wrangler d1 create control-de-academia-db     # copia el database_id en wrangler.toml
 npx wrangler r2 bucket create cdacademia-files
 npm run db:migrate:remote
-npx wrangler secret put PLATFORM_KEY               # el mismo valor que en Diwilo Web y las demás apps
 ```
-Local: `echo 'PLATFORM_KEY=dev' > .dev.vars && npm run db:migrate:local && npm run dev`.
+Local: `npm run db:migrate:local && npm run dev`. Para crear negocios en local, levanta Diwilo Web junto con esta app (desde la carpeta de Diwilo: `npx wrangler dev -c wrangler.jsonc -c "../Control de Academia/wrangler.toml" --var ACCESS_AUD: --var DEV_ADMIN_EMAIL:tu@correo.com`) y usa Negocios en http://localhost:8787/admin. `/api/platform/*` solo responde por RPC.
 
 ## Despliegue
 GitHub + Workers Builds: push a `main` despliega solo (conectar el repo en el panel de Cloudflare).

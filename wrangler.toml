@@ -11,7 +11,7 @@ run_worker_first = ["/", "/login", "/admin", "/admin.html"]
 [[d1_databases]]
 binding = "DB"
 database_name = "control-de-academia-db"
-database_id = "REEMPLAZAR_CON_EL_ID_DE_D1"   # wrangler d1 create control-de-academia-db
+database_id = "3cad86e3-cbc8-4e0c-b69b-8367c63f4b65"
 
 [[r2_buckets]]
 binding = "FILES"

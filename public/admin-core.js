@@ -577,7 +577,7 @@ function render(){
     return `<tr><td><a href="#" class="text-reset fw-semibold text-decoration-none" onclick="event.preventDefault();verFicha('${e.id}')">${esc(e.nombre)}</a>
         <div class="small text-muted text-truncate" style="max-width:260px">${esc(cu?.nombre||'')}</div>
         <div class="small text-muted tabular"><i class="bi bi-calendar-range"></i> ${fechasCurso[q.insc.cursoId]||''}</div></td>
-      <td class="tabular text-nowrap">${fechaLarga(q.fecha)}</td>
+      <td class="tabular text-nowrap"><div class="fw-semibold">${DIAS_L[new Date(q.fecha+'T12:00').getDay()]}</div><small class="text-muted">${fechaLarga(q.fecha)}</small></td>
       <td style="min-width:110px"><div class="small fw-semibold tabular">${cuota}</div>
         <div class="barra mt-1" title="${p.pagadas} de ${p.total} cuotas pagadas"><i style="width:${pct}%"></i></div></td>
       <td class="text-end tabular"><div class="fw-semibold">${money(totalInsc(q.insc))}</div>
@@ -599,16 +599,15 @@ function render(){
   // estudiantes
   const q=($('#buscarEst').value||'').toLowerCase();
   $('#tablaEst').innerHTML = DB.estudiantes.filter(e=>[e.nombre,e.doc,e.tel].join(' ').toLowerCase().includes(q)).map(e=>{
-    const ins=DB.inscripciones.filter(i=>i.estId===e.id), s=saldoEst(e.id);
+    const ins=DB.inscripciones.filter(i=>i.estId===e.id);
     return `<tr><td><div class="d-flex align-items-center gap-2"><div class="avatar">${iniciales(e.nombre)}</div>
       <div><div class="fw-semibold">${esc(e.nombre)}</div><small class="text-muted">${esc(e.doc)}${e.origen?` · <span class="text-marca">${esc(nombreOrigen(e.origen))}</span>`:''}</small></div></div></td>
       <td><small>${esc(e.tel)}<br><span class="text-muted">${esc(e.email)}</span></small></td>
       <td>${ins.map(i=>`<span class="badge bg-marca-suave text-marca fw-medium me-1">${esc(curso(i.cursoId)?.nombre)}</span>`).join('')||'<small class="text-muted">—</small>'}</td>
-      <td class="text-end tabular ${s>0?'text-danger fw-semibold':'text-success'}">${s>0?money(s):'Al día'}</td>
       <td class="text-end text-nowrap">
         <button class="btn btn-sm btn-outline-secondary" onclick="verFicha('${e.id}')" title="Ver ficha"><i class="bi bi-eye"></i></button>
         <button class="btn btn-sm btn-outline-secondary" onclick="abrirEstudiante('${e.id}')" title="Editar"><i class="bi bi-pencil"></i></button></td></tr>`}).join('')
-    || `<tr><td colspan="5" class="text-center text-muted py-4">No hay ${c.termP} que coincidan.</td></tr>`;
+    || `<tr><td colspan="4" class="text-center text-muted py-4">No hay ${c.termP} que coincidan.</td></tr>`;
 
   // cursos
   $('#gridCursos').innerHTML = DB.cursos.map(cu=>{
@@ -676,7 +675,10 @@ function botonWA(q, link){
   const txt = q.estado==='vencida'
     ? `Hola ${nombre} 👋 Te recordamos que la ${q.etiqueta.toLowerCase()} de ${cu.nombre} venció el ${fechaLarga(q.fecha)}. Valor pendiente: ${money(q.falta)}. ¡Gracias! — ${DB.config.nombre}`
     : `Hola ${nombre} 👋 Te recordamos que la ${q.etiqueta.toLowerCase()} de ${cu.nombre} vence el ${fechaLarga(q.fecha)}. Valor: ${money(q.falta)}. ¡Gracias! — ${DB.config.nombre}`;
-  const url=`https://wa.me/${num}?text=${encodeURIComponent(txt)}`;
+  // además de esta cuota, se cuentan las otras que le faltan (las ya pagadas, aunque haya pagado varias de una vez, no se mencionan)
+  const pend=estadoCuotas(q.insc).filter(x=>x.falta>0), otras=pend.length-1;
+  const extra=otras>0 ? ` Después de esta le quedan ${otras} ${otras===1?'cuota':'cuotas'} por pagar (saldo total ${money(saldoInsc(q.insc))}).` : '';
+  const url=`https://wa.me/${num}?text=${encodeURIComponent(txt.replace(/ ¡Gracias!/,extra+' ¡Gracias!'))}`;
   return link
     ? `<a class="btn btn-sm btn-link text-success p-0" href="${url}" target="_blank" title="Recordar por WhatsApp"><i class="bi bi-whatsapp"></i></a>`
     : `<a class="btn btn-sm btn-outline-success" href="${url}" target="_blank" title="Recordar por WhatsApp"><i class="bi bi-whatsapp"></i></a>`;
@@ -741,7 +743,7 @@ $('#formCuotas').addEventListener('submit',ev=>{
 function llenarCursos(sel){ sel.innerHTML='<option value="">— Ninguno por ahora —</option>'+DB.cursos.map(c=>`<option value="${c.id}">${esc(c.nombre)} (${money(c.precio)})</option>`).join(''); }
 function abrirEstudiante(id){
   $('#formEst').reset(); llenarCursos($('#estCurso'));
-  contCuotasEst().innerHTML=''; $('#bloqueCuotasEst').hidden=true; codigoAplicado=null; $('#estCodigoMsg').textContent='';
+  contCuotasEst().innerHTML=''; $('#bloqueCuotasEst').hidden=true; codigoAplicado=null; $('#estCodigoMsg').textContent=''; $('#estCuponesLista').innerHTML='';
   const e=id?est(id):{}; $('#estId').value=id||'';
   $('#tEst').textContent=(id?'Editar ':'Nuevo ')+DB.config.termS;
   ['Nombre','Doc','Tel','Email','Notas'].forEach(k=>$('#est'+k).value=e[k.toLowerCase()]||'');
@@ -753,11 +755,19 @@ function refrescarCuotasEst(){
   const activo=!!$('#estCurso').value; $('#bloqueCuotasEst').hidden=!activo;
   if(!activo) return;
   const total=(+$('#estValor').value||0)-(+$('#estDesc').value||0), cont=contCuotasEst();
-  if(!cont.firstElementChild) montarFormCuotas(cont,total,null,hoyISO());
+  if(!cont.firstElementChild){ const cu=curso($('#estCurso').value); montarFormCuotas(cont,total,{inicial:Math.min(+cu?.inicial||0,Math.max(0,total)),n:1,frecuencia:'mensual',primera:hoyISO()},hoyISO()); }
   else { cont.dataset.total=total; cont.actualizar(); }
 }
 let codigoAplicado=null;
-$('#estCurso').addEventListener('change',e=>{ const c=curso(e.target.value); $('#estValor').value=c?c.precio:''; codigoAplicado=null; $('#estCodigo').value=''; $('#estCodigoMsg').textContent=''; $('#estCodigoWrap').hidden=!c; refrescarCuotasEst(); });
+/* Cupones vigentes del curso elegido: se aplican con un clic */
+function pintarCuponesEst(){
+  const cu=curso($('#estCurso').value), hoy=hoyISO();
+  const vivos=(cu?.descuentos||[]).filter(d=>d.codigo && (!d.hasta || d.hasta>=hoy) && (!d.max || (d.usos||0)<d.max));
+  $('#estCuponesLista').innerHTML=vivos.length ? `<span class="small text-muted align-self-center">Cupones de este curso:</span>`+vivos.map(d=>
+    `<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-cupon="${esc(d.codigo)}">${esc(d.codigo)} · ${d.tipo==='pct'?d.valor+' %':money(d.valor)}</button>`).join('') : '';
+}
+$('#estCuponesLista').addEventListener('click',e=>{ const b=e.target.closest('[data-cupon]'); if(!b) return; $('#estCodigo').value=b.dataset.cupon; $('#estCodigoBtn').click(); });
+$('#estCurso').addEventListener('change',e=>{ const c=curso(e.target.value); $('#estValor').value=c?c.precio:''; $('#estDesc').value=0; codigoAplicado=null; $('#estCodigo').value=''; $('#estCodigoMsg').textContent=''; $('#estCodigoWrap').hidden=!c; contCuotasEst().innerHTML=''; pintarCuponesEst(); refrescarCuotasEst(); });
 /* Valida un código del curso (vigencia y usos) y calcula el descuento */
 function validarCodigo(c,codigo,base){
   const cod=(c.descuentos||[]).find(d=>d.codigo===String(codigo||'').trim().toUpperCase());
@@ -843,7 +853,7 @@ function abrirCurso(id){
   $('#formCurso').reset(); const c=id?curso(id):{};
   $('#tCurso').textContent=id?'Editar curso':'Nuevo curso';
   $('#curId').value=id||''; $('#curNombre').value=c.nombre||''; $('#curPrecio').value=c.precio||'';
-  $('#curNivel').value=c.nivel||'Básico'; $('#curDesc').value=c.desc||'';
+  $('#curNivel').value=c.nivel||'Básico'; $('#curDesc').value=c.desc||''; $('#curInicial').value=c.inicial||'';
   const g=c.grupo||{jornada:'Mañana',slots:[],inicio:'',numClases:16,festivos:true};
   $('#curArea').innerHTML='<option value="">— Sin área —</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
   $('#curArea').value=c.areaId||'';
@@ -900,7 +910,9 @@ $('#formCurso').addEventListener('submit',ev=>{
   const grupo=construirGrupo(pro);
   const N=grupo.numClases;
   const mods=modsTemp.filter(r=>modulo(r.ref)).map(r=>({ref:r.ref,desde:Math.min(r.desde,N),hasta:Math.min(Math.max(r.hasta,r.desde),N)}));
-  const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,nivel:$('#curNivel').value,areaId:$('#curArea').value,
+  const inicial=Math.max(0,+$('#curInicial').value||0);
+  if(inicial>(+$('#curPrecio').value||0)){ toast('La cuota inicial no puede ser mayor que el precio del curso'); return; }
+  const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,inicial,nivel:$('#curNivel').value,areaId:$('#curArea').value,
               desc:$('#curDesc').value,grupo,clases:prev.clases||[],modulos:mods,descuentos:dc,
               evaluaciones:prev.evaluaciones||[{id:'ev1',nombre:'Prácticas',peso:40,clase:null},{id:'ev2',nombre:'Evaluación final',peso:60,clase:grupo.numClases}]};
   const idx=DB.cursos.findIndex(c=>c.id===id); idx>=0?DB.cursos[idx]=data:DB.cursos.push(data);

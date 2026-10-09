@@ -98,7 +98,7 @@
         </div>
         <div class="card"><div class="table-responsive">
           <table class="table align-middle mb-0">
-            <thead><tr><th>Nombre</th><th>Contacto</th><th>Cursos</th><th class="text-end">Saldo</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Contacto</th><th>Cursos</th><th></th></tr></thead>
             <tbody id="tablaEst"></tbody>
           </table>
         </div></div>
@@ -183,7 +183,7 @@
         <div class="row g-3 mb-3" id="statsCuotas"></div>
         <div class="card"><div class="table-responsive">
           <table class="table align-middle mb-0">
-            <thead><tr><th><span data-term="Estudiante">Estudiante</span> · curso · inicio → fin</th><th>Fecha de cobro</th><th>Cuotas</th><th class="text-end">Total / Pagado</th><th class="text-end">Cuota / Falta</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th data-term="Estudiante">Estudiante</th><th>Día de cobro</th><th>Cuotas</th><th class="text-end">Total / Pagado</th><th class="text-end">Cuota / Falta</th><th>Estado</th><th></th></tr></thead>
             <tbody id="tablaCuotas"></tbody>
           </table>
         </div></div>
@@ -402,12 +402,13 @@
     <div class="col-md-6"><label class="form-label small" for="estEmail">Correo</label><input type="email" class="form-control" id="estEmail"></div>
     <div class="col-md-8"><label class="form-label small" for="estNotas">Notas</label><textarea class="form-control" id="estNotas" rows="1"></textarea></div>
     <div class="col-md-4"><label class="form-label small" for="estOrigen">¿Cómo nos conoció?</label><select class="form-select" id="estOrigen"></select></div>
-    <div class="col-12 mt-3"><h3 class="h6">Inscribir en curso</h3></div>
+    <div class="col-12 mt-3"><h3 class="h6">Seleccionar curso</h3></div>
     <div class="col-md-6"><label class="form-label small" for="estCurso">Curso</label><select class="form-select" id="estCurso"><option value="">— Ninguno por ahora —</option></select></div>
-    <div class="col-md-3"><label class="form-label small" for="estValor">Valor acordado</label><input type="number" class="form-control" id="estValor" min="0"></div>
+    <div class="col-md-3"><label class="form-label small" for="estValor">Valor del curso</label><input type="number" class="form-control" id="estValor" min="0"></div>
     <div class="col-md-3"><label class="form-label small" for="estDesc">Descuento</label><input type="number" class="form-control" id="estDesc" min="0" value="0"></div>
     <div class="col-12" id="estCodigoWrap" hidden><label class="form-label small" for="estCodigo">Código de descuento del curso</label>
       <div class="input-group" style="max-width:360px"><input class="form-control text-uppercase" id="estCodigo" autocomplete="off" placeholder="Ej: BIENVENIDA10"><button type="button" class="btn btn-outline-secondary" id="estCodigoBtn">Aplicar</button></div>
+      <div class="d-flex flex-wrap gap-1 mt-1" id="estCuponesLista"></div>
       <div class="small" id="estCodigoMsg"></div></div>
     <div class="col-12" id="bloqueCuotasEst" hidden>
       <div class="bg-marca-suave rounded p-3 mt-2">
@@ -560,8 +561,9 @@
         <div class="row g-2">
           <div class="col-md-8"><label class="form-label small" for="curNombre">Nombre</label><input class="form-control" id="curNombre" required maxlength="120"></div>
           <div class="col-md-4"><label class="form-label small" for="curPrecio">Precio</label><input type="number" class="form-control" id="curPrecio" min="0" required></div>
-          <div class="col-md-6"><label class="form-label small" for="curNivel">Nivel</label><select class="form-select" id="curNivel"><option>Básico</option><option>Intermedio</option><option>Avanzado</option><option>Profesional</option></select></div>
-          <div class="col-md-6"><label class="form-label small" for="curArea">Área</label><select class="form-select" id="curArea"></select></div>
+          <div class="col-md-4"><label class="form-label small" for="curNivel">Nivel</label><select class="form-select" id="curNivel"><option>Básico</option><option>Intermedio</option><option>Avanzado</option><option>Profesional</option></select></div>
+          <div class="col-md-4"><label class="form-label small" for="curArea">Área</label><select class="form-select" id="curArea"></select></div>
+          <div class="col-md-4"><label class="form-label small" for="curInicial">Cuota inicial</label><input type="number" class="form-control" id="curInicial" min="0" step="1000" placeholder="0"><small class="text-muted">Se propone al inscribir; puede ser 0</small></div>
           <div class="col-12"><label class="form-label small" for="curDesc">Descripción</label><textarea class="form-control" id="curDesc" rows="3" placeholder="Qué aprende la persona, a quién va dirigido…"></textarea></div>
         </div></div>
 

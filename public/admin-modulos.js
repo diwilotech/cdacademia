@@ -21,6 +21,7 @@ function migrarEsquema(){
     if(!c.areaId){ const t=norm(c.nombre), h=PISTAS.find(([id,re])=>re.test(t) && area(id)); if(h){ c.areaId=h[0]; cambio=true; } }  // área sugerida por el nombre del curso
     if(c.grupo){ if(!c.grupo.slots) cambio=true; normGrupo(c.grupo); }
     if(!c.descuentos){ c.descuentos=[]; cambio=true; }
+    if(c.inicial===undefined){ c.inicial=+(DB.inscripciones.find(i=>i.cursoId===c.id)?.planCuotas?.inicial)||0; cambio=true; }   // la inicial de la primera inscripción pasa a ser la del curso
     const nom=(c.grupo?.docente||'').trim();
     if(nom && !c.grupo.profesionalId){            // el docente escrito a mano pasa a ser un profesional
       let p=DB.profesionales.find(x=>x.nombre.toLowerCase()===nom.toLowerCase());

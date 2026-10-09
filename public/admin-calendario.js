@@ -1,16 +1,18 @@
 /* =========================================================
    CALENDARIO SEMANAL ÚNICO (clases y reposiciones)
    Una sola forma de ver todo: columnas lunes–domingo y filas por momento del día
-   (mañana, media mañana, tarde, muy tarde y noche). Cada tarjeta muestra la hora, el título de la clase,
+   (mañana, media mañana, tarde, media tarde y noche). Cada tarjeta muestra la hora, el título de la clase,
    el curso, el profesor, los módulos y los estudiantes. Se usa en Reposiciones, en Cursos y dentro de cada curso.
    ========================================================= */
 const MOMENTOS = [
   {n:'Mañana',        r:'antes de las 9:00',     ic:'bi-sunrise',          hasta:9*60},
   {n:'Media mañana',  r:'9:00 – 12:00',          ic:'bi-brightness-high',  hasta:12*60},
   {n:'Tarde',         r:'12:00 – 3:00 p. m.',    ic:'bi-sun',              hasta:15*60},
-  {n:'Muy tarde',     r:'3:00 – 6:00 p. m.',     ic:'bi-sunset',           hasta:18*60},
+  {n:'Media tarde',     r:'3:00 – 6:00 p. m.',     ic:'bi-sunset',           hasta:18*60},
   {n:'Noche',         r:'desde las 6:00 p. m.',  ic:'bi-moon-stars',       hasta:24*60}
 ];
+/* Horario que se propone al agregar una clase en cada momento del día */
+const HORA_MOMENTO = [['07:00','09:00'],['09:00','12:00'],['12:00','15:00'],['15:00','18:00'],['18:00','21:00']];
 const momentoDe = ini => MOMENTOS.findIndex(m=>aMin(ini)<m.hasta);
 const calBase = o => ({semana:lunesDe(hoyISO()),clases:true,repos:false,area:'',prof:'',cursoId:'',nuevo:false,...o});
 const CALS = {
@@ -84,7 +86,7 @@ function calHtml(id){
     <div class="cal"><div class="cal-grid">
       <div class="cal-cab cal-esq"></div>${dias.map(iso=>{ const d=new Date(iso+'T12:00'); return `<div class="cal-cab ${iso===hoy?'hoy':''}"><span>${DIAS[d.getDay()]}</span> <b>${d.getDate()}</b>${cal.nuevo?`<button type="button" class="cal-mas" data-nuevo="${iso}" title="Abrir un espacio de reposición este día"><i class="bi bi-plus-circle"></i></button>`:''}</div>`; }).join('')}
       ${celdas}</div></div>
-    <div class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Así se ven todas las clases${cal.repos?' y reposiciones':''}: la jornada se divide en mañana, media mañana, tarde, muy tarde y noche.
+    <div class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Así se ven todas las clases${cal.repos?' y reposiciones':''}: la jornada se divide en mañana, media mañana, tarde, media tarde y noche.
       ${ev.length?'':' <b>No hay nada esta semana con estos filtros.</b>'}</div>`;
 }
 function pintarCal(id){ const el=document.getElementById(id); if(el && !el.hidden) el.innerHTML=calHtml(id); }

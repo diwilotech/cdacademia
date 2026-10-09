@@ -1,11 +1,10 @@
 /* =========================================================
-   SEMANA INTERACTIVA DE CLASES (formulario del curso)
-   Una cuadrícula lunes–domingo con horas: clic y arrastre para crear una clase, arrastrar una clase para moverla
-   (de hora o de día), estirar su borde de abajo para cambiar la duración. Edita franjasTemp = [{dia, ini, fin}].
+   SEMANA DE CLASES (formulario del curso)
+   De lunes a domingo, con la jornada dividida en mañana, media mañana, tarde, media tarde y noche
+   (los mismos momentos del calendario). «+ Clase» agrega una clase en ese día y momento; se arrastra a otro
+   día o momento; la hora se escribe en la propia tarjeta. Edita franjasTemp = [{dia, ini, fin}].
    ========================================================= */
-const PX_H = 34, PASO = 15, MIN_DUR = 30;
 const ORDEN_DIAS = [1,2,3,4,5,6,0];
-let gridIni = 6*60, gridFin = 22*60, ultimaDur = 120, arr = null;
 const aMin = h => { const [a,b] = String(h||'0:0').split(':').map(Number); return a*60 + b; };
 const deMin = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 
@@ -14,121 +13,67 @@ function ordenSemana(){
   return franjasTemp.map((_,k)=>k).sort((a,b)=>ordenDia(franjasTemp[a].dia)-ordenDia(franjasTemp[b].dia) || franjasTemp[a].ini.localeCompare(franjasTemp[b].ini));
 }
 const numeroSemana = k => ordenSemana().indexOf(k) + 1;
+/* ¿Se pisa con otra clase del mismo día? */
+const choca = (dia,ini,fin,excepto) => franjasTemp.some((x,k)=>k!==excepto && x.dia===dia && aMin(x.ini)<fin && aMin(x.fin)>ini);
 
 function refrescarHorario(){
   pintarSemana(); pintarFranjas(); resumenFechasForm();
   $('#curPorSemanaTxt').textContent = franjasTemp.length;
 }
-const choca = (dia,ini,fin,excepto) => franjasTemp.some((x,k)=>k!==excepto && x.dia===dia && aMin(x.ini)<fin && aMin(x.fin)>ini);
-/* Inicio de la clase más cercana que empieza después de `desde` ese día (límite al estirar) */
-const limiteDespues = (dia,desde,excepto) => Math.min(gridFin, ...franjasTemp.filter((x,k)=>k!==excepto && x.dia===dia && aMin(x.ini)>=desde).map(x=>aMin(x.ini)));
-
-function claseHtml(x,k,n){
-  const top=(aMin(x.ini)-gridIni)/60*PX_H, alto=Math.max(14,(aMin(x.fin)-aMin(x.ini))/60*PX_H);
-  return `<div class="sg-clase" data-k="${k}" tabindex="0" role="button" style="top:${top}px;height:${alto}px" aria-label="Clase ${n}, ${DIAS_L[x.dia]} ${rangoHoras(x.ini,x.fin)}">
-    <b>Clase ${n}</b><span class="sg-rango">${rangoHoras(x.ini,x.fin)}</span>
-    <button type="button" class="sg-x" title="Quitar esta clase" aria-label="Quitar clase ${n}">×</button><div class="sg-res" title="Estira para cambiar la hora de fin"></div></div>`;
-}
 function pintarSemana(){
-  const cont=$('#curSemana'), y=cont.scrollTop;
-  // el rango se amplía si alguna clase queda fuera de 6 a. m. – 10 p. m.
-  gridIni=Math.min(6*60, ...franjasTemp.map(x=>Math.floor(aMin(x.ini)/60)*60));
-  gridFin=Math.max(22*60, ...franjasTemp.map(x=>Math.ceil(aMin(x.fin)/60)*60));
-  const orden=ordenSemana(), num=k=>orden.indexOf(k)+1;
-  const horas=[]; for(let m=gridIni;m<=gridFin;m+=60){ const h=m/60; horas.push(`<span style="top:${(m-gridIni)/60*PX_H}px">${h%12||12}${h>=12?'p':'a'}</span>`); }
-  cont.innerHTML=`<div class="sg-head"><div></div>${ORDEN_DIAS.map(d=>`<div>${DIAS[d]}</div>`).join('')}</div>
-    <div class="sg-body" style="height:${(gridFin-gridIni)/60*PX_H}px"><div class="sg-horas">${horas.join('')}</div>
-    ${ORDEN_DIAS.map(d=>`<div class="sg-col" data-dia="${d}">${franjasTemp.map((x,k)=>x.dia===d?claseHtml(x,k,num(k)):'').join('')}</div>`).join('')}</div>`;
+  const cont=$('#curSemana'), y=cont.scrollTop, orden=ordenSemana();
+  const tarjeta=(x,k)=>`<div class="sg-card" draggable="true" data-k="${k}" aria-label="Clase ${orden.indexOf(k)+1}, ${DIAS_L[x.dia]}">
+      <div class="sg-top"><i class="bi bi-grip-vertical text-muted"></i><b>Clase ${orden.indexOf(k)+1}</b><button type="button" class="sg-x" title="Quitar esta clase" aria-label="Quitar clase ${orden.indexOf(k)+1}">×</button></div>
+      <div class="sg-hor"><input type="time" data-f="ini" value="${x.ini}" aria-label="Hora de inicio"><span class="text-muted">–</span><input type="time" data-f="fin" value="${x.fin}" aria-label="Hora de fin"></div></div>`;
+  cont.innerHTML=`<div class="cal-grid"><div class="cal-cab cal-esq"></div>${ORDEN_DIAS.map(d=>`<div class="cal-cab"><span>${DIAS[d]}</span></div>`).join('')}
+    ${MOMENTOS.map((m,i)=>`<div class="cal-mom"><i class="bi ${m.ic}"></i><b>${m.n}</b><small>${m.r}</small></div>`+ORDEN_DIAS.map(d=>
+      `<div class="cal-celda" data-dia="${d}" data-mom="${i}">${franjasTemp.map((x,k)=>x.dia===d && momentoDe(x.ini)===i ? tarjeta(x,k) : '').join('')}
+        <button type="button" class="sg-add" data-add title="Agregar una clase el ${DIAS_L[d]} en la ${m.n.toLowerCase()}">+ Clase</button></div>`).join('')).join('')}</div>`;
   cont.scrollTop=y;
 }
-function irAPrimeraClase(){
-  const cont=$('#curSemana'); if(!franjasTemp.length) return;
-  cont.scrollTop=Math.max(0,(Math.min(...franjasTemp.map(x=>aMin(x.ini)))-gridIni)/60*PX_H-24);
-}
-document.getElementById('mCurso').addEventListener('shown.bs.modal',irAPrimeraClase);
 
-/* --- coordenadas --- */
-const cuerpoSemana = () => document.querySelector('#curSemana .sg-body');
-function minDesdeY(y){ const r=cuerpoSemana().getBoundingClientRect(); return Math.round((gridIni+(y-r.top)/PX_H*60)/PASO)*PASO; }
-function diaDesdeX(x){
-  for(const c of document.querySelectorAll('#curSemana .sg-col')){ const r=c.getBoundingClientRect(); if(x>=r.left && x<r.right) return +c.dataset.dia; }
-  return null;
+/* Agrega una clase en ese día y momento (con el horario típico del momento, sin pisar otras) */
+function agregarClase(dia,mom){
+  let [ini,fin]=HORA_MOMENTO[mom].map(aMin); const dur=fin-ini;
+  franjasTemp.filter(x=>x.dia===dia).sort((a,b)=>a.ini.localeCompare(b.ini)).forEach(x=>{ if(aMin(x.ini)<ini+dur && aMin(x.fin)>ini){ ini=aMin(x.fin); } });   // si ya hay una, empieza cuando termina
+  fin=ini+dur;
+  if(fin>24*60 || choca(dia,ini,fin,-1)){ toast('No hay espacio libre en ese momento del día'); return; }
+  franjasTemp.push({dia,ini:deMin(ini),fin:deMin(fin)}); refrescarHorario();
+}
+/* Mueve una clase a otro día o momento: conserva su duración y toma la hora típica del nuevo momento */
+function moverClase(k,dia,mom){
+  const x=franjasTemp[k], dur=aMin(x.fin)-aMin(x.ini);
+  let ini = momentoDe(x.ini)===mom ? aMin(x.ini) : aMin(HORA_MOMENTO[mom][0]);
+  franjasTemp.filter((y,j)=>j!==k && y.dia===dia).sort((a,b)=>a.ini.localeCompare(b.ini)).forEach(y=>{ if(aMin(y.ini)<ini+dur && aMin(y.fin)>ini) ini=aMin(y.fin); });
+  if(ini+dur>24*60 || choca(dia,ini,ini+dur,k)){ toast('No hay espacio libre en ese lugar'); return; }
+  x.dia=dia; x.ini=deMin(ini); x.fin=deMin(ini+dur); refrescarHorario();
 }
 
-/* --- arrastre --- */
-$('#curSemana').addEventListener('pointerdown',e=>{
-  if(e.button>0 || e.target.closest('.sg-x')) return;
-  const col=e.target.closest('.sg-col'); if(!col) return;
-  const bl=e.target.closest('.sg-clase'), m=minDesdeY(e.clientY);
-  if(bl){
-    const k=+bl.dataset.k, x=franjasTemp[k];
-    arr={modo:e.target.closest('.sg-res')?'res':'mov',k,bl,dia:x.dia,ini:aMin(x.ini),fin:aMin(x.fin),m0:m,y0:e.clientY,x0:e.clientX,movido:false};
-    arr.cand={dia:x.dia,ini:arr.ini,fin:arr.fin}; bl.classList.add('arrastrando');
-  } else {
-    arr={modo:'crear',dia:+col.dataset.dia,m0:m,y0:e.clientY,x0:e.clientX,movido:false,col};
-    arr.cand={dia:arr.dia,ini:m,fin:m+PASO*2};
-  }
-  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(x){}
-  e.preventDefault();
-});
-$('#curSemana').addEventListener('pointermove',e=>{
-  if(!arr) return;
-  if(Math.abs(e.clientY-arr.y0)>3 || Math.abs(e.clientX-arr.x0)>3) arr.movido=true;
-  if(!arr.movido) return;
-  const m=minDesdeY(e.clientY);
-  if(arr.modo==='mov'){
-    const dur=arr.fin-arr.ini, ini=Math.max(gridIni,Math.min(gridFin-dur,arr.ini+(m-arr.m0))), dia=diaDesdeX(e.clientX) ?? arr.cand.dia;
-    if(choca(dia,ini,ini+dur,arr.k)) return;                       // no se pisa con otra clase
-    arr.cand={dia,ini,fin:ini+dur};
-    const col=document.querySelector(`#curSemana .sg-col[data-dia="${dia}"]`); if(col && arr.bl.parentNode!==col) col.appendChild(arr.bl);
-    arr.bl.style.top=(ini-gridIni)/60*PX_H+'px';
-  } else if(arr.modo==='res'){
-    const fin=Math.max(arr.ini+MIN_DUR,Math.min(m,limiteDespues(arr.dia,arr.fin,arr.k)));
-    arr.cand={dia:arr.dia,ini:arr.ini,fin};
-    arr.bl.style.height=(fin-arr.ini)/60*PX_H+'px';
-  } else {
-    const fin=Math.max(arr.m0+MIN_DUR,Math.min(m,limiteDespues(arr.dia,arr.m0,-1)));
-    arr.cand={dia:arr.dia,ini:arr.m0,fin};
-    if(!arr.fantasma){ arr.fantasma=document.createElement('div'); arr.fantasma.className='sg-clase sg-fantasma'; arr.col.appendChild(arr.fantasma); }
-    arr.fantasma.style.top=(arr.m0-gridIni)/60*PX_H+'px'; arr.fantasma.style.height=(fin-arr.m0)/60*PX_H+'px';
-    arr.fantasma.innerHTML=`<b>${rangoHoras(deMin(arr.m0),deMin(fin))}</b>`;
-  }
-});
-function terminarArrastre(cancelar){
-  const a=arr; arr=null; if(!a) return;
-  if(!cancelar){
-    if(a.modo==='crear'){
-      let {ini,fin}=a.cand;
-      if(!a.movido){ ini=Math.max(gridIni,Math.min(a.m0,gridFin-MIN_DUR)); fin=Math.min(ini+ultimaDur,limiteDespues(a.dia,ini,-1)); }
-      if(choca(a.dia,ini,fin,-1) || fin-ini<MIN_DUR){ toast('No hay espacio libre a esa hora'); }
-      else { franjasTemp.push({dia:a.dia,ini:deMin(ini),fin:deMin(fin)}); ultimaDur=fin-ini; }
-    } else if(a.movido){
-      const x=franjasTemp[a.k]; x.dia=a.cand.dia; x.ini=deMin(a.cand.ini); x.fin=deMin(a.cand.fin); ultimaDur=a.cand.fin-a.cand.ini;
-    }
-  }
-  refrescarHorario();
-  if(a.modo!=='crear'){ document.querySelector(`#curSemana .sg-clase[data-k="${a.k}"]`)?.classList.add('sel'); }
-}
-$('#curSemana').addEventListener('pointerup',()=>terminarArrastre(false));
-$('#curSemana').addEventListener('pointercancel',()=>terminarArrastre(true));
 $('#curSemana').addEventListener('click',e=>{
-  const x=e.target.closest('.sg-x'); if(!x) return;
-  franjasTemp.splice(+x.closest('.sg-clase').dataset.k,1); refrescarHorario();
+  const add=e.target.closest('[data-add]');
+  if(add){ const c=add.closest('.cal-celda'); agregarClase(+c.dataset.dia,+c.dataset.mom); return; }
+  const x=e.target.closest('.sg-x'); if(x){ franjasTemp.splice(+x.closest('.sg-card').dataset.k,1); refrescarHorario(); }
 });
-
-/* --- teclado: flechas mueven, Mayús+flechas cambian la duración, Supr quita --- */
-$('#curSemana').addEventListener('keydown',e=>{
-  const bl=e.target.closest('.sg-clase'); if(!bl || e.target!==bl) return;
-  const k=+bl.dataset.k, x=franjasTemp[k]; let ini=aMin(x.ini), fin=aMin(x.fin), dia=x.dia;
-  if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); franjasTemp.splice(k,1); refrescarHorario(); return; }
-  if(e.key==='ArrowUp'||e.key==='ArrowDown'){
-    const d=e.key==='ArrowUp'?-PASO:PASO;
-    if(e.shiftKey) fin=Math.max(ini+MIN_DUR,Math.min(gridFin,fin+d)); else { if(ini+d<gridIni||fin+d>gridFin) return; ini+=d; fin+=d; }
-  } else if(!e.shiftKey && (e.key==='ArrowLeft'||e.key==='ArrowRight')){
-    const i=ORDEN_DIAS.indexOf(dia)+(e.key==='ArrowLeft'?-1:1); if(i<0||i>=ORDEN_DIAS.length) return; dia=ORDEN_DIAS[i];
-  } else return;
-  e.preventDefault();
-  if(choca(dia,ini,fin,k)) return;
-  x.dia=dia; x.ini=deMin(ini); x.fin=deMin(fin); refrescarHorario();
-  document.querySelector(`#curSemana .sg-clase[data-k="${k}"]`)?.focus();
+/* La hora se escribe en la tarjeta; al salir del campo se valida y la clase cambia de momento si hace falta */
+$('#curSemana').addEventListener('change',e=>{
+  const inp=e.target.closest('input[data-f]'); if(!inp) return;
+  const k=+inp.closest('.sg-card').dataset.k, x=franjasTemp[k], ini=inp.dataset.f==='ini'?inp.value:x.ini, fin=inp.dataset.f==='fin'?inp.value:x.fin;
+  if(!ini || !fin || aMin(fin)<=aMin(ini)){ toast('La hora final debe ser después de la inicial'); pintarSemana(); return; }
+  if(choca(x.dia,aMin(ini),aMin(fin),k)){ toast('Se cruza con otra clase de ese día'); pintarSemana(); return; }
+  x.ini=ini; x.fin=fin; refrescarHorario();
+});
+/* Arrastrar y soltar entre días y momentos */
+let arrastrada=null;
+$('#curSemana').addEventListener('dragstart',e=>{
+  const c=e.target.closest('.sg-card'); if(!c) return; arrastrada=+c.dataset.k; c.classList.add('arrastrando');
+  if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(arrastrada)); }
+});
+$('#curSemana').addEventListener('dragend',()=>{ arrastrada=null; document.querySelectorAll('#curSemana .arrastrando, #curSemana .sobre').forEach(n=>n.classList.remove('arrastrando','sobre')); });
+$('#curSemana').addEventListener('dragover',e=>{
+  const c=e.target.closest('.cal-celda'); if(!c || arrastrada===null) return;
+  e.preventDefault(); document.querySelectorAll('#curSemana .sobre').forEach(n=>n!==c&&n.classList.remove('sobre')); c.classList.add('sobre');
+});
+$('#curSemana').addEventListener('drop',e=>{
+  const c=e.target.closest('.cal-celda'); if(!c || arrastrada===null) return; e.preventDefault();
+  const k=arrastrada; arrastrada=null; moverClase(k,+c.dataset.dia,+c.dataset.mom);
 });

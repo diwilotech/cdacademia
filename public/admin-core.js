@@ -831,7 +831,7 @@ function abrirCurso(id){
   $('#tCurso').textContent=id?'Editar curso':'Nuevo curso';
   $('#curId').value=id||''; $('#curNombre').value=c.nombre||''; $('#curPrecio').value=c.precio||'';
   $('#curNivel').value=c.nivel||'Básico'; $('#curDesc').value=c.desc||'';
-  const g=c.grupo||{jornada:'Mañana',slots:[{dia:1,ini:'09:00',fin:'12:00'}],inicio:'',numClases:16,festivos:true};
+  const g=c.grupo||{jornada:'Mañana',slots:[],inicio:'',numClases:16,festivos:true};
   $('#curArea').innerHTML='<option value="">— Sin área —</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
   $('#curArea').value=c.areaId||'';
   refrescarProfCurso(g.profesionalId||'');

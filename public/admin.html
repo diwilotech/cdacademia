@@ -575,8 +575,8 @@
           <div class="col-6 col-md-3"><span class="form-label small d-block">Clases por semana</span><div class="form-control-plaintext fw-semibold tabular" id="curPorSemanaTxt">0</div></div>
           <div class="col-6 col-md-3"><label class="form-label small" for="curNumClases">Total de clases</label><input type="number" min="1" max="200" class="form-control" id="curNumClases" value="16"></div>
           <div class="col-md-6 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
-          <div class="col-12"><span class="form-label small d-block mb-1">Semana de clases <span class="text-muted">· haz clic y arrastra sobre un día para crear una clase; arrástrala para moverla y estira su borde de abajo para cambiar la hora</span></span>
-            <div class="sg" id="curSemana" aria-label="Horario semanal"></div>
+          <div class="col-12"><span class="form-label small d-block mb-1">Semana de clases <span class="text-muted">· de lunes a domingo, en mañana, media mañana, tarde, media tarde o noche. Pulsa «+ Clase» en el día y momento que quieras, arrastra una clase para cambiarla de día o de momento, y escribe su hora si necesitas otra.</span></span>
+            <div class="cal cal-compacto" id="curSemana" aria-label="Horario semanal de clases"></div>
             <details class="mt-2"><summary class="small text-marca" style="cursor:pointer">Ajustar horas exactas</summary>
               <div id="curFranjas" class="d-flex flex-column gap-2 mt-2"></div></details></div>
           <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>

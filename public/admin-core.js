@@ -801,15 +801,21 @@ function verFicha(id){
 }
 
 /* ===== cursos ===== */
-let franjasTemp=[], descTemp=[];
+let franjasTemp=[], descTemp=[], modsTemp=[];
 const opcionesDia = sel => [1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${d===sel?'selected':''}>${DIAS_L[d]}</option>`).join('');
+/* Una fila por cada clase de la semana (día y hora de cada una) */
 function pintarFranjas(){
   $('#curFranjas').innerHTML=franjasTemp.map((x,k)=>`<div class="d-flex flex-wrap gap-2 align-items-center" data-k="${k}">
-    <select class="form-select form-select-sm" style="width:130px" data-f="dia" aria-label="Día">${opcionesDia(x.dia)}</select>
+    <span class="badge bg-marca-suave text-marca" style="min-width:68px">Clase ${k+1}</span>
+    <select class="form-select form-select-sm" style="width:130px" data-f="dia" aria-label="Día de la clase ${k+1}">${opcionesDia(x.dia)}</select>
     <input type="time" class="form-control form-control-sm" style="width:115px" data-f="ini" value="${x.ini}" aria-label="Desde">
     <span class="text-muted small">a</span>
-    <input type="time" class="form-control form-control-sm" style="width:115px" data-f="fin" value="${x.fin}" aria-label="Hasta">
-    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar horario" ${franjasTemp.length<2?'disabled':''}><i class="bi bi-trash"></i></button></div>`).join('');
+    <input type="time" class="form-control form-control-sm" style="width:115px" data-f="fin" value="${x.fin}" aria-label="Hasta"></div>`).join('');
+}
+function ajustarClasesSemana(n){
+  n=Math.max(1,Math.min(14,Math.round(n)||1));
+  while(franjasTemp.length<n){ const u=franjasTemp.at(-1)||{dia:0,ini:'09:00',fin:'12:00'}; franjasTemp.push({...u,dia:(u.dia+1)%7}); }
+  franjasTemp.length=n;
 }
 function pintarDescCurso(){
   $('#curDescuentos').innerHTML=descTemp.length ? descTemp.map((d,k)=>`<div class="d-flex flex-wrap gap-2 align-items-center" data-k="${k}">
@@ -819,11 +825,12 @@ function pintarDescCurso(){
     <label class="small text-muted d-flex align-items-center gap-1">Vence <input type="date" class="form-control form-control-sm" style="width:140px" data-f="hasta" value="${d.hasta||''}"></label>
     <label class="small text-muted d-flex align-items-center gap-1">Usos máx. <input type="number" min="0" class="form-control form-control-sm" style="width:80px" data-f="max" value="${d.max||0}" title="0 = sin límite"></label>
     <span class="small text-muted tabular">${d.usos||0} usados</span>
-    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar código"><i class="bi bi-trash"></i></button></div>`).join('')
-    : '<div class="small text-muted">Sin códigos para este curso.</div>';
+    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar cupón"><i class="bi bi-trash"></i></button></div>`).join('')
+    : '<div class="small text-muted">Sin cupones para este curso.</div>';
 }
 function abrirCurso(id){
   $('#formCurso').reset(); const c=id?curso(id):{};
+  $('#tCurso').textContent=id?'Editar curso':'Nuevo curso';
   $('#curId').value=id||''; $('#curNombre').value=c.nombre||''; $('#curPrecio').value=c.precio||'';
   $('#curNivel').value=c.nivel||'Básico'; $('#curDesc').value=c.desc||'';
   const g=c.grupo||{jornada:'Mañana',slots:[{dia:1,ini:'09:00',fin:'12:00'}],inicio:'',numClases:16,festivos:true};
@@ -833,8 +840,9 @@ function abrirCurso(id){
   $('#curJornada').value=g.jornada||'Mañana';
   $('#curInicio').value=g.inicio||''; $('#curNumClases').value=g.numClases||16; $('#curFestivos').checked=g.festivos!==false;
   franjasTemp=slotsDe(g).map(x=>({...x})); if(!franjasTemp.length) franjasTemp=[{dia:1,ini:'09:00',fin:'12:00'}];
-  descTemp=structuredClone(c.descuentos||[]);
-  pintarFranjas(); pintarDescCurso(); resumenFechasForm();
+  $('#curPorSemana').value=franjasTemp.length;
+  descTemp=structuredClone(c.descuentos||[]); modsTemp=structuredClone(c.modulos||[]);
+  pintarFranjas(); pintarDescCurso(); pintarModsCurso(); resumenFechasForm();
   modal('mCurso').show();
 }
 /* Docentes que dictan esa área y nivel (los que no, no se ofrecen) */
@@ -847,9 +855,9 @@ function refrescarProfCurso(sel){
   $('#curProfNota').textContent = !DB.profesionales?.length ? 'Aún no hay profesionales: créalos en la sección Profesionales.' : !lista.length ? 'Ningún profesional dicta esta área y nivel todavía.' : '';
 }
 ['#curArea','#curNivel'].forEach(q=>$(q).addEventListener('change',()=>refrescarProfCurso()));
-$('#curAddFranja').addEventListener('click',()=>{ const u=franjasTemp.at(-1)||{dia:1,ini:'09:00',fin:'12:00'}; franjasTemp.push({...u}); pintarFranjas(); resumenFechasForm(); });
+$('#curPorSemana').addEventListener('input',e=>{ if(e.target.value==='') return; ajustarClasesSemana(+e.target.value); pintarFranjas(); resumenFechasForm(); });
+$('#curPorSemana').addEventListener('change',e=>{ e.target.value=franjasTemp.length; });
 $('#curFranjas').addEventListener('input',e=>{ const row=e.target.closest('[data-k]'); if(!row||!e.target.dataset.f) return; const f=e.target.dataset.f; franjasTemp[+row.dataset.k][f]= f==='dia'?+e.target.value:e.target.value; resumenFechasForm(); });
-$('#curFranjas').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(!b) return; franjasTemp.splice(+b.dataset.del,1); pintarFranjas(); resumenFechasForm(); });
 $('#curAddDesc').addEventListener('click',()=>{ descTemp.push({id:'d'+uid(),codigo:'',tipo:'pct',valor:10,hasta:'',max:0,usos:0}); pintarDescCurso(); });
 $('#curDescuentos').addEventListener('input',e=>{ const row=e.target.closest('[data-k]'); if(!row||!e.target.dataset.f) return; const f=e.target.dataset.f, d=descTemp[+row.dataset.k];
   d[f]= f==='codigo' ? e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'') : (f==='valor'||f==='max') ? +e.target.value||0 : e.target.value; if(f==='codigo') e.target.value=d.codigo; });
@@ -874,17 +882,19 @@ function analizarPlan(texto){
 
 $('#formCurso').addEventListener('submit',ev=>{
   ev.preventDefault();
-  if(franjasTemp.some(x=>!x.ini||!x.fin||x.fin<=x.ini)){ toast('En cada horario, la hora final debe ser después de la inicial'); return; }
+  if(franjasTemp.some(x=>!x.ini||!x.fin||x.fin<=x.ini)){ toast('En cada clase, la hora final debe ser después de la inicial'); return; }
   const dc=descTemp.filter(d=>d.codigo.trim());
-  if(new Set(dc.map(d=>d.codigo)).size!==dc.length){ toast('Hay códigos de descuento repetidos'); return; }
+  if(new Set(dc.map(d=>d.codigo)).size!==dc.length){ toast('Hay cupones repetidos'); return; }
   const id=$('#curId').value||uid();
   const prev=curso(id)||{};
   const pro=profesional($('#curProf').value);
   const grupo=normGrupo({docente:pro?pro.nombre:'',profesionalId:pro?pro.id:'',jornada:$('#curJornada').value,
     slots:franjasTemp.map(x=>({...x})),inicio:$('#curInicio').value,
     numClases:Math.max(1,+$('#curNumClases').value||16),festivos:$('#curFestivos').checked});
+  const N=grupo.numClases;
+  const mods=modsTemp.filter(r=>modulo(r.ref)).map(r=>({ref:r.ref,desde:Math.min(r.desde,N),hasta:Math.min(Math.max(r.hasta,r.desde),N)}));
   const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,nivel:$('#curNivel').value,areaId:$('#curArea').value,
-              desc:$('#curDesc').value,grupo,clases:prev.clases||[],modulos:prev.modulos||[],descuentos:dc,
+              desc:$('#curDesc').value,grupo,clases:prev.clases||[],modulos:mods,descuentos:dc,
               evaluaciones:prev.evaluaciones||[{id:'ev1',nombre:'Prácticas',peso:40,clase:null},{id:'ev2',nombre:'Evaluación final',peso:60,clase:grupo.numClases}]};
   const idx=DB.cursos.findIndex(c=>c.id===id); idx>=0?DB.cursos[idx]=data:DB.cursos.push(data);
   guardar(); modal('mCurso').hide(); render(); if(cursoActual===id) pintarCurso(); toast('Curso guardado');
@@ -896,6 +906,7 @@ function resumenFechasForm(){
   const prev=curso($('#curId').value);
   const ses=sesionesGrupo(g,prev?.clases||[]), f=ses.map(x=>x.fecha).filter(Boolean);
   const caja=$('#curResumenFechas');
+  $('#curListaClases').innerHTML=f.length ? ses.map((x,k)=>`<span class="tag tabular"><b>${k+1}</b> · ${DIAS[new Date(x.fecha+'T12:00').getDay()]} ${fechaMini(x.fecha)} · ${rangoHoras(x.ini,x.fin)}</span>`).join('') : '<span class="small text-muted">Elige la primera clase para ver las fechas.</span>';
   if(!g.inicio || !franjasTemp.length || !f.length){ caja.innerHTML='<i class="bi bi-info-circle"></i> Elige el horario y la primera clase para calcular cuándo termina.'; return; }
   const diasConClase=new Set(franjasTemp.map(x=>x.dia)), dia0=new Date(g.inicio+'T12:00').getDay();
   const aviso = diasConClase.has(dia0) ? '' : `<div class="text-warning"><i class="bi bi-exclamation-triangle"></i> La primera clase cae ${DIAS_L[dia0]}, que no tiene horario. Empezará el ${fechaLarga(f[0])}.</div>`;
@@ -904,7 +915,8 @@ function resumenFechasForm(){
   caja.innerHTML=aviso+`<b>Termina el ${DIAS_L[new Date(fin+'T12:00').getDay()]} ${fechaLarga(fin)}</b> · ${semanas} semanas · ${g.numClases} clases = <b>${h} h</b>`+
     (saltados.length?`<div class="text-muted mt-1"><i class="bi bi-calendar-x"></i> Se saltan festivos: ${saltados.map(fechaCorta).join(', ')}</div>`:'');
 }
-['#curInicio','#curNumClases','#curFestivos'].forEach(q=>$(q).addEventListener('input',resumenFechasForm));
+['#curInicio','#curFestivos'].forEach(q=>$(q).addEventListener('input',resumenFechasForm));
+$('#curNumClases').addEventListener('input',()=>{ resumenFechasForm(); pintarModsCurso(); });
 
 function duplicarCurso(id){
   const c=structuredClone(curso(id)); c.id=uid(); c.nombre=c.nombre+' (otro grupo)';

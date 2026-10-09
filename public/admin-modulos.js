@@ -34,11 +34,12 @@ function migrarEsquema(){
       if(mods.length){
         const N=+c.grupo?.numClases||mods.length, cnt=distribuirClases(mods,N); let desde=1;
         mods.forEach((pm,k)=>{ const m={id:'m'+uid(),titulo:pm.titulo||`Módulo ${k+1}`,descripcion:'',horas:+pm.horas||0,areaId:c.areaId||'',temas:[...(pm.temas||[])],items:[]};
-          DB.modulos.push(m); const d=Math.min(desde,N); c.modulos.push({ref:m.id,desde:d,hasta:Math.min(N,d+cnt[k]-1)}); desde+=cnt[k]; });
+          m.bloques=bloquesDe(m); DB.modulos.push(m); const d=Math.min(desde,N); c.modulos.push({ref:m.id,desde:d,hasta:Math.min(N,d+cnt[k]-1)}); desde+=cnt[k]; });
       }
       cambio=true;
     }
   });
+  DB.modulos.forEach(m=>{ if(!m.bloques){ m.bloques=bloquesDe(m); cambio=true; } });
   DB.espacios.forEach(sp=>{
     if(!sp.profesionalId && sp.docente){ const p=DB.profesionales.find(x=>x.nombre===sp.docente); if(p){ sp.profesionalId=p.id; cambio=true; } }
     if(sp.areaId===undefined){ sp.areaId=curso(sp.cursoId)?.areaId||''; cambio=true; }
@@ -100,16 +101,6 @@ function abrirVista(it, desde){
 }
 document.getElementById('mVista').addEventListener('hidden.bs.modal',()=>{ $('#cuerpoVista').innerHTML=''; if(volverA){ const v=volverA; volverA=null; modal(v).show(); } });
 
-/* Lista de material (solo lectura) con vista previa y descarga */
-function listaItemsHtml(items, desde){
-  return (items||[]).map((it,k)=>`<div class="d-flex align-items-center gap-2 small py-1">
-    <i class="bi ${iconoArchivo(it)} text-marca fs-5"></i>
-    <button type="button" class="btn btn-link p-0 text-start text-truncate flex-grow-1" data-prev="${k}" data-desde="${desde||''}" title="Ver">${esc(it.nombre||it.url||'Sin nombre')}</button>
-    ${it.size?`<span class="text-muted tabular">${fmtTam(it.size)}</span>`:''}
-    ${it.tipo==='enlace'?`<a class="btn btn-sm btn-outline-secondary py-0" href="${esc(it.url)}" target="_blank" rel="noopener" title="Abrir enlace"><i class="bi bi-box-arrow-up-right"></i></a>`
-      :`<a class="btn btn-sm btn-outline-secondary py-0" href="${urlDescarga(it)}" title="Descargar" download><i class="bi bi-download"></i></a>`}</div>`).join('');
-}
-
 /* ---------- biblioteca ---------- */
 function pintarModulos(){
   const q=($('#buscarMod').value||'').toLowerCase(), todos=DB.modulos||[];
@@ -143,88 +134,212 @@ function eliminarModulo(id,b){
   keys.forEach(soltarArchivo); guardar(); render(); if($('section[data-vista="curso"]').classList.contains('activa')) pintarCurso(); toast('Módulo eliminado');
 }
 
+/* =========================================================
+   DOCUMENTO DEL MÓDULO
+   m.bloques = [{id, tipo, texto | nombre,key,mime,size | nombre,url}]  tipos: titulo, subtitulo, texto, lista, numerada,
+   destacado, separador, archivo, enlace. m.items, m.temas y m.descripcion se derivan al guardar.
+   ========================================================= */
+const inlineMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>').replace(/\n/g,'<br>');
+const lineas = t => String(t||'').split('\n').map(x=>x.trim()).filter(Boolean);
+/* Módulos viejos (descripción + temas + archivos) se muestran como documento */
+function bloquesDe(m){
+  if(m.bloques) return m.bloques;
+  const b=[];
+  if(m.descripcion) b.push({id:'b'+uid(),tipo:'texto',texto:m.descripcion});
+  if((m.temas||[]).length){ b.push({id:'b'+uid(),tipo:'subtitulo',texto:'Temas'},{id:'b'+uid(),tipo:'lista',texto:m.temas.join('\n')}); }
+  (m.items||[]).forEach(it=>b.push({...it,id:'b'+uid(),tipo:it.tipo==='enlace'?'enlace':'archivo'}));
+  return b;
+}
+function derivarModulo(m){
+  const b=m.bloques||[];
+  m.items=b.filter(x=>x.tipo==='archivo'||x.tipo==='enlace').map(x=>({id:x.id,tipo:x.tipo,nombre:x.nombre,key:x.key,mime:x.mime,size:x.size,url:x.url}));
+  m.temas=b.filter(x=>x.tipo==='lista'||x.tipo==='numerada').flatMap(x=>lineas(x.texto)).map(t=>t.replace(/\*+/g,''));
+  const p=b.find(x=>x.tipo==='texto' && (x.texto||'').trim()); m.descripcion=p?p.texto.trim().slice(0,300):'';
+}
+function embedVideo(url){
+  const y=String(url).match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/), v=String(url).match(/vimeo\.com\/(\d+)/);
+  return y ? `https://www.youtube-nocookie.com/embed/${y[1]}` : v ? `https://player.vimeo.com/video/${v[1]}` : null;
+}
+const barraArchivo = (b,extra='') => `<div class="doc-barra"><i class="bi ${iconoArchivo(b)}"></i><span class="text-truncate" title="${esc(b.nombre)}">${esc(b.nombre||'Archivo')}</span><small class="text-muted tabular">${fmtTam(b.size||0)}</small>${extra}
+  <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-prev title="Ampliar"><i class="bi bi-arrows-fullscreen"></i></button>
+  <a class="btn btn-sm btn-outline-secondary py-0" href="${urlDescarga(b)}" download title="Descargar"><i class="bi bi-download"></i></a></div>`;
+function archivoHtml(b){
+  const u=urlArchivo(b.key);
+  if(esImagen(b)) return `<figure class="doc-fig"><img src="${u}" loading="lazy" alt="${esc(b.nombre)}" data-prev><figcaption class="small text-muted mt-1">${esc(b.nombre)}</figcaption></figure>`;
+  if(/^video\/(mp4|webm)$/.test(b.mime||'')) return `<figure class="doc-fig"><video src="${u}" controls preload="metadata"></video><figcaption class="small text-muted mt-1">${esc(b.nombre)}</figcaption></figure>`;
+  if(/^audio\//.test(b.mime||'')) return `<div class="doc-archivo">${barraArchivo(b)}<audio src="${u}" controls preload="none" class="w-100 px-2 pb-2"></audio></div>`;
+  if(esPdf(b)) return `<div class="doc-archivo">${barraArchivo(b,'<button type="button" class="btn btn-sm btn-marca py-0" data-embed>Ver documento</button>')}<div class="doc-embed" hidden><iframe data-src="${u}" title="${esc(b.nombre)}"></iframe></div></div>`;
+  return `<div class="doc-archivo">${barraArchivo(b)}<div class="px-3 pb-2 small text-muted">Este tipo de archivo se abre descargándolo.</div></div>`;
+}
+function enlaceHtml(b){
+  const e=embedVideo(b.url);
+  if(e) return `<div class="doc-video"><iframe src="${e}" loading="lazy" title="${esc(b.nombre||'Video')}" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+  return /^https?:\/\//i.test(b.url||'') ? `<a class="doc-enlace" href="${esc(b.url)}" target="_blank" rel="noopener"><i class="bi bi-link-45deg fs-4 text-marca"></i><span class="text-truncate">${esc(b.nombre||b.url)}</span><i class="bi bi-box-arrow-up-right ms-auto"></i></a>` : '';
+}
+function bloqueHtml(b){
+  const t=b.texto;
+  switch(b.tipo){
+    case 'titulo': return `<h2 class="doc-h1">${inlineMd(t)}</h2>`;
+    case 'subtitulo': return `<h3 class="doc-h2">${inlineMd(t)}</h3>`;
+    case 'texto': return `<p>${inlineMd(t)}</p>`;
+    case 'lista': return `<ul>${lineas(t).map(x=>`<li>${inlineMd(x)}</li>`).join('')}</ul>`;
+    case 'numerada': return `<ol>${lineas(t).map(x=>`<li>${inlineMd(x)}</li>`).join('')}</ol>`;
+    case 'destacado': return `<div class="doc-callout"><i class="bi bi-lightbulb text-marca"></i> ${inlineMd(t)}</div>`;
+    case 'separador': return '<hr>';
+    case 'archivo': return archivoHtml(b);
+    case 'enlace': return enlaceHtml(b);
+  }
+  return '';
+}
+const docHtml = m => { const b=bloquesDe(m); return b.length ? `<div class="doc">${b.map((x,k)=>`<div data-b="${k}">${bloqueHtml(x)}</div>`).join('')}</div>` : '<div class="small text-muted">Este módulo aún no tiene contenido.</div>'; };
+/* Clics dentro de un documento: ver documento (PDF) y ampliar. Devuelve true si lo atendió. */
+function docClick(e, bloques, desde){
+  const bl=e.target.closest('[data-b]'); if(!bl) return false;
+  const b=bloques[+bl.dataset.b]; if(!b) return false;
+  if(e.target.closest('[data-embed]')){ const em=bl.querySelector('.doc-embed'), f=em.querySelector('iframe'); em.hidden=!em.hidden; if(!f.src) f.src=f.dataset.src; return true; }
+  if(e.target.closest('[data-prev]')){ if(desde==='mModulo') modEncadena=true; abrirVista(b,desde); return true; }
+  return false;
+}
+
 /* ---------- editor de módulo ---------- */
-let modTemp=null, modNuevos=[], modGuardado=false, modEncadena=false, modCurso=null;
-function abrirModulo(id, cursoId){
-  const m=id?modulo(id):null;
-  modTemp = m ? structuredClone(m) : {id:'m'+uid(),titulo:'',descripcion:'',horas:0,areaId:'',temas:[],items:[]};
-  modNuevos=[]; modGuardado=false; modEncadena=false; modCurso=cursoId||null;
+const NUEVO_BLOQUE = {titulo:{texto:''},subtitulo:{texto:''},texto:{texto:''},lista:{texto:''},numerada:{texto:''},destacado:{texto:''},separador:{},enlace:{nombre:'',url:''}};
+const PLACEHOLDER = {titulo:'Título',subtitulo:'Subtítulo',texto:'Escribe aquí… (**negrita**, *cursiva*)',lista:'Un elemento por línea',numerada:'Un paso por línea',destacado:'Nota destacada'};
+let modTemp=null, modNuevos=[], modGuardado=false, modEncadena=false, modCtx={}, bloqueSel=null;
+function abrirModulo(id, ctx){
+  const m=id?modulo(id):null; modCtx=ctx||{};
+  modTemp = m ? structuredClone(m) : {id:'m'+uid(),titulo:'',horas:0,areaId:'',temas:[],items:[]};
+  modTemp.bloques = structuredClone(bloquesDe(m||modTemp));
+  if(!modTemp.bloques.length) modTemp.bloques.push({id:'b'+uid(),tipo:'texto',texto:''});
+  modNuevos=[]; modGuardado=false; modEncadena=false; bloqueSel=null;
   $('#formModulo').reset(); $('#modId').value=modTemp.id;
   $('#tModulo').textContent = m ? 'Editar módulo' : 'Nuevo módulo';
-  $('#modTitulo').value=modTemp.titulo; $('#modHoras').value=modTemp.horas||''; $('#modDesc').value=modTemp.descripcion||'';
-  $('#modTemas').value=(modTemp.temas||[]).join('\n');
+  $('#modTitulo').value=modTemp.titulo; $('#modHoras').value=modTemp.horas||'';
   $('#modArea').innerHTML='<option value="">Sin área</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
-  $('#modArea').value=modTemp.areaId||(cursoId?curso(cursoId)?.areaId:'')||'';
+  $('#modArea').value=modTemp.areaId||(modCtx.cursoId?curso(modCtx.cursoId)?.areaId:'')||'';
   const usos=m?cursosDeModulo(m.id):[], caja=$('#modEnCursos');
   caja.classList.toggle('d-none',!usos.length);
-  caja.innerHTML=usos.length?`<div class="small bg-marca-suave rounded p-2"><i class="bi bi-info-circle"></i> Está en ${usos.length===1?'el curso':'los cursos'}: <b>${usos.map(c=>esc(c.nombre)).join(', ')}</b>. Los cambios se reflejan en todos.</div>`:'';
-  const adj=$('#modAdjuntar'), c=cursoId?curso(cursoId):null;
+  caja.textContent=usos.length?`En ${usos.length===1?'el curso':'los cursos'}: ${usos.map(c=>c.nombre).join(', ')} · los cambios se reflejan en todos`:'';
+  const adj=$('#modAdjuntar'), c=modCtx.cursoId?curso(modCtx.cursoId):null;
   adj.classList.toggle('d-none',!c);
   if(c){ const N=+c.grupo.numClases||1, ult=Math.max(0,...(c.modulos||[]).map(r=>r.hasta)), d=Math.min(N,ult+1);
     const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
     $('#modDesde').innerHTML=op(d); $('#modHasta').innerHTML=op(d); }
-  pintarItemsMod(); modal('mModulo').show();
+  pintarDoc();
+  encadenar(modCtx.volver,()=>modal('mModulo').show());
 }
-function pintarItemsMod(){
-  const it=modTemp.items;
-  $('#modItems').innerHTML=it.map((x,k)=>`<div class="border rounded p-2 d-flex flex-wrap gap-2 align-items-center" data-i="${k}">
-    <i class="bi ${iconoArchivo(x)} text-marca fs-4"></i>
-    <div class="flex-grow-1" style="min-width:160px">
-      <input class="form-control form-control-sm" data-f="nombre" value="${esc(x.nombre)}" placeholder="Nombre" aria-label="Nombre">
-      ${x.tipo==='enlace'?`<input class="form-control form-control-sm mt-1" data-f="url" value="${esc(x.url||'')}" placeholder="https://…" aria-label="Enlace">`:`<small class="text-muted tabular">${esc(x.mime||'')} · ${fmtTam(x.size||0)}</small>`}</div>
-    <div class="btn-group btn-group-sm">
-      <button type="button" class="btn btn-outline-secondary" data-prev title="Vista previa"><i class="bi bi-eye"></i></button>
-      ${x.tipo==='archivo'?`<a class="btn btn-outline-secondary" href="${urlDescarga(x)}" download title="Descargar"><i class="bi bi-download"></i></a>`:''}
-      <button type="button" class="btn btn-outline-secondary" data-up title="Subir" ${k===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
-      <button type="button" class="btn btn-outline-secondary" data-down title="Bajar" ${k===it.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
-      <button type="button" class="btn btn-outline-danger" data-quitar title="Quitar"><i class="bi bi-trash"></i></button></div></div>`).join('')
-    || '<div class="small text-muted border rounded p-3 text-center">Sin material todavía. Sube PDF, Word, imágenes… o agrega un enlace.</div>';
+const autoAlto = ta => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
+function editorBloque(b,k){
+  const ta=(cls,rows=1)=>`<textarea class="bl-in ${cls}" rows="${rows}" data-f="texto" placeholder="${PLACEHOLDER[b.tipo]||''}" aria-label="${BLOQUES_N[b.tipo]}">${esc(b.texto||'')}</textarea>`;
+  switch(b.tipo){
+    case 'titulo': return ta('bl-t1');
+    case 'subtitulo': return ta('bl-t2');
+    case 'texto': return ta('');
+    case 'lista': case 'numerada': return ta('',2);
+    case 'destacado': return `<div class="bl-callout">${ta('')}</div>`;
+    case 'separador': return '<hr>';
+    case 'archivo': return `<div class="doc" data-b="${k}">${archivoHtml(b)}</div><input class="form-control form-control-sm mt-1" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre o pie del archivo" aria-label="Nombre del archivo">`;
+    case 'enlace': return `<div class="row g-1"><div class="col-md-4"><input class="form-control form-control-sm" data-f="nombre" value="${esc(b.nombre||'')}" placeholder="Nombre del enlace" aria-label="Nombre del enlace"></div>
+      <div class="col-md-8"><input class="form-control form-control-sm" data-f="url" data-recarga value="${esc(b.url||'')}" placeholder="https://… (YouTube y Vimeo se ven aquí mismo)" aria-label="Dirección"></div></div><div class="doc" data-b="${k}">${enlaceHtml(b)}</div>`;
+  }
+  return '';
 }
-$('#modItems').addEventListener('input',e=>{ const row=e.target.closest('[data-i]'); if(row && e.target.dataset.f) modTemp.items[+row.dataset.i][e.target.dataset.f]=e.target.value; });
-$('#modItems').addEventListener('click',e=>{
-  const row=e.target.closest('[data-i]'); if(!row) return; const k=+row.dataset.i, it=modTemp.items;
-  if(e.target.closest('[data-up]') && k>0) [it[k-1],it[k]]=[it[k],it[k-1]];
-  else if(e.target.closest('[data-down]') && k<it.length-1) [it[k+1],it[k]]=[it[k],it[k+1]];
-  else if(e.target.closest('[data-quitar]')) it.splice(k,1);
-  else if(e.target.closest('[data-prev]')){ modEncadena=true; abrirVista(it[k],'mModulo'); return; }
-  else return;
-  pintarItemsMod();
+const BLOQUES_N = {titulo:'Título',subtitulo:'Subtítulo',texto:'Texto',lista:'Lista',numerada:'Lista numerada',destacado:'Nota destacada',separador:'Separador',archivo:'Archivo',enlace:'Enlace'};
+function pintarDoc(foco){
+  const fondo=$('#modDocFondo'), y=fondo.scrollTop;
+  $('#modDoc').innerHTML=modTemp.bloques.map((b,k)=>`<div class="bl" data-k="${k}"><div class="bl-ctrl" role="group" aria-label="Bloque ${k+1}">
+      <button type="button" data-a="up" title="Subir" ${k===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
+      <button type="button" data-a="down" title="Bajar" ${k===modTemp.bloques.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
+      <button type="button" data-a="dup" title="Duplicar"><i class="bi bi-copy"></i></button>
+      <button type="button" data-a="del" title="Quitar"><i class="bi bi-trash"></i></button></div>${editorBloque(b,k)}</div>`).join('');
+  document.querySelectorAll('#modDoc textarea').forEach(autoAlto);
+  fondo.scrollTop=y;
+  if(foco!==undefined){ const t=document.querySelector(`#modDoc [data-k="${foco}"] textarea, #modDoc [data-k="${foco}"] input`); if(t) t.focus(); }
+}
+function insertarBloque(tipo, extra){
+  const pos = bloqueSel===null ? modTemp.bloques.length : bloqueSel+1;
+  // si el bloque donde estás está vacío, se reemplaza en vez de dejar un hueco
+  if(bloqueSel===null && modTemp.bloques.length===1) bloqueSel=0;     // documento recién creado: usa el párrafo vacío
+  const act=bloqueSel!==null?modTemp.bloques[bloqueSel]:null;
+  const nuevo={id:'b'+uid(),tipo,...(NUEVO_BLOQUE[tipo]||{}),...(extra||{})};
+  if(act && act.tipo==='texto' && !(act.texto||'').trim() && tipo!=='texto'){ modTemp.bloques.splice(bloqueSel,1,nuevo); }
+  else { modTemp.bloques.splice(pos,0,nuevo); bloqueSel=pos; }
+  pintarDoc(bloqueSel);
+}
+$('#modBarra').addEventListener('click',e=>{
+  const i=e.target.closest('[data-ins]'); if(i) return insertarBloque(i.dataset.ins);
+  const f=e.target.closest('[data-fmt]'); if(!f) return;
+  const ta=document.activeElement; if(!ta || ta.tagName!=='TEXTAREA' || !ta.closest('#modDoc')) { toast('Haz clic dentro de un texto y selecciona lo que quieres resaltar'); return; }
+  const m=f.dataset.fmt, a=ta.selectionStart, z=ta.selectionEnd, sel=ta.value.slice(a,z)||'texto';
+  ta.value=ta.value.slice(0,a)+m+sel+m+ta.value.slice(z); ta.setSelectionRange(a+m.length,a+m.length+sel.length); ta.dispatchEvent(new Event('input',{bubbles:true})); ta.focus();
 });
-$('#modArchivos').addEventListener('change',async e=>{
-  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
-  toast(`Subiendo ${files.length} ${files.length===1?'archivo':'archivos'}…`);
+$('#modBarra').addEventListener('mousedown',e=>{ if(e.target.closest('[data-fmt]')) e.preventDefault(); });   // no pierde la selección
+$('#modDoc').addEventListener('focusin',e=>{ const bl=e.target.closest('.bl'); if(bl) bloqueSel=+bl.dataset.k; });
+$('#modDoc').addEventListener('input',e=>{
+  const bl=e.target.closest('.bl'), f=e.target.dataset.f; if(!bl||!f) return;
+  modTemp.bloques[+bl.dataset.k][f]=e.target.value; if(e.target.tagName==='TEXTAREA') autoAlto(e.target);
+});
+$('#modDoc').addEventListener('change',e=>{ if(e.target.hasAttribute('data-recarga')) pintarDoc(); });
+$('#modDoc').addEventListener('keydown',e=>{
+  if(e.key!=='Enter' || e.shiftKey || e.target.tagName!=='TEXTAREA') return;
+  const bl=e.target.closest('.bl'), b=modTemp.bloques[+bl.dataset.k];
+  if(b.tipo==='titulo'||b.tipo==='subtitulo'){ e.preventDefault(); insertarBloque('texto'); }   // Enter en un título baja a un párrafo
+});
+$('#modDoc').addEventListener('click',e=>{
+  const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, a=e.target.closest('[data-a]')?.dataset.a;
+  if(!a){ docClick(e,B,'mModulo'); return; }
+  if(a==='up' && k>0) [B[k-1],B[k]]=[B[k],B[k-1]];
+  else if(a==='down' && k<B.length-1) [B[k+1],B[k]]=[B[k],B[k+1]];
+  else if(a==='dup') B.splice(k+1,0,{...structuredClone(B[k]),id:'b'+uid()});
+  else if(a==='del'){ B.splice(k,1); if(!B.length) B.push({id:'b'+uid(),tipo:'texto',texto:''}); }
+  else return;
+  bloqueSel=null; pintarDoc();
+});
+/* Archivos: botón, arrastrar y soltar, o pegar una imagen */
+async function agregarArchivos(files){
+  files=[...files]; if(!files.length) return;
+  $('#modEstado').textContent=`Subiendo ${files.length} ${files.length===1?'archivo':'archivos'}…`;
   for(const f of files){
-    try{ const it=await subirArchivo(f); modTemp.items.push(it); modNuevos.push(it.key); pintarItemsMod(); }
+    try{ const it=await subirArchivo(f); modNuevos.push(it.key); insertarBloque('archivo',{nombre:it.nombre,key:it.key,mime:it.mime,size:it.size}); }
     catch(x){ toast(x.message); }
   }
-});
-$('#modAddLink').addEventListener('click',()=>{ modTemp.items.push({id:'a'+uid(),tipo:'enlace',nombre:'',url:''}); pintarItemsMod(); });
+  $('#modEstado').textContent='';
+}
+$('#modArchivos').addEventListener('change',e=>{ const f=e.target.files; agregarArchivos(f).then(()=>{ e.target.value=''; }); });
+const papel=$('#modDocFondo');
+['dragover','dragleave','drop'].forEach(ev=>papel.addEventListener(ev,e=>{ if(![...(e.dataTransfer?.types||[])].includes('Files')) return; e.preventDefault(); papel.style.outline=ev==='dragover'?'2px dashed var(--marca)':''; if(ev==='drop') agregarArchivos(e.dataTransfer.files); }));
+papel.addEventListener('paste',e=>{ const f=[...(e.clipboardData?.files||[])]; if(f.length){ e.preventDefault(); agregarArchivos(f); } });
 $('#modDesde').addEventListener('change',()=>{ if(+$('#modHasta').value<+$('#modDesde').value) $('#modHasta').value=$('#modDesde').value; });
+
 $('#formModulo').addEventListener('submit',ev=>{
   ev.preventDefault();
-  const titulo=$('#modTitulo').value.trim(); if(!titulo) return;
-  const items=modTemp.items.filter(x=>x.tipo!=='enlace' || x.url.trim());
-  if(items.some(x=>x.tipo==='enlace' && !/^https?:\/\//i.test(x.url.trim()))){ toast('Los enlaces deben empezar por http:// o https://'); return; }
-  items.forEach(x=>{ if(!x.nombre.trim()) x.nombre = x.tipo==='enlace' ? x.url : 'Archivo'; if(x.tipo==='enlace') x.url=x.url.trim(); });
+  const titulo=$('#modTitulo').value.trim(); if(!titulo){ $('#modTitulo').focus(); return; }
+  const bloques=modTemp.bloques.filter(b=>b.tipo==='separador'||b.tipo==='archivo' ? true : b.tipo==='enlace' ? (b.url||'').trim() : (b.texto||'').trim());
+  if(bloques.some(b=>b.tipo==='enlace' && !/^https?:\/\//i.test(b.url.trim()))){ toast('Los enlaces deben empezar por http:// o https://'); return; }
+  bloques.forEach(b=>{ if(b.tipo==='enlace'){ b.url=b.url.trim(); if(!(b.nombre||'').trim()) b.nombre=b.url; } if(b.tipo==='archivo' && !(b.nombre||'').trim()) b.nombre='Archivo'; });
   const prev=modulo(modTemp.id), antes=(prev?.items||[]).map(x=>x.key);
-  const m={...modTemp,titulo,descripcion:$('#modDesc').value.trim(),horas:+$('#modHoras').value||0,areaId:$('#modArea').value,
-           temas:$('#modTemas').value.split('\n').map(t=>t.trim()).filter(Boolean),items};
+  const m={...modTemp,titulo,horas:+$('#modHoras').value||0,areaId:$('#modArea').value,bloques};
+  derivarModulo(m);
   const idx=DB.modulos.findIndex(x=>x.id===m.id); idx>=0?DB.modulos[idx]=m:DB.modulos.push(m);
-  if(modCurso && !$('#modAdjuntar').classList.contains('d-none')){
-    const c=curso(modCurso), d=+$('#modDesde').value, h=Math.max(d,+$('#modHasta').value);
+  if(modCtx.cursoId && !$('#modAdjuntar').classList.contains('d-none')){
+    const c=curso(modCtx.cursoId), d=+$('#modDesde').value, h=Math.max(d,+$('#modHasta').value);
     if(c && !(c.modulos||[]).some(r=>r.ref===m.id)) (c.modulos=c.modulos||[]).push({ref:m.id,desde:d,hasta:h});
   }
+  if(modCtx.paraCursoTemp && !modsTemp.some(r=>r.ref===m.id)){          // se está creando desde el formulario del curso
+    const N=Math.max(1,+$('#curNumClases').value||1), d=Math.min(N,Math.max(0,...modsTemp.map(r=>r.hasta))+1);
+    modsTemp.push({ref:m.id,desde:d,hasta:d});
+  }
   modGuardado=true;
-  [...antes,...modNuevos].filter(k=>k && !items.some(x=>x.key===k)).forEach(soltarArchivo);
+  [...antes,...modNuevos].filter(k=>k && !m.items.some(x=>x.key===k)).forEach(soltarArchivo);
   guardar(); modal('mModulo').hide(); render();
   if($('section[data-vista="curso"]').classList.contains('activa')) pintarCurso();
   toast('Módulo guardado');
 });
-/* Si cierra sin guardar, se borran los archivos que acababa de subir */
+/* Si cierra sin guardar, se borran los archivos que acababa de subir; si venía del formulario del curso, vuelve a él */
 document.getElementById('mModulo').addEventListener('hidden.bs.modal',()=>{
   if(modEncadena){ modEncadena=false; return; }
   if(!modGuardado) modNuevos.forEach(soltarArchivo);
   modNuevos=[];
+  if(modCtx.volver){ const v=modCtx.volver; modCtx={}; modal(v).show(); pintarModsCurso(); }
 });
 
 /* ---------- pestaña «Módulos» del curso ---------- */
@@ -252,19 +367,19 @@ function tabModulos(c,inf){
           <button class="btn btn-outline-secondary" data-a="bajar" title="Bajar en el orden" ${pos===ms.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
           <button class="btn btn-outline-secondary" data-a="editar" title="Editar el módulo"><i class="bi bi-pencil"></i></button>
           <button class="btn btn-outline-danger" data-a="quitar" title="Quitar de este curso"><i class="bi bi-x-lg"></i></button></div></div>
-      ${x.m.descripcion?`<p class="small text-muted mt-2 mb-1">${esc(x.m.descripcion)}</p>`:''}
-      ${(x.m.temas||[]).length?`<ul class="small mb-1 mt-2">${x.m.temas.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
-      ${(x.m.items||[]).length?`<div class="mt-2 border-top pt-2" data-items="${x.k}">${listaItemsHtml(x.m.items)}</div>`:''}
+      <div class="mt-2"><button class="btn btn-sm btn-link text-marca p-0" data-a="ver"><i class="bi bi-eye"></i> Ver contenido${(x.m.items||[]).length?` · ${x.m.items.length} ${x.m.items.length===1?'archivo':'archivos'}`:''}</button></div>
+      <div class="doc-mini d-none mt-2" data-doc="${x.k}">${docHtml(x.m)}</div>
     </div></div>`).join('')||`<div class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-collection fs-1"></i><p class="mb-2">Este curso aún no tiene módulos.</p>
         <button class="btn btn-marca" data-a="biblioteca">Agregar de la biblioteca</button> <button class="btn btn-outline-secondary" data-a="nuevo">Crear módulo</button></div></div>`}</div>`;
   const cont=$('#cuerpoTab');
   cont.addEventListener('click',e=>{
-    const prev=e.target.closest('[data-prev]');
-    if(prev){ const k=+prev.closest('[data-items]').dataset.items, it=modulo(c.modulos[k].ref).items[+prev.dataset.prev]; abrirVista(it); return; }
+    const docEl=e.target.closest('[data-doc]');
+    if(docEl){ docClick(e,bloquesDe(modulo(c.modulos[+docEl.dataset.doc].ref))); return; }
     const b=e.target.closest('[data-a]'); if(!b) return;
     const card=b.closest('[data-k]'), k=card?+card.dataset.k:-1, a=b.dataset.a, arr=c.modulos;
     if(a==='biblioteca') return abrirModAgregar();
-    if(a==='nuevo') return abrirModulo(null,c.id);
+    if(a==='ver'){ card.querySelector('[data-doc]').classList.toggle('d-none'); return; }
+    if(a==='nuevo') return abrirModulo(null,{cursoId:c.id});
     if(a==='plan') return abrirPlan();
     if(a==='editar') return abrirModulo(arr[k].ref);
     if(a==='quitar'){ arr.splice(k,1); }
@@ -548,3 +663,49 @@ $('#exAplicar').addEventListener('click',e=>{
 });
 $('#exGuardar').addEventListener('click',()=>{ guardar(); modal('mExamen').hide(); if(cursoActual) pintarCurso(); toast('Examen guardado'); });
 document.getElementById('mExamen').addEventListener('hidden.bs.modal',()=>{ if(!volverA && cursoActual && $('section[data-vista="curso"]').classList.contains('activa')) pintarCurso(); });
+
+/* =========================================================
+   Módulos dentro del formulario del curso: tarjetas para agregar y organizar
+   ========================================================= */
+function pintarModsCurso(){
+  const N=Math.max(1,+$('#curNumClases').value||1), usados=new Set(modsTemp.map(r=>r.ref));
+  const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
+  const cubiertas=new Set(); modsTemp.forEach(r=>{ for(let n=r.desde;n<=Math.min(r.hasta,N);n++) cubiertas.add(n); });
+  const sin=Array.from({length:N},(_,k)=>k+1).filter(n=>!cubiertas.has(n));
+  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id));
+  $('#curModulos').innerHTML=`
+    <div class="row g-2">${modsTemp.map((r,k)=>{ const m=modulo(r.ref); if(!m) return ''; const ar=area(m.areaId);
+      return `<div class="col-md-6" data-k="${k}"><div class="mod-card h-100">
+        <div class="d-flex gap-2 align-items-start"><span class="display-font fs-4 text-marca" style="min-width:26px">${k+1}</span>
+          <div class="flex-grow-1" style="min-width:0"><div class="fw-semibold text-truncate">${esc(m.titulo)}</div>
+            <small class="text-muted">${ar?esc(ar.nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} ${(m.items||[]).length===1?'archivo':'archivos'}</small></div>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" data-a="up" title="Subir" ${k===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
+            <button type="button" class="btn btn-outline-secondary" data-a="down" title="Bajar" ${k===modsTemp.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
+            <button type="button" class="btn btn-outline-secondary" data-a="edit" title="Editar el contenido"><i class="bi bi-pencil"></i></button>
+            <button type="button" class="btn btn-outline-danger" data-a="del" title="Quitar del curso"><i class="bi bi-x-lg"></i></button></div></div>
+        <div class="d-flex align-items-center gap-1 small mt-2">Clases <select class="form-select form-select-sm w-auto" data-r="desde" aria-label="Desde la clase">${op(Math.min(r.desde,N))}</select> a <select class="form-select form-select-sm w-auto" data-r="hasta" aria-label="Hasta la clase">${op(Math.min(r.hasta,N))}</select></div>
+      </div></div>`; }).join('') || '<div class="col-12"><div class="small text-muted border rounded p-3 text-center bg-white">Aún no hay módulos en este curso. Elige uno de la biblioteca o crea uno nuevo.</div></div>'}</div>
+    ${modsTemp.length&&sin.length?`<div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle"></i> Clases sin módulo: ${sin.join(', ')}.</div>`:''}
+    <div class="d-flex justify-content-between align-items-center mt-3 mb-2"><b class="small">Biblioteca de módulos</b>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-a="new"><i class="bi bi-plus-lg"></i> Crear módulo nuevo</button></div>
+    <div class="row g-2">${libres.map(m=>`<div class="col-6 col-md-4"><button type="button" class="mod-lib" data-add="${m.id}">
+        <div class="fw-semibold small text-truncate">${esc(m.titulo)}</div><div class="small text-muted text-truncate">${area(m.areaId)?esc(area(m.areaId).nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} arch.</div>
+        <div class="small text-marca mt-1"><i class="bi bi-plus-circle"></i> Agregar</div></button></div>`).join('') || `<div class="col-12 small text-muted">${(DB.modulos||[]).length?'Todos los módulos de la biblioteca ya están en este curso.':'La biblioteca está vacía.'}</div>`}</div>`;
+}
+$('#curModulos').addEventListener('click',e=>{
+  const add=e.target.closest('[data-add]');
+  if(add){ const N=Math.max(1,+$('#curNumClases').value||1), d=Math.min(N,Math.max(0,...modsTemp.map(r=>r.hasta))+1); modsTemp.push({ref:add.dataset.add,desde:d,hasta:d}); pintarModsCurso(); return; }
+  const b=e.target.closest('[data-a]'); if(!b) return; const card=b.closest('[data-k]'), k=card?+card.dataset.k:-1, a=b.dataset.a;
+  if(a==='new') return encadenar('mCurso',()=>abrirModulo(null,{paraCursoTemp:true,volver:'mCurso'}));
+  if(a==='edit') return encadenar('mCurso',()=>abrirModulo(modsTemp[k].ref,{volver:'mCurso'}));
+  if(a==='del') modsTemp.splice(k,1);
+  if(a==='up' && k>0) [modsTemp[k-1],modsTemp[k]]=[modsTemp[k],modsTemp[k-1]];
+  if(a==='down' && k<modsTemp.length-1) [modsTemp[k+1],modsTemp[k]]=[modsTemp[k],modsTemp[k+1]];
+  pintarModsCurso();
+});
+$('#curModulos').addEventListener('change',e=>{
+  const sel=e.target.closest('[data-r]'); if(!sel) return; const r=modsTemp[+sel.closest('[data-k]').dataset.k];
+  r[sel.dataset.r]=+sel.value; if(r.hasta<r.desde){ if(sel.dataset.r==='desde') r.hasta=r.desde; else r.desde=r.hasta; }
+  pintarModsCurso();
+});

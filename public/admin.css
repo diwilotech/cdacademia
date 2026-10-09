@@ -273,3 +273,21 @@ section[data-vista].activa{display:block}
 /* Palabras con tamaño de título o de encabezado dentro de un párrafo o lista */
 .sz-t{font:400 1.6rem/1.25 var(--font-display)}
 .sz-h{font:700 1.1rem/1.3 var(--font-body)}
+
+/* ---------- Semana interactiva de clases ---------- */
+.sg{--ph:34px;border:1px solid var(--borde);border-radius:.6rem;background:#fff;overflow:auto;max-height:460px;user-select:none;-webkit-user-select:none}
+.sg-head,.sg-body{display:grid;grid-template-columns:44px repeat(7,minmax(86px,1fr));min-width:660px}
+.sg-head{position:sticky;top:0;z-index:4;background:#fff;border-bottom:1px solid var(--borde);font-size:.75rem;font-weight:700;color:#6b5d66;text-align:center;padding:.35rem 0}
+.sg-head div:first-child{visibility:hidden}
+.sg-body{position:relative}
+.sg-horas{position:relative}
+.sg-horas span{position:absolute;right:6px;font-size:.62rem;color:#9a8c95;transform:translateY(-50%);font-variant-numeric:tabular-nums}
+.sg-col{position:relative;border-left:1px solid var(--borde);background-image:linear-gradient(to bottom,var(--borde) 1px,transparent 1px);background-size:100% var(--ph);cursor:crosshair;touch-action:pan-y}
+.sg-clase{position:absolute;left:3px;right:3px;background:var(--marca);color:#fff;border-radius:.4rem;padding:.2rem .4rem;font-size:.7rem;line-height:1.2;cursor:grab;touch-action:none;overflow:hidden;box-shadow:0 2px 6px rgba(42,31,38,.25);outline:none}
+.sg-clase:focus-visible,.sg-clase.sel{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--marca)}
+.sg-clase b{display:block;font-size:.72rem}
+.sg-clase .sg-x{position:absolute;top:0;right:2px;border:0;background:none;color:#fff;opacity:.8;font-size:1rem;line-height:1;padding:0 .2rem;cursor:pointer}
+.sg-clase .sg-x:hover{opacity:1}
+.sg-res{position:absolute;left:0;right:0;bottom:0;height:9px;cursor:ns-resize;background:linear-gradient(transparent,rgba(255,255,255,.28))}
+.sg-clase.arrastrando{cursor:grabbing;opacity:.92;z-index:3}
+.sg-clase.sg-fantasma{opacity:.55;pointer-events:none}

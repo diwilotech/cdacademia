@@ -578,11 +578,13 @@
             <select class="form-select" id="curJornada"><option>Mañana</option><option>Tarde</option><option>Noche</option><option>Sabatina</option><option>Dominical</option></select></div>
           <div class="col-md-4"><label class="form-label small" for="curInicio">Primera clase</label><input type="date" class="form-control" id="curInicio"></div>
           <div class="col-12"><small class="text-muted" id="curProfNota"></small></div>
-          <div class="col-6 col-md-3"><label class="form-label small" for="curPorSemana">Clases por semana</label><input type="number" min="1" max="14" class="form-control" id="curPorSemana" value="1"></div>
+          <div class="col-6 col-md-3"><span class="form-label small d-block">Clases por semana</span><div class="form-control-plaintext fw-semibold tabular" id="curPorSemanaTxt">0</div></div>
           <div class="col-6 col-md-3"><label class="form-label small" for="curNumClases">Total de clases</label><input type="number" min="1" max="200" class="form-control" id="curNumClases" value="16"></div>
           <div class="col-md-6 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
-          <div class="col-12"><span class="form-label small d-block mb-1">Cada clase de la semana <span class="text-muted">· elige el día y la hora de cada una (pueden ser el mismo día a distintas horas)</span></span>
-            <div id="curFranjas" class="d-flex flex-column gap-2"></div></div>
+          <div class="col-12"><span class="form-label small d-block mb-1">Semana de clases <span class="text-muted">· haz clic y arrastra sobre un día para crear una clase; arrástrala para moverla y estira su borde de abajo para cambiar la hora</span></span>
+            <div class="sg" id="curSemana" aria-label="Horario semanal"></div>
+            <details class="mt-2"><summary class="small text-marca" style="cursor:pointer">Ajustar horas exactas</summary>
+              <div id="curFranjas" class="d-flex flex-column gap-2 mt-2"></div></details></div>
           <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>
           <div class="col-12"><details><summary class="small text-marca" style="cursor:pointer">Ver todas las clases con su fecha y hora</summary><div class="d-flex flex-wrap gap-1 mt-2" id="curListaClases" style="max-height:160px;overflow:auto"></div></details></div>
         </div></div>
@@ -753,6 +755,7 @@
 <script src="/admin-reposiciones.js"></script>
 <script src="/admin-modulos.js"></script>
 <script src="/admin-profesionales.js"></script>
+<script src="/admin-semana.js"></script>
 <script src="/admin-boot.js"></script>
 </body>
 </html>

@@ -842,6 +842,7 @@ function abrirCurso(id){
   franjasTemp=slotsDe(g).map(x=>({...x})); if(!franjasTemp.length) franjasTemp=[{dia:1,ini:'09:00',fin:'12:00'}];
   $('#curPorSemana').value=franjasTemp.length;
   descTemp=structuredClone(c.descuentos||[]); modsTemp=structuredClone(c.modulos||[]);
+  modAreaTodas=false; modBuscar='';
   pintarFranjas(); pintarDescCurso(); pintarModsCurso(); resumenFechasForm();
   modal('mCurso').show();
 }

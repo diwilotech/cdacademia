@@ -113,15 +113,15 @@ function pintarModulos(){
   const lista=todos.filter(m=>{
     if(q && ![m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q)) return false;
     if(fa.value==='_sin' ? m.areaId : fa.value && m.areaId!==fa.value) return false;
-    const usos=cursosDeModulo(m.id);
+    const usos=cursosDeModulo(m.id), nu=usos.length, uso=$('#filtroModUso').value;
+    if(uso==='varios' ? nu<2 : uso==='uno' ? nu!==1 : uso==='ninguno' ? nu!==0 : false) return false;
     if(fc.value==='_sin' ? usos.length : fc.value && !usos.some(c=>c.id===fc.value)) return false;
     if(mat==='con' && !(m.items||[]).length) return false;
     if(mat==='sin' && (m.items||[]).length) return false;
     return true;
   });
-  const hay=fa.value||fc.value||mat||q;
   $('#contModulos').textContent=`${lista.length} de ${todos.length} ${todos.length===1?'módulo':'módulos'}`;
-  $('#limpiarModFiltros').hidden=!(fa.value||fc.value||mat);
+  $('#limpiarModFiltros').hidden=!(fa.value||fc.value||mat||$('#filtroModUso').value);
   $('#gridModulos').innerHTML=lista.map(m=>{
     const usos=cursosDeModulo(m.id), ar=area(m.areaId);
     return `<div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body d-flex flex-column">
@@ -129,18 +129,19 @@ function pintarModulos(){
         ${ar?`<span class="badge" style="background:${esc(ar.color)}">${esc(ar.nombre)}</span>`:'<span class="badge text-bg-light border">Sin área</span>'}
         <span class="small text-muted tabular">${m.horas?m.horas+' h · ':''}${(m.items||[]).length} ${(m.items||[]).length===1?'archivo':'archivos'}</span></div>
       <h3 class="h5 mb-1">${esc(m.titulo)}</h3>
+      <div class="mb-2">${usos.length>1?`<span class="pill pill-virtual"><i class="bi bi-diagram-3"></i> En ${usos.length} cursos</span>`:usos.length===1?'<span class="pill pill-pendiente">Solo en 1 curso</span>':'<span class="pill pill-hoy">Sin usar en cursos</span>'}</div>
       ${m.descripcion?`<p class="small text-muted mb-2">${esc(m.descripcion)}</p>`:''}
       ${(m.temas||[]).length?`<div class="small mb-2">${m.temas.slice(0,4).map(t=>`<div class="text-truncate"><i class="bi bi-dot"></i>${esc(t)}</div>`).join('')}${m.temas.length>4?`<div class="text-muted">+${m.temas.length-4} más</div>`:''}</div>`:''}
       <div class="small flex-grow-1 mb-2">${(m.items||[]).slice(0,3).map(it=>`<div class="text-truncate"><i class="bi ${iconoArchivo(it)} text-marca"></i> ${esc(it.nombre||it.url)}</div>`).join('')}</div>
-      <div class="small text-muted mb-2"><i class="bi bi-journal-bookmark"></i> ${usos.length?usos.map(c=>esc(c.nombre)).join(', '):'No está en ningún curso'}</div>
+      <div class="small text-muted mb-2"><i class="bi bi-journal-bookmark"></i> ${usos.length?usos.map(c=>esc(c.nombre)).join(' · '):'No está en ningún curso todavía'}</div>
       <div class="d-flex gap-2"><button class="btn btn-sm btn-marca flex-grow-1" onclick="abrirModulo('${m.id}')">Abrir</button>
         <button class="btn btn-sm btn-outline-secondary" title="Duplicar" onclick="duplicarModulo('${m.id}')"><i class="bi bi-copy"></i></button>
         <button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="eliminarModulo('${m.id}',this)"><i class="bi bi-trash"></i></button></div>
     </div></div></div>`; }).join('')
     || `<div class="col-12"><div class="card"><div class="card-body text-muted small">${todos.length?'Ningún módulo coincide con los filtros.':'Aún no hay módulos. Crea el primero con «Nuevo módulo»; luego podrás usarlo en cualquier curso.'}</div></div></div>`;
 }
-['#filtroModArea','#filtroModCurso','#filtroModMat'].forEach(q=>$(q).addEventListener('change',pintarModulos));
-$('#limpiarModFiltros').addEventListener('click',()=>{ $('#filtroModArea').value=''; $('#filtroModCurso').value=''; $('#filtroModMat').value=''; $('#buscarMod').value=''; pintarModulos(); });
+['#filtroModArea','#filtroModCurso','#filtroModMat','#filtroModUso'].forEach(q=>$(q).addEventListener('change',pintarModulos));
+$('#limpiarModFiltros').addEventListener('click',()=>{ $('#filtroModArea').value=''; $('#filtroModCurso').value=''; $('#filtroModMat').value=''; $('#filtroModUso').value=''; $('#buscarMod').value=''; pintarModulos(); });
 $('#buscarMod').addEventListener('input',pintarModulos);
 function duplicarModulo(id){
   const m=structuredClone(modulo(id)); m.id='m'+uid(); m.titulo+=' (copia)'; (m.items||[]).forEach(it=>{ it.id='a'+uid(); });
@@ -468,7 +469,7 @@ function abrirModulo(id, ctx){
   $('#tModulo').textContent = m ? 'Editar módulo' : 'Nuevo módulo';
   $('#modTitulo').value=modTemp.titulo; $('#modHoras').value=modTemp.horas||'';
   $('#modArea').innerHTML='<option value="">Sin área</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
-  $('#modArea').value=modTemp.areaId||(modCtx.cursoId?curso(modCtx.cursoId)?.areaId:'')||'';
+  $('#modArea').value=modTemp.areaId||(modCtx.cursoId?curso(modCtx.cursoId)?.areaId:modCtx.paraCursoTemp?$('#curArea').value:'')||'';
   const usos=m?cursosDeModulo(m.id):[], caja=$('#modEnCursos');
   caja.classList.toggle('d-none',!usos.length);
   caja.textContent=usos.length?`En ${usos.length===1?'el curso':'los cursos'}: ${usos.map(c=>c.nombre).join(', ')} · los cambios se reflejan en todos`:'';
@@ -683,18 +684,26 @@ function tabModulos(c,inf){
 }
 
 /* ---------- agregar un módulo de la biblioteca ---------- */
+function llenarModAgregar(){
+  const c=curso(cursoActual), usados=new Set((c.modulos||[]).map(r=>r.ref)), todas=$('#maTodas').checked;
+  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id) && (todas || !c.areaId || m.areaId===c.areaId));
+  $('#maModulo').innerHTML=libres.length ? libres.map(m=>`<option value="${m.id}">${esc(m.titulo)}${area(m.areaId)?' · '+esc(area(m.areaId).nombre):' · sin área'}</option>`).join('') : '<option value="">No hay módulos de esta área</option>';
+  vistaModAgregar();
+}
 function abrirModAgregar(){
-  const c=curso(cursoActual), N=+c.grupo.numClases||1, usados=new Set((c.modulos||[]).map(r=>r.ref));
-  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id));
-  if(!libres.length){ toast(DB.modulos?.length?'Todos los módulos de la biblioteca ya están en este curso':'La biblioteca está vacía: crea un módulo primero'); return; }
-  $('#maModulo').innerHTML=libres.map(m=>`<option value="${m.id}">${esc(m.titulo)}${area(m.areaId)?' · '+esc(area(m.areaId).nombre):''}</option>`).join('');
+  const c=curso(cursoActual), N=+c.grupo.numClases||1;
+  if(!(DB.modulos||[]).length){ toast('La biblioteca está vacía: crea un módulo primero'); return; }
+  $('#maTodas').checked=false;
+  $('#maTodasLbl').textContent = c.areaId ? `Incluir módulos de otras áreas (ahora solo ${area(c.areaId)?.nombre||'del área del curso'})` : 'Este curso no tiene área: se muestran todos';
+  $('#maTodas').disabled=!c.areaId;
   const ult=Math.max(0,...(c.modulos||[]).map(r=>r.hasta)), d=Math.min(N,ult+1);
   const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
   $('#maDesde').innerHTML=op(d); $('#maHasta').innerHTML=op(d);
-  vistaModAgregar(); modal('mModAgregar').show();
+  llenarModAgregar(); modal('mModAgregar').show();
 }
+$('#maTodas').addEventListener('change',llenarModAgregar);
 function vistaModAgregar(){
-  const m=modulo($('#maModulo').value); if(!m) return;
+  const m=modulo($('#maModulo').value); if(!m){ $('#maVista').innerHTML=''; return; }
   const c=curso(cursoActual), horasClase=(infoCurso(c).horas/(+c.grupo.numClases||1))||0;
   if(m.horas && horasClase){ const n=Math.max(1,Math.round(m.horas/horasClase)), d=+$('#maDesde').value; $('#maHasta').value=Math.min(+c.grupo.numClases||1,d+n-1); }
   $('#maVista').innerHTML=`<div class="border rounded p-2 small">${m.descripcion?`<p class="mb-1">${esc(m.descripcion)}</p>`:''}${(m.temas||[]).length?`<div class="text-muted">${m.temas.length} temas</div>`:''}${(m.items||[]).length?`<div class="text-muted">${m.items.length} archivos</div>`:''}</div>`;
@@ -703,6 +712,7 @@ $('#maModulo').addEventListener('change',vistaModAgregar);
 $('#maDesde').addEventListener('change',()=>{ vistaModAgregar(); if(+$('#maHasta').value<+$('#maDesde').value) $('#maHasta').value=$('#maDesde').value; });
 $('#formModAgregar').addEventListener('submit',e=>{
   e.preventDefault();
+  if(!modulo($('#maModulo').value)){ toast('Elige un módulo'); return; }
   const c=curso(cursoActual), d=+$('#maDesde').value, h=Math.max(d,+$('#maHasta').value);
   (c.modulos=c.modulos||[]).push({ref:$('#maModulo').value,desde:d,hasta:h});
   guardar(); modal('mModAgregar').hide(); render(); pintarCurso(); toast('Módulo agregado al curso');
@@ -954,21 +964,21 @@ document.getElementById('mExamen').addEventListener('hidden.bs.modal',()=>{ if(!
 /* =========================================================
    Módulos dentro del formulario del curso: tarjetas para agregar y organizar
    ========================================================= */
-let modBuscar='', modAreaF='';
+let modBuscar='', modAreaTodas=false;
 function pintarModsCurso(){
   const N=Math.max(1,+$('#curNumClases').value||1), usados=new Set(modsTemp.map(r=>r.ref));
   const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
   const cubiertas=new Set(); modsTemp.forEach(r=>{ for(let n=r.desde;n<=Math.min(r.hasta,N);n++) cubiertas.add(n); });
   const sin=Array.from({length:N},(_,k)=>k+1).filter(n=>!cubiertas.has(n));
-  const q=modBuscar.toLowerCase();
-  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id) && (!modAreaF || m.areaId===modAreaF) && (!q || [m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q)));
-  const hayFiltro=!!(q||modAreaF), enc=document.activeElement?.id==='curModBuscar';
+  const q=modBuscar.toLowerCase(), areaC=$('#curArea').value, ar=area(areaC);
+  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id) && (modAreaTodas || (areaC && m.areaId===areaC)) && (!q || [m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q)));
+  const hayFiltro=!!q, enc=document.activeElement?.id==='curModBuscar', idCurso=$('#curId').value;
   $('#curModulos').innerHTML=`
-    <div class="row g-2">${modsTemp.map((r,k)=>{ const m=modulo(r.ref); if(!m) return ''; const ar=area(m.areaId);
+    <div class="row g-2">${modsTemp.map((r,k)=>{ const m=modulo(r.ref); if(!m) return '';
       return `<div class="col-md-6" data-k="${k}"><div class="mod-card h-100">
         <div class="d-flex gap-2 align-items-start"><span class="display-font fs-4 text-marca" style="min-width:26px">${k+1}</span>
           <div class="flex-grow-1" style="min-width:0"><div class="fw-semibold text-truncate">${esc(m.titulo)}</div>
-            <small class="text-muted">${ar?esc(ar.nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} ${(m.items||[]).length===1?'archivo':'archivos'}</small></div>
+            <small class="text-muted">${area(m.areaId)?esc(area(m.areaId).nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} ${(m.items||[]).length===1?'archivo':'archivos'}${(()=>{ const o=cursosDeModulo(m.id).filter(c=>c.id!==idCurso).length; return o?` · <span class="text-marca">también en ${o} ${o===1?'curso':'cursos'}</span>`:''; })()}</small></div>
           <div class="btn-group btn-group-sm">
             <button type="button" class="btn btn-outline-secondary" data-a="up" title="Subir" ${k===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
             <button type="button" class="btn btn-outline-secondary" data-a="down" title="Bajar" ${k===modsTemp.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
@@ -977,17 +987,18 @@ function pintarModsCurso(){
         <div class="d-flex align-items-center gap-1 small mt-2">Clases <select class="form-select form-select-sm w-auto" data-r="desde" aria-label="Desde la clase">${op(Math.min(r.desde,N))}</select> a <select class="form-select form-select-sm w-auto" data-r="hasta" aria-label="Hasta la clase">${op(Math.min(r.hasta,N))}</select></div>
       </div></div>`; }).join('') || '<div class="col-12"><div class="small text-muted border rounded p-3 text-center bg-white">Aún no hay módulos en este curso. Elige uno de la biblioteca o crea uno nuevo.</div></div>'}</div>
     ${modsTemp.length&&sin.length?`<div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle"></i> Clases sin módulo: ${sin.join(', ')}.</div>`:''}
-    <div class="d-flex flex-wrap gap-2 align-items-center mt-3 mb-2"><b class="small me-auto">Biblioteca de módulos</b>
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3 mb-2"><b class="small me-auto">${ar?`Módulos de <span class="text-marca">${esc(ar.nombre)}</span>`:'Biblioteca de módulos'}</b>
       <input class="form-control form-control-sm" style="max-width:190px" id="curModBuscar" placeholder="Buscar módulo" value="${esc(modBuscar)}" aria-label="Buscar módulo">
-      <select class="form-select form-select-sm w-auto" id="curModArea" aria-label="Filtrar por área"><option value="">Todas las áreas</option>${(DB.areas||[]).map(a=>`<option value="${a.id}" ${a.id===modAreaF?'selected':''}>${esc(a.nombre)}</option>`).join('')}</select>
+      <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="curModTodas" ${modAreaTodas?'checked':''}><label class="form-check-label small" for="curModTodas">Otras áreas</label></div>
       <button type="button" class="btn btn-sm btn-outline-secondary" data-a="new"><i class="bi bi-plus-lg"></i> Crear módulo nuevo</button></div>
     <div class="row g-2">${libres.map(m=>`<div class="col-6 col-md-4"><button type="button" class="mod-lib" data-add="${m.id}">
         <div class="fw-semibold small text-truncate">${esc(m.titulo)}</div><div class="small text-muted text-truncate">${area(m.areaId)?esc(area(m.areaId).nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} arch.</div>
-        <div class="small text-marca mt-1"><i class="bi bi-plus-circle"></i> Agregar</div></button></div>`).join('') || `<div class="col-12 small text-muted">${hayFiltro?'Ningún módulo coincide con el filtro.':(DB.modulos||[]).length?'Todos los módulos de la biblioteca ya están en este curso.':'La biblioteca está vacía.'}</div>`}</div>`;
+        <div class="small text-marca mt-1"><i class="bi bi-plus-circle"></i> Agregar</div></button></div>`).join('') || `<div class="col-12 small text-muted">${!areaC && !modAreaTodas ? 'Elige primero el <b>área</b> del curso (paso 1) para ver sus módulos.' : hayFiltro ? 'Ningún módulo coincide con la búsqueda.' : !(DB.modulos||[]).length ? 'La biblioteca está vacía.' : `No hay más módulos${modAreaTodas?'':` de ${esc(ar?.nombre||'esta área')}`}: crea uno nuevo${modAreaTodas?'':' o activa «Otras áreas»'}.`}</div>`}</div>`;
   if(enc){ const i=$('#curModBuscar'); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
 }
 $('#curModulos').addEventListener('input',e=>{ if(e.target.id==='curModBuscar'){ modBuscar=e.target.value; pintarModsCurso(); } });
-$('#curModulos').addEventListener('change',e=>{ if(e.target.id==='curModArea'){ modAreaF=e.target.value; pintarModsCurso(); } });
+$('#curModulos').addEventListener('change',e=>{ if(e.target.id==='curModTodas'){ modAreaTodas=e.target.checked; pintarModsCurso(); } });
+$('#curArea').addEventListener('change',pintarModsCurso);
 $('#curModulos').addEventListener('click',e=>{
   const add=e.target.closest('[data-add]');
   if(add){ const N=Math.max(1,+$('#curNumClases').value||1), d=Math.min(N,Math.max(0,...modsTemp.map(r=>r.hasta))+1); modsTemp.push({ref:add.dataset.add,desde:d,hasta:d}); pintarModsCurso(); return; }

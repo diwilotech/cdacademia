@@ -570,23 +570,37 @@
           <div class="col-md-4"><label class="form-label small" for="curProf">Docente</label><select class="form-select" id="curProf"></select></div>
           <div class="col-md-4"><label class="form-label small" for="curJornada">Jornada</label>
             <select class="form-select" id="curJornada"><option>Mañana</option><option>Tarde</option><option>Noche</option><option>Sabatina</option><option>Dominical</option></select></div>
-          <div class="col-md-4"><label class="form-label small" for="curInicio">Primera clase</label><input type="date" class="form-control" id="curInicio"></div>
+          <div class="col-md-4" id="curInicioWrap"><label class="form-label small" for="curInicio">Primera clase</label><input type="date" class="form-control" id="curInicio"></div>
           <div class="col-12"><small class="text-muted" id="curProfNota"></small></div>
           <div class="col-6 col-md-3"><span class="form-label small d-block">Clases por semana</span><div class="form-control-plaintext fw-semibold tabular" id="curPorSemanaTxt">0</div></div>
           <div class="col-6 col-md-3"><label class="form-label small" for="curNumClases">Total de clases</label><input type="number" min="1" max="200" class="form-control" id="curNumClases" value="16"></div>
-          <div class="col-md-6 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
-          <div class="col-12"><span class="form-label small d-block mb-1">Semana de clases <span class="text-muted">· de lunes a domingo, en mañana, media mañana, tarde, media tarde o noche. Pulsa «+ Clase» en el día y momento que quieras, arrastra una clase para cambiarla de día o de momento, y escribe su hora si necesitas otra.</span></span>
+          <div class="col-md-6 d-flex align-items-end" id="curFestivosWrap"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
+          <div class="col-12"><span class="form-label small d-block mb-1">¿Cómo se reparten las clases?</span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de horario">
+              <input type="radio" class="btn-check" name="curModo" id="curModoSem" value="semanal" checked><label class="btn btn-outline-secondary" for="curModoSem"><i class="bi bi-arrow-repeat"></i> Se repiten cada semana</label>
+              <input type="radio" class="btn-check" name="curModo" id="curModoVar" value="variable"><label class="btn btn-outline-secondary" for="curModoVar"><i class="bi bi-calendar2-week"></i> Cada clase en su fecha</label></div>
+            <div class="small text-muted mt-1" id="curModoAyuda"></div></div>
+
+          <div class="col-12" id="curBloqueSemanal">
             <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
-              <div><label class="form-label small mb-0" for="rapDia">Día</label>
-                <select class="form-select form-select-sm" id="rapDia"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6" selected>Sábado</option><option value="0">Domingo</option></select></div>
-              <div class="flex-grow-1" style="min-width:220px;max-width:360px"><label class="form-label small mb-0" for="rapHoras">Horas de las clases <span class="text-muted">(puedes poner varias)</span></label>
-                <input class="form-control form-control-sm" id="rapHoras" placeholder="Ej: 8 a 10, 10 a 1" autocomplete="off"></div>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="rapAgregar"><i class="bi bi-plus-lg"></i> Agregar al día</button>
-              <small class="w-100 text-muted" id="rapMsg">Escribe las horas y se acomodan solas en la mañana, tarde o noche. Ejemplos: <code>8 a 10, 10 a 1</code> · <code>2-4</code> · <code>6:30pm-9pm</code></small>
-            </div>
-            <div class="cal cal-compacto" id="curSemana" aria-label="Horario semanal de clases"></div>
-            <details class="mt-2"><summary class="small text-marca" style="cursor:pointer">Ajustar horas exactas</summary>
+              <div><span class="form-label small d-block mb-0">Días <span class="text-muted">(uno o varios)</span></span>
+                <div class="btn-group btn-group-sm" role="group" id="rapDias" aria-label="Días de la clase">
+                  <input type="checkbox" class="btn-check" id="rapD1" value="1"><label class="btn btn-outline-secondary" for="rapD1">Lun</label><input type="checkbox" class="btn-check" id="rapD2" value="2"><label class="btn btn-outline-secondary" for="rapD2">Mar</label><input type="checkbox" class="btn-check" id="rapD3" value="3"><label class="btn btn-outline-secondary" for="rapD3">Mié</label><input type="checkbox" class="btn-check" id="rapD4" value="4"><label class="btn btn-outline-secondary" for="rapD4">Jue</label><input type="checkbox" class="btn-check" id="rapD5" value="5"><label class="btn btn-outline-secondary" for="rapD5">Vie</label><input type="checkbox" class="btn-check" id="rapD6" value="6"><label class="btn btn-outline-secondary" for="rapD6">Sáb</label><input type="checkbox" class="btn-check" id="rapD0" value="0"><label class="btn btn-outline-secondary" for="rapD0">Dom</label></div></div>
+              <div><label class="form-label small mb-0" for="rapIni">Hora de inicio</label><input type="time" class="form-control form-control-sm" id="rapIni" value="08:00"></div>
+              <div><label class="form-label small mb-0" for="rapFin">Hora de fin</label><input type="time" class="form-control form-control-sm" id="rapFin" value="10:00"></div>
+              <button type="button" class="btn btn-sm btn-marca" id="rapAgregar"><i class="bi bi-plus-lg"></i> Agregar</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="rapCancelar" hidden>Cancelar</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" id="rapQuitar" hidden><i class="bi bi-trash"></i> Quitar</button>
+              <small class="w-100 text-muted" id="rapMsg"></small></div>
+            <div class="tt" id="curSemana" aria-label="Horario semanal de clases"></div>
+            <details class="mt-2"><summary class="small text-marca" style="cursor:pointer">Ver y ajustar las horas de cada clase</summary>
               <div id="curFranjas" class="d-flex flex-column gap-2 mt-2"></div></details></div>
+
+          <div class="col-12" id="curBloqueVariable" hidden>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <small class="text-muted">Pon la fecha y la hora de cada clase. Pueden caer en días distintos cada semana: por ejemplo la clase 1 un sábado y la clase 2 un martes.</small>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="curRellenar"><i class="bi bi-magic"></i> Rellenar con el horario semanal</button></div>
+            <div id="curFechasClases" class="d-flex flex-column gap-2"></div></div>
           <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>
           <div class="col-12"><details><summary class="small text-marca" style="cursor:pointer">Ver todas las clases con su fecha y hora</summary><div class="d-flex flex-wrap gap-1 mt-2" id="curListaClases" style="max-height:160px;overflow:auto"></div></details></div>
         </div></div>

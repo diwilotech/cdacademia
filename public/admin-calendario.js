@@ -11,8 +11,6 @@ const MOMENTOS = [
   {n:'Media tarde',     r:'3:00 – 6:00 p. m.',     ic:'bi-sunset',           hasta:18*60},
   {n:'Noche',         r:'desde las 6:00 p. m.',  ic:'bi-moon-stars',       hasta:24*60}
 ];
-/* Horario que se propone al agregar una clase en cada momento del día */
-const HORA_MOMENTO = [['07:00','09:00'],['09:00','12:00'],['12:00','15:00'],['15:00','18:00'],['18:00','21:00']];
 const momentoDe = ini => MOMENTOS.findIndex(m=>aMin(ini)<m.hasta);
 const calBase = o => ({semana:lunesDe(hoyISO()),clases:true,repos:false,area:'',prof:'',cursoId:'',nuevo:false,...o});
 const CALS = {

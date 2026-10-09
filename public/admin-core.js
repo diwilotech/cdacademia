@@ -361,10 +361,23 @@ const esFestivo = iso => festivosCO(+iso.slice(0,4)).has(iso);
 
 /* Horario del grupo: lista de franjas {dia, ini, fin}. Cada franja es una clase, así que un mismo día puede
    tener varias clases a distintas horas y cada día de la semana puede tener su propio horario. */
-const slotsDe = g => (g && g.slots && g.slots.length) ? g.slots : ((g && g.dias) || []).map(d=>({dia:d,ini:g.horaIni||'09:00',fin:g.horaFin||'12:00'}));
+/* Franjas semanales del grupo. En horario «clase por clase» salen de las fechas de cada clase. */
+function slotsDe(g){
+  if(g && g.modo==='variable'){
+    const u=new Map(); (g.sesiones||[]).forEach(s=>{ if(!s.fecha||!s.ini||!s.fin) return; const d=new Date(s.fecha+'T12:00').getDay(); u.set(`${d}${s.ini}${s.fin}`,{dia:d,ini:s.ini,fin:s.fin}); });
+    return [...u.values()];
+  }
+  return (g && g.slots && g.slots.length) ? g.slots : ((g && g.dias) || []).map(d=>({dia:d,ini:g.horaIni||'09:00',fin:g.horaFin||'12:00'}));
+}
 const ordenDia = d => (d+6)%7;
 function sesionesGrupo(g, clases){
   g=g||{}; const N=+g.numClases||0, slots=slotsDe(g);
+  if(g.modo==='variable'){                                   // cada clase tiene su propia fecha y hora
+    const S=(g.sesiones||[]).slice(0,N).map(s=>({fecha:s.fecha||null,ini:s.ini||'',fin:s.fin||''}));
+    while(S.length<N) S.push({fecha:null,ini:'',fin:''});
+    (clases||[]).forEach(cl=>{ const o=S[cl.n-1]; if(o && cl.n<=N){ if(cl.fecha) o.fecha=cl.fecha; if(cl.ini) o.ini=cl.ini; if(cl.fin) o.fin=cl.fin; } });
+    return S;
+  }
   if(!g.inicio || !slots.length || !N) return Array.from({length:N},()=>({fecha:null,ini:slots[0]?.ini||'',fin:slots[0]?.fin||''}));
   const porDia={}; slots.forEach(x=>(porDia[x.dia]=porDia[x.dia]||[]).push(x)); Object.values(porDia).forEach(arr=>arr.sort((p,q)=>p.ini.localeCompare(q.ini)));
   const out=[]; let [y,m,d]=g.inicio.split('-').map(Number); let t=new Date(Date.UTC(y,m-1,d));
@@ -840,6 +853,7 @@ function abrirCurso(id){
   franjasTemp=slotsDe(g).map(x=>({...x}));
   descTemp=structuredClone(c.descuentos||[]); modsTemp=structuredClone(c.modulos||[]);
   modAreaTodas=false; modBuscar='';
+  modoCurso=g.modo==='variable'?'variable':'semanal'; sesionesTemp=structuredClone(g.sesiones||[]); aplicarModoCurso();
   refrescarHorario(); pintarDescCurso(); pintarModsCurso();
   modal('mCurso').show();
 }
@@ -879,16 +893,13 @@ function analizarPlan(texto){
 
 $('#formCurso').addEventListener('submit',ev=>{
   ev.preventDefault();
-  if(!franjasTemp.length){ toast('Agrega al menos una clase en la semana'); return; }
-  if(franjasTemp.some(x=>!x.ini||!x.fin||x.fin<=x.ini)){ toast('En cada clase, la hora final debe ser después de la inicial'); return; }
+  const errHorario=validarHorario(); if(errHorario){ toast(errHorario); return; }
   const dc=descTemp.filter(d=>d.codigo.trim());
   if(new Set(dc.map(d=>d.codigo)).size!==dc.length){ toast('Hay cupones repetidos'); return; }
   const id=$('#curId').value||uid();
   const prev=curso(id)||{};
   const pro=profesional($('#curProf').value);
-  const grupo=normGrupo({docente:pro?pro.nombre:'',profesionalId:pro?pro.id:'',jornada:$('#curJornada').value,
-    slots:franjasTemp.map(x=>({...x})),inicio:$('#curInicio').value,
-    numClases:Math.max(1,+$('#curNumClases').value||16),festivos:$('#curFestivos').checked});
+  const grupo=construirGrupo(pro);
   const N=grupo.numClases;
   const mods=modsTemp.filter(r=>modulo(r.ref)).map(r=>({ref:r.ref,desde:Math.min(r.desde,N),hasta:Math.min(Math.max(r.hasta,r.desde),N)}));
   const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,nivel:$('#curNivel').value,areaId:$('#curArea').value,
@@ -898,27 +909,12 @@ $('#formCurso').addEventListener('submit',ev=>{
   guardar(); modal('mCurso').hide(); render(); if(cursoActual===id) pintarCurso(); toast('Curso guardado');
 });
 
-/* Resumen de fechas en vivo dentro del formulario */
-function resumenFechasForm(){
-  const g={slots:franjasTemp,inicio:$('#curInicio').value,numClases:+$('#curNumClases').value||0,festivos:$('#curFestivos').checked};
-  const prev=curso($('#curId').value);
-  const ses=sesionesGrupo(g,prev?.clases||[]), f=ses.map(x=>x.fecha).filter(Boolean);
-  const caja=$('#curResumenFechas');
-  $('#curListaClases').innerHTML=f.length ? ses.map((x,k)=>`<span class="tag tabular"><b>${k+1}</b> · ${DIAS[new Date(x.fecha+'T12:00').getDay()]} ${fechaMini(x.fecha)} · ${rangoHoras(x.ini,x.fin)}</span>`).join('') : '<span class="small text-muted">Elige la primera clase para ver las fechas.</span>';
-  if(!g.inicio || !franjasTemp.length || !f.length){ caja.innerHTML='<i class="bi bi-info-circle"></i> Elige el horario y la primera clase para calcular cuándo termina.'; return; }
-  const diasConClase=new Set(franjasTemp.map(x=>x.dia)), dia0=new Date(g.inicio+'T12:00').getDay();
-  const aviso = diasConClase.has(dia0) ? '' : `<div class="text-warning"><i class="bi bi-exclamation-triangle"></i> La primera clase cae ${DIAS_L[dia0]}, que no tiene horario. Empezará el ${fechaLarga(f[0])}.</div>`;
-  const fin=f.at(-1), semanas=Math.ceil((new Date(fin)-new Date(f[0]))/864e5/7)+1, h=ses.reduce((a,x)=>a+horasSesion(x),0);
-  const saltados=[]; if(g.festivos){ let t=new Date(f[0]+'T12:00Z'); while(t.toISOString().slice(0,10)<=fin){ const iso=t.toISOString().slice(0,10); if(diasConClase.has(t.getUTCDay())&&esFestivo(iso)) saltados.push(iso); t.setUTCDate(t.getUTCDate()+1);} }
-  caja.innerHTML=aviso+`<b>Termina el ${DIAS_L[new Date(fin+'T12:00').getDay()]} ${fechaLarga(fin)}</b> · ${semanas} semanas · ${g.numClases} clases = <b>${h} h</b>`+
-    (saltados.length?`<div class="text-muted mt-1"><i class="bi bi-calendar-x"></i> Se saltan festivos: ${saltados.map(fechaCorta).join(', ')}</div>`:'');
-}
 ['#curInicio','#curFestivos'].forEach(q=>$(q).addEventListener('input',resumenFechasForm));
-$('#curNumClases').addEventListener('input',()=>{ resumenFechasForm(); pintarModsCurso(); });
+$('#curNumClases').addEventListener('input',()=>{ ajustarNumClases(); pintarModsCurso(); });
 
 function duplicarCurso(id){
   const c=structuredClone(curso(id)); c.id=uid(); c.nombre=c.nombre+' (otro grupo)';
-  c.grupo.docente=''; c.grupo.profesionalId=''; c.grupo.inicio=''; (c.clases||[]).forEach(cl=>{ delete cl.fecha; delete cl.ini; delete cl.fin; cl.obs=''; });
+  c.grupo.docente=''; c.grupo.profesionalId=''; c.grupo.inicio=''; if(c.grupo.modo==='variable'){ delete c.grupo.modo; delete c.grupo.sesiones; }   // la copia empieza como horario semanal (c.clases||[]).forEach(cl=>{ delete cl.fecha; delete cl.ini; delete cl.fin; cl.obs=''; });
   (c.descuentos||[]).forEach(d=>{ d.usos=0; });
   DB.cursos.push(c); guardar(); render(); abrirCurso(c.id); toast('Curso duplicado: ajusta docente, jornada y fechas');
 }

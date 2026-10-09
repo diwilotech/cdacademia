@@ -256,12 +256,28 @@ function mostrarSaldo(){
   const atajos=[];
   if(sig) atajos.push([`${sig.etiqueta}`,sig.falta,sig.abonado>0?`Saldo ${sig.etiqueta.toLowerCase()}`:sig.etiqueta]);
   if(vencido>0 && (!sig || vencido!==sig.falta)) atajos.push(['Todo lo vencido',vencido,'Pago cuotas vencidas']);
+  const pend=qs.filter(q=>q.falta>0);
+  for(const n of [2,3]) if(pend.length>n) atajos.push([`Próximas ${n} cuotas`,pend.slice(0,n).reduce((a,q)=>a+q.falta,0),`Pago de ${n} cuotas`]);   // por si paga varias a la vez
   if(saldoInsc(i)>0 && (!sig || saldoInsc(i)!==sig.falta)) atajos.push(['Saldo total',saldoInsc(i),'Pago total']);
   $('#pagoAtajos').innerHTML=`<div class="d-flex flex-wrap gap-2">${atajos.map(([t,v,conc])=>
     `<button type="button" class="btn btn-sm btn-outline-secondary" data-v="${v}" data-c="${esc(conc)}">${esc(t)} · ${money(v)}</button>`).join('')}</div>`;
-  $('#pagoAtajos').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ $('#pagoValor').value=b.dataset.v; $('#pagoConcepto').value=b.dataset.c; }));
+  $('#pagoAtajos').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ $('#pagoValor').value=b.dataset.v; $('#pagoConcepto').value=b.dataset.c; previsualizarPago(); }));
   if(!$('#pagoValor').value && atajos.length){ $('#pagoValor').value=atajos[0][1]; $('#pagoConcepto').value=atajos[0][2]; }
+  previsualizarPago();
 }
+/* El pago se reparte solo, en orden, entre las cuotas: aquí se ve qué cuotas cubre antes de guardarlo */
+function previsualizarPago(){
+  const i=insc($('#pagoInsc').value), v=+$('#pagoValor').value||0, caja=$('#pagoAplicacion');
+  if(!i || v<=0){ caja.innerHTML=''; return; }
+  const antes=estadoCuotas(i); let disp=pagado(i.id)+v;
+  const despues=[...(i.cuotas||[])].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(q=>{ const ab=Math.min(q.valor,disp); disp-=ab; return {...q,abonado:ab,falta:q.valor-ab}; });
+  const cambios=despues.map((q,k)=>({q,nuevo:q.abonado-antes[k].abonado})).filter(x=>x.nuevo>0);
+  const sobra=Math.max(0,disp);
+  caja.innerHTML=`<div class="border rounded p-2 small bg-white"><div class="fw-semibold mb-1">Con este pago de ${money(v)}:</div>`+
+    (cambios.map(({q,nuevo})=>`<div class="d-flex justify-content-between gap-2 tabular"><span>${esc(q.etiqueta)}</span><span>${q.falta<=0?'<b class="text-success">queda pagada</b>':`abono de ${money(nuevo)} · <b class="text-danger">falta ${money(q.falta)}</b>`}</span></div>`).join('')||'<div class="text-muted">No cubre ninguna cuota.</div>')+
+    (sobra>0?`<div class="text-warning mt-1"><i class="bi bi-exclamation-triangle"></i> El pago supera el saldo en ${money(sobra)}.</div>`:'')+'</div>';
+}
+$('#pagoValor').addEventListener('input',previsualizarPago);
 $('#pagoInsc').addEventListener('change',()=>{ $('#pagoValor').value=''; mostrarSaldo(); });
 $('#formPago').addEventListener('submit',ev=>{
   ev.preventDefault();

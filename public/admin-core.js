@@ -580,9 +580,10 @@ function render(){
       <td class="tabular text-nowrap">${fechaLarga(q.fecha)}</td>
       <td style="min-width:110px"><div class="small fw-semibold tabular">${cuota}</div>
         <div class="barra mt-1" title="${p.pagadas} de ${p.total} cuotas pagadas"><i style="width:${pct}%"></i></div></td>
-      <td class="text-end tabular fw-semibold">${money(totalInsc(q.insc))}</td>
+      <td class="text-end tabular"><div class="fw-semibold">${money(totalInsc(q.insc))}</div>
+        <div class="small ${saldoInsc(q.insc)>0?'text-muted':'text-success'}" title="Saldo de toda la inscripción: ${money(Math.max(0,saldoInsc(q.insc)))}">Pagado ${money(pagado(q.insc.id))}</div></td>
       <td class="text-end tabular"><div class="fw-semibold">${money(q.valor)}</div>
-        <div class="small ${q.falta>0?'text-danger':'text-success'}">${q.falta>0?'Falta '+money(q.falta):'Pagada'}</div></td>
+        <div class="small ${q.falta>0?'text-danger':'text-success'}">${q.falta<=0?'Pagada':q.abonado>0?`Abonó ${money(q.abonado)} · falta ${money(q.falta)}`:'Falta '+money(q.falta)}</div></td>
       <td>${pill(q)}</td>
       <td class="text-end text-nowrap">${q.falta>0?`${botonWA(q)} <button class="btn btn-sm btn-marca" onclick="abrirPago('${q.insc.id}')">Cobrar</button>`:''}</td></tr>`}).join('')
     || '<tr><td colspan="7" class="text-center text-muted py-4">No hay cuotas en este filtro.</td></tr>';

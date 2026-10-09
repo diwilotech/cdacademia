@@ -304,7 +304,7 @@ section[data-vista].activa{display:block}
 
 /* ---------- Semana de clases en el formulario del curso (mismos momentos del día) ---------- */
 .cal-compacto{max-height:420px}
-.cal-compacto .cal-grid{grid-template-columns:104px repeat(7,minmax(128px,1fr));min-width:1000px}
+.cal-compacto .cal-grid{grid-template-columns:104px repeat(7,minmax(136px,1fr));min-width:1060px}
 .cal-compacto .cal-celda{min-height:74px;transition:background .15s}
 .cal-compacto .cal-celda.sobre{background:var(--marca-suave);box-shadow:inset 0 0 0 2px var(--marca)}
 .sg-card{border:1px solid var(--borde);border-left:4px solid var(--marca);border-radius:.5rem;background:#fff;padding:.3rem .4rem;cursor:grab;box-shadow:0 1px 2px rgba(42,31,38,.08)}
@@ -312,7 +312,8 @@ section[data-vista].activa{display:block}
 .sg-card .sg-top{display:flex;align-items:center;gap:.25rem;font-size:.74rem}
 .sg-card .sg-top b{flex:1;color:var(--marca)}
 .sg-card .sg-x{border:0;background:none;color:#a12424;font-size:1rem;line-height:1;padding:0 .2rem;cursor:pointer}
-.sg-card .sg-hor{display:flex;align-items:center;gap:.2rem;margin-top:.2rem}
-.sg-card input[type=time]{width:100%;min-width:0;font-size:.72rem;padding:.1rem .2rem;border:1px solid var(--borde);border-radius:.3rem;background:#faf6f8}
+.sg-card .sg-hor{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin:.25rem 0 0;font-size:.7rem;color:#6b5d66}
+.sg-card .sg-hor span{flex:none;width:2.6em}
+.sg-card input[type=time]{flex:1;min-width:0;font-size:.78rem;padding:.15rem .3rem;border:1px solid var(--borde);border-radius:.3rem;background:#faf6f8;color:var(--tinta)}
 .sg-add{border:1px dashed #d8cbd3;background:transparent;border-radius:.45rem;color:#9a8c95;font-size:.7rem;padding:.15rem 0;width:100%;margin-top:auto}
 .sg-add:hover{border-color:var(--marca);color:var(--marca);background:#fff}

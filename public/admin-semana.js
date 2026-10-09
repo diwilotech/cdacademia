@@ -24,7 +24,8 @@ function pintarSemana(){
   const cont=$('#curSemana'), y=cont.scrollTop, orden=ordenSemana();
   const tarjeta=(x,k)=>`<div class="sg-card" draggable="true" data-k="${k}" aria-label="Clase ${orden.indexOf(k)+1}, ${DIAS_L[x.dia]}">
       <div class="sg-top"><i class="bi bi-grip-vertical text-muted"></i><b>Clase ${orden.indexOf(k)+1}</b><button type="button" class="sg-x" title="Quitar esta clase" aria-label="Quitar clase ${orden.indexOf(k)+1}">×</button></div>
-      <div class="sg-hor"><input type="time" data-f="ini" value="${x.ini}" aria-label="Hora de inicio"><span class="text-muted">–</span><input type="time" data-f="fin" value="${x.fin}" aria-label="Hora de fin"></div></div>`;
+      <label class="sg-hor"><span>Inicio</span><input type="time" data-f="ini" value="${x.ini}" aria-label="Hora de inicio"></label>
+      <label class="sg-hor"><span>Fin</span><input type="time" data-f="fin" value="${x.fin}" aria-label="Hora de fin"></label></div>`;
   cont.innerHTML=`<div class="cal-grid"><div class="cal-cab cal-esq"></div>${ORDEN_DIAS.map(d=>`<div class="cal-cab"><span>${DIAS[d]}</span></div>`).join('')}
     ${MOMENTOS.map((m,i)=>`<div class="cal-mom"><i class="bi ${m.ic}"></i><b>${m.n}</b><small>${m.r}</small></div>`+ORDEN_DIAS.map(d=>
       `<div class="cal-celda" data-dia="${d}" data-mom="${i}">${franjasTemp.map((x,k)=>x.dia===d && momentoDe(x.ini)===i ? tarjeta(x,k) : '').join('')}

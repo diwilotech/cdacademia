@@ -253,3 +253,19 @@ section[data-vista].activa{display:block}
 .bl-lista .li-mark{flex:none;width:1.6rem;text-align:right;padding-top:.15rem;line-height:1.6;color:var(--marca);font-weight:600}
 .doc-pie{min-height:150px;cursor:text;color:#b9aab3;font-size:.8rem;padding-top:.8rem}
 .doc-pie code{background:#f3edf0;border-radius:.25rem;padding:0 .25rem;color:#7a6c75}
+
+/* ---------- Editor de una sola superficie (como Notas) ---------- */
+.ed{outline:none;min-height:46vh;position:relative;cursor:text}
+.ed[data-vacio="1"]::before{content:"Escribe aquí…";position:absolute;left:0;top:0;color:#c4b8bf;pointer-events:none}
+.ed h2{font:400 1.6rem/1.25 var(--font-display);margin:1rem 0 .4rem}
+.ed h3{font:700 1.1rem/1.3 var(--font-body);margin:.9rem 0 .3rem}
+.ed p{margin:0 0 .6rem;min-height:1.6em}
+.ed ul,.ed ol{margin:0 0 .7rem;padding-left:1.4rem}
+.ed blockquote{background:var(--marca-suave);border-left:3px solid var(--marca);border-radius:.35rem;padding:.55rem .8rem;margin:.6rem 0}
+.ed hr{margin:1rem 0;border-color:var(--borde);opacity:1}
+.ed-atom{position:relative;margin:.7rem 0;padding:.35rem;border-radius:.55rem;border:1px solid transparent;cursor:default}
+.ed-atom:hover,.ed-atom:focus-within{border-color:var(--borde);background:#fcf9fb}
+.ed-atom>.bl-ctrl{display:none}
+.ed-atom:hover>.bl-ctrl,.ed-atom:focus-within>.bl-ctrl{display:flex}
+.ed-atom .doc-fig,.ed-atom .doc-archivo{margin:.3rem 0}
+.doc-papel{min-height:60vh}

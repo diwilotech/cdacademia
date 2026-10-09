@@ -103,8 +103,25 @@ document.getElementById('mVista').addEventListener('hidden.bs.modal',()=>{ $('#c
 
 /* ---------- biblioteca ---------- */
 function pintarModulos(){
-  const q=($('#buscarMod').value||'').toLowerCase(), todos=DB.modulos||[];
-  const lista=todos.filter(m=>[m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q));
+  const todos=DB.modulos||[];
+  // opciones de los filtros (conservan la selección)
+  const fa=$('#filtroModArea'), fc=$('#filtroModCurso'), va=fa.value, vc=fc.value;
+  fa.innerHTML='<option value="">Todas las áreas</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('')+'<option value="_sin">Sin área</option>';
+  fc.innerHTML='<option value="">Todos los cursos</option><option value="_sin">Sin curso</option>'+DB.cursos.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  fa.value=va; fc.value=vc;
+  const q=($('#buscarMod').value||'').toLowerCase(), mat=$('#filtroModMat').value;
+  const lista=todos.filter(m=>{
+    if(q && ![m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q)) return false;
+    if(fa.value==='_sin' ? m.areaId : fa.value && m.areaId!==fa.value) return false;
+    const usos=cursosDeModulo(m.id);
+    if(fc.value==='_sin' ? usos.length : fc.value && !usos.some(c=>c.id===fc.value)) return false;
+    if(mat==='con' && !(m.items||[]).length) return false;
+    if(mat==='sin' && (m.items||[]).length) return false;
+    return true;
+  });
+  const hay=fa.value||fc.value||mat||q;
+  $('#contModulos').textContent=`${lista.length} de ${todos.length} ${todos.length===1?'módulo':'módulos'}`;
+  $('#limpiarModFiltros').hidden=!(fa.value||fc.value||mat);
   $('#gridModulos').innerHTML=lista.map(m=>{
     const usos=cursosDeModulo(m.id), ar=area(m.areaId);
     return `<div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body d-flex flex-column">
@@ -120,8 +137,10 @@ function pintarModulos(){
         <button class="btn btn-sm btn-outline-secondary" title="Duplicar" onclick="duplicarModulo('${m.id}')"><i class="bi bi-copy"></i></button>
         <button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="eliminarModulo('${m.id}',this)"><i class="bi bi-trash"></i></button></div>
     </div></div></div>`; }).join('')
-    || `<div class="col-12"><div class="card"><div class="card-body text-muted small">${todos.length?'Ningún módulo coincide con la búsqueda.':'Aún no hay módulos. Crea el primero con «Nuevo módulo»; luego podrás usarlo en cualquier curso.'}</div></div></div>`;
+    || `<div class="col-12"><div class="card"><div class="card-body text-muted small">${todos.length?'Ningún módulo coincide con los filtros.':'Aún no hay módulos. Crea el primero con «Nuevo módulo»; luego podrás usarlo en cualquier curso.'}</div></div></div>`;
 }
+['#filtroModArea','#filtroModCurso','#filtroModMat'].forEach(q=>$(q).addEventListener('change',pintarModulos));
+$('#limpiarModFiltros').addEventListener('click',()=>{ $('#filtroModArea').value=''; $('#filtroModCurso').value=''; $('#filtroModMat').value=''; $('#buscarMod').value=''; pintarModulos(); });
 $('#buscarMod').addEventListener('input',pintarModulos);
 function duplicarModulo(id){
   const m=structuredClone(modulo(id)); m.id='m'+uid(); m.titulo+=' (copia)'; (m.items||[]).forEach(it=>{ it.id='a'+uid(); });
@@ -201,22 +220,180 @@ const docHtml = m => { const b=bloquesDe(m); return b.length ? `<div class="doc"
 /* Clics dentro de un documento: ver documento (PDF) y ampliar. Devuelve true si lo atendió. */
 function docClick(e, bloques, desde){
   const bl=e.target.closest('[data-b]'); if(!bl) return false;
-  const b=bloques[+bl.dataset.b]; if(!b) return false;
+  const b=typeof bloques==='function' ? bloques(bl.dataset.b) : bloques[+bl.dataset.b]; if(!b) return false;
   if(e.target.closest('[data-embed]')){ const em=bl.querySelector('.doc-embed'), f=em.querySelector('iframe'); em.hidden=!em.hidden; if(!f.src) f.src=f.dataset.src; return true; }
   if(e.target.closest('[data-prev]')){ if(desde==='mModulo') modEncadena=true; abrirVista(b,desde); return true; }
   return false;
 }
 
-/* ---------- editor de módulo ---------- */
-const NUEVO_BLOQUE = {titulo:{texto:''},subtitulo:{texto:''},texto:{texto:''},lista:{texto:''},numerada:{texto:''},destacado:{texto:''},separador:{},enlace:{nombre:'',url:''}};
-const PLACEHOLDER = {titulo:'Título',subtitulo:'Subtítulo',texto:'Escribe aquí… (**negrita**, *cursiva*)',lista:'Un elemento por línea',numerada:'Un paso por línea',destacado:'Nota destacada'};
-let modTemp=null, modNuevos=[], modGuardado=false, modEncadena=false, modCtx={}, bloqueSel=null;
+/* =========================================================
+   EDITOR DE MÓDULO: una sola superficie editable (como Notas)
+   El documento se edita como HTML y al guardar se convierte a bloques. Archivos y enlaces son «átomos»
+   (islas no editables con sus propios campos). El formato se aplica donde está el cursor o la selección.
+   ========================================================= */
+const ED = () => document.getElementById('modEditor');
+let modTemp=null, modNuevos=[], modGuardado=false, modEncadena=false, modCtx={}, atomos={};
+const BLOQUE_TAG = {titulo:'H2',subtitulo:'H3',texto:'P',destacado:'BLOCKQUOTE',lista:'UL',numerada:'OL'};
+const esAtomo = n => !!n && n.nodeType===1 && n.classList.contains('ed-atom');
+function tipoDe(el){
+  if(esAtomo(el)) return 'atomo';
+  return ({H1:'titulo',H2:'titulo',H3:'subtitulo',H4:'subtitulo',BLOCKQUOTE:'destacado',UL:'lista',OL:'numerada',HR:'separador'})[el.tagName] || 'texto';
+}
+const parrafoVacio = () => { const p=document.createElement('p'); p.appendChild(document.createElement('br')); return p; };
+const esVacio = el => !esAtomo(el) && el.tagName!=='HR' && !el.textContent.trim() && !el.querySelector('img,iframe');
+const autoAlto = ta => { ta.style.height='auto'; if(ta.scrollHeight) ta.style.height=ta.scrollHeight+'px'; };
+function ajustarAlturas(){ document.querySelectorAll('#modEditor textarea').forEach(autoAlto); }
+document.getElementById('mModulo').addEventListener('shown.bs.modal',()=>{
+  ajustarAlturas();
+  if(!$('#modTitulo').value.trim()) { $('#modTitulo').focus(); return; }          // módulo nuevo: primero el título
+  const e=ED(); e.focus(); colocarCursor(e.lastElementChild, true);
+});
+try{ document.execCommand('defaultParagraphSeparator',false,'p'); }catch(e){}
+
+/* --- bloques <-> HTML --- */
+function atomoHtml(b){
+  const idx=`data-b="${b.id}"`;
+  let cuerpo;
+  if(b.tipo==='archivo' && esImagen(b)){
+    const lay=b.diseno||'izq', btn=(v,ic,t)=>`<button type="button" class="btn btn-sm ${lay===v?'btn-marca':'btn-outline-secondary'}" data-lay="${v}" title="${t}"><i class="bi ${ic}"></i></button>`;
+    const campos=`<input class="form-control form-control-sm mb-1" data-f="titulo" value="${esc(b.titulo||'')}" placeholder="Título junto a la imagen (opcional)" aria-label="Título junto a la imagen"><textarea class="form-control form-control-sm" rows="3" data-f="texto" placeholder="Texto junto a la imagen… (**negrita**, *cursiva*)" aria-label="Texto junto a la imagen">${esc(b.texto||'')}</textarea>`;
+    const img=`<figure class="doc-fig"><img src="${urlArchivo(b.key)}" alt="${esc(b.nombre)}" data-prev></figure>`;
+    cuerpo=`<div class="d-flex flex-wrap align-items-center gap-1 mb-1 small text-muted"><span>Diseño:</span><div class="btn-group btn-group-sm">${btn('izq','bi-layout-sidebar','Imagen a la izquierda, texto a la derecha')}${btn('der','bi-layout-sidebar-reverse','Texto a la izquierda, imagen a la derecha')}${btn('completo','bi-image','Imagen sola, de lado a lado')}</div>
+      <input class="form-control form-control-sm ms-auto" style="max-width:220px" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre del archivo" aria-label="Nombre del archivo"></div>
+      ${lay==='completo'?`<div class="doc-fig">${img}</div><div class="mt-2">${campos}</div>`:`<div class="doc-split ${lay==='der'?'der':''}">${img}<div class="doc-split-txt">${campos}</div></div>`}`;
+  } else if(b.tipo==='archivo'){
+    cuerpo=`${archivoHtml(b)}<input class="form-control form-control-sm mt-1" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre o pie del archivo" aria-label="Nombre del archivo">`;
+  } else {
+    cuerpo=`<div class="row g-1"><div class="col-md-4"><input class="form-control form-control-sm" data-f="nombre" value="${esc(b.nombre||'')}" placeholder="Nombre del enlace" aria-label="Nombre del enlace"></div>
+      <div class="col-md-8"><input class="form-control form-control-sm" data-f="url" data-recarga value="${esc(b.url||'')}" placeholder="https://… (YouTube y Vimeo se ven aquí mismo)" aria-label="Dirección"></div></div>${enlaceHtml(b)}`;
+  }
+  return `<div class="ed-atom" contenteditable="false" data-id="${b.id}" ${idx}><div class="bl-ctrl" role="group" aria-label="Bloque">
+      <button type="button" data-a="up" title="Subir"><i class="bi bi-arrow-up"></i></button><button type="button" data-a="down" title="Bajar"><i class="bi bi-arrow-down"></i></button>
+      <button type="button" data-a="del" title="Quitar"><i class="bi bi-trash"></i></button></div>${cuerpo}</div>`;
+}
+function editorDesde(bloques){
+  atomos={};
+  const li=t=>lineas(t).map(x=>`<li>${inlineMd(x)||'<br>'}</li>`).join('');
+  return bloques.map(b=>{
+    b.id=b.id||'b'+uid(); const t=inlineMd(b.texto||'')||'<br>';
+    switch(b.tipo){
+      case 'titulo': return `<h2>${t}</h2>`;
+      case 'subtitulo': return `<h3>${t}</h3>`;
+      case 'destacado': return `<blockquote>${t}</blockquote>`;
+      case 'lista': return `<ul>${li(b.texto)||'<li><br></li>'}</ul>`;
+      case 'numerada': return `<ol>${li(b.texto)||'<li><br></li>'}</ol>`;
+      case 'separador': return '<hr>';
+      case 'archivo': case 'enlace': atomos[b.id]=b; return atomoHtml(b);
+      default: return `<p>${t}</p>`;
+    }
+  }).join('');
+}
+/* Texto de un nodo con **negrita** y *cursiva* */
+function domAMd(n){
+  let o='';
+  n.childNodes.forEach(c=>{
+    if(c.nodeType===3){ o+=c.nodeValue; return; }
+    if(c.nodeType!==1) return;
+    const t=c.tagName;
+    if(t==='BR') o+='\n';
+    else if(t==='B'||t==='STRONG'){ const i=domAMd(c); o+=i.trim()?`**${i}**`:i; }
+    else if(t==='I'||t==='EM'){ const i=domAMd(c); o+=i.trim()?`*${i}*`:i; }
+    else { if((t==='DIV'||t==='P') && o && !o.endsWith('\n')) o+='\n'; o+=domAMd(c); }
+  });
+  return o.replace(/ /g,' ');
+}
+function bloquesDesdeEditor(){
+  const out=[];
+  [...ED().children].forEach(el=>{
+    const t=tipoDe(el);
+    if(t==='atomo'){ const b=atomos[el.dataset.id]; if(b) out.push(b); return; }
+    if(t==='separador'){ out.push({id:'b'+uid(),tipo:'separador'}); return; }
+    if(t==='lista'||t==='numerada'){
+      const items=[...el.children].filter(c=>c.tagName==='LI').map(x=>domAMd(x).replace(/\n+$/,'').replace(/\n/g,' ')).filter(x=>x.trim());
+      if(items.length) out.push({id:'b'+uid(),tipo:t,texto:items.join('\n')}); return;
+    }
+    const texto=domAMd(el).replace(/\n+$/,'');
+    if(texto.trim()) out.push({id:'b'+uid(),tipo:t,texto:t==='titulo'||t==='subtitulo'?texto.replace(/\n+/g,' '):texto});
+  });
+  return out;
+}
+
+/* --- selección y cursor --- */
+function colocarCursor(el, alFinal){
+  if(!el) return;
+  const r=document.createRange(), sel=window.getSelection(); if(!sel) return;
+  if(alFinal){ const l=el.lastChild; if(l && l.nodeName==='BR') r.setStartBefore(l); else { r.selectNodeContents(el); r.collapse(false); } if(l && l.nodeName==='BR') r.collapse(true); }
+  else { r.selectNodeContents(el); r.collapse(true); }
+  sel.removeAllRanges(); sel.addRange(r);
+}
+/* Bloques de primer nivel que toca la selección */
+function bloquesSel(){
+  const sel=window.getSelection(), ed=ED(); if(!sel || !sel.rangeCount) return [];
+  const r=sel.getRangeAt(0); if(!ed.contains(r.startContainer) || !ed.contains(r.endContainer)) return [];
+  const top=(n,off)=>{ if(n===ed) return ed.children[Math.min(off,ed.children.length-1)]; while(n && n.parentNode!==ed) n=n.parentNode; return n; };
+  const a=top(r.startContainer,r.startOffset), z=top(r.endContainer,Math.max(0,r.endOffset-1)); if(!a||!z) return [];
+  const out=[]; for(let n=a;n;n=n.nextElementSibling){ out.push(n); if(n===z) break; }
+  return out.filter(n=>!esAtomo(n));
+}
+const mover = (a,b) => { while(a.firstChild) b.appendChild(a.firstChild); if(!b.firstChild) b.appendChild(document.createElement('br')); };
+/* Al mover el contenido a otro elemento el navegador pierde la selección: se guarda como (línea, carácter) y se restaura */
+function marcaSel(unidades,nodo,off){
+  const u=unidades.findIndex(x=>x.contains(nodo)); if(u<0) return null;
+  const r=document.createRange(); r.selectNodeContents(unidades[u]); r.setEnd(nodo,off); return {u,n:r.toString().length};
+}
+function puntoEn(el,n){
+  const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT); let acum=0, ult=null;
+  while(w.nextNode()){ const t=w.currentNode; ult=t; if(acum+t.length>=n) return [t,n-acum]; acum+=t.length; }
+  return ult ? [ult,ult.length] : [el,0];
+}
+/* Cambia el formato de lo seleccionado, en su lugar */
+function aTipo(tipo){
+  const sel=window.getSelection(); if(!sel || !sel.rangeCount) return;
+  const rango=sel.getRangeAt(0), bs=bloquesSel(); if(!bs.length) return;
+  const destino = tipo!=='texto' && bs.every(b=>tipoDe(b)===tipo) ? 'texto' : tipo;      // pulsarlo otra vez lo quita
+  const unidades=[];
+  bs.forEach(b=>{ if(b.tagName==='UL'||b.tagName==='OL') [...b.children].filter(c=>c.tagName==='LI').forEach(x=>unidades.push(x)); else unidades.push(b); });
+  const ini=marcaSel(unidades,rango.startContainer,rango.startOffset), fin=marcaSel(unidades,rango.endContainer,rango.endOffset);
+  const nuevos=[], destinos=[];
+  if(destino==='lista'||destino==='numerada'){
+    const l=document.createElement(destino==='lista'?'ul':'ol');
+    unidades.forEach(u=>{ const li=document.createElement('li'); mover(u,li); l.appendChild(li); destinos.push(li); }); nuevos.push(l);
+  } else unidades.forEach(u=>{ const e=document.createElement(BLOQUE_TAG[destino]); mover(u,e); nuevos.push(e); destinos.push(e); });
+  bs[0].before(...nuevos); bs.forEach(b=>b.remove());
+  if(ini && fin){
+    const r=document.createRange(), [a,ao]=puntoEn(destinos[ini.u],ini.n), [z,zo]=puntoEn(destinos[fin.u],fin.n);
+    r.setStart(a,ao); r.setEnd(z,zo); sel.removeAllRanges(); sel.addRange(r);
+  } else colocarCursor(destinos[0], true);
+  marcarVacio(); actualizarBarra();
+}
+function asegurarCola(){
+  const ed=ED(), u=ed.lastElementChild;
+  if(!u || esAtomo(u) || u.tagName==='HR') ed.appendChild(parrafoVacio());
+  [...ed.querySelectorAll('.ed-atom')].forEach(a=>{ if(!a.nextElementSibling || esAtomo(a.nextElementSibling)) a.after(parrafoVacio()); });
+}
+function normalizar(){
+  const ed=ED();
+  [...ed.childNodes].forEach(n=>{                          // texto suelto en la raíz -> párrafo
+    if((n.nodeType===3 && n.nodeValue.trim()) || (n.nodeType===1 && /^(B|I|STRONG|EM|SPAN|A|BR)$/.test(n.tagName))){
+      const p=document.createElement('p'); n.before(p); p.appendChild(n);
+    } else if(n.nodeType===3) n.remove();
+  });
+  asegurarCola();
+}
+function marcarVacio(){ const ed=ED(); ed.dataset.vacio = ed.children.length===1 && esVacio(ed.firstElementChild) && ed.firstElementChild.tagName==='P' ? '1' : '0'; }
+function actualizarBarra(){
+  const bs=bloquesSel(), t = bs.length && bs.every(b=>tipoDe(b)===tipoDe(bs[0])) ? tipoDe(bs[0]) : null;
+  document.querySelectorAll('#modBarra [data-conv]').forEach(b=>b.classList.toggle('activo',b.dataset.conv===t));
+  ['bold','italic'].forEach(c=>{ let on=false; try{ on=bs.length>0 && document.queryCommandState(c); }catch(e){} const b=document.querySelector(`#modBarra [data-cmd="${c}"]`); if(b) b.classList.toggle('activo',on); });
+}
+document.addEventListener('selectionchange',()=>{ if(document.getElementById('mModulo').classList.contains('show')) actualizarBarra(); });
+
+/* --- abrir / cerrar --- */
 function abrirModulo(id, ctx){
   const m=id?modulo(id):null; modCtx=ctx||{};
   modTemp = m ? structuredClone(m) : {id:'m'+uid(),titulo:'',horas:0,areaId:'',temas:[],items:[]};
-  modTemp.bloques = structuredClone(bloquesDe(m||modTemp));
-  if(!modTemp.bloques.length) modTemp.bloques.push({id:'b'+uid(),tipo:'texto',texto:''});
-  modNuevos=[]; modGuardado=false; modEncadena=false; bloqueSel=null;
+  const bl=structuredClone(bloquesDe(m||modTemp));
+  modNuevos=[]; modGuardado=false; modEncadena=false;
   $('#formModulo').reset(); $('#modId').value=modTemp.id;
   $('#tModulo').textContent = m ? 'Editar módulo' : 'Nuevo módulo';
   $('#modTitulo').value=modTemp.titulo; $('#modHoras').value=modTemp.horas||'';
@@ -230,172 +407,109 @@ function abrirModulo(id, ctx){
   if(c){ const N=+c.grupo.numClases||1, ult=Math.max(0,...(c.modulos||[]).map(r=>r.hasta)), d=Math.min(N,ult+1);
     const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
     $('#modDesde').innerHTML=op(d); $('#modHasta').innerHTML=op(d); }
-  pintarDoc();
+  ED().innerHTML=editorDesde(bl.length?bl:[{tipo:'texto',texto:''}]);
+  normalizar(); marcarVacio(); ajustarAlturas();
   encadenar(modCtx.volver,()=>modal('mModulo').show());
 }
-const autoAlto = ta => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
-function editorBloque(b,k){
-  const ta=(cls,rows=1)=>`<textarea class="bl-in ${cls}" rows="${rows}" data-f="texto" placeholder="${PLACEHOLDER[b.tipo]||''}" aria-label="${BLOQUES_N[b.tipo]}">${esc(b.texto||'')}</textarea>`;
-  switch(b.tipo){
-    case 'titulo': return ta('bl-t1');
-    case 'subtitulo': return ta('bl-t2');
-    case 'texto': return ta('');
-    case 'lista': case 'numerada': {
-      const items=String(b.texto||'').split('\n');
-      return `<div class="bl-lista">${items.map((t,j)=>`<div class="li-row"><span class="li-mark">${b.tipo==='lista'?'•':(j+1)+'.'}</span><textarea class="bl-in" rows="1" data-li="${j}" placeholder="${j===0?'Elemento de la lista':''}" aria-label="Elemento ${j+1}">${esc(t)}</textarea></div>`).join('')}</div>`; }
-    case 'destacado': return `<div class="bl-callout">${ta('')}</div>`;
-    case 'separador': return '<hr>';
-    case 'archivo': if(esImagen(b)){
-      const lay=b.diseno||'izq', btn=(v,ic,t)=>`<button type="button" class="btn btn-sm ${lay===v?'btn-marca':'btn-outline-secondary'}" data-lay="${v}" title="${t}"><i class="bi ${ic}"></i></button>`;
-      const campos=`<input class="form-control form-control-sm mb-1" data-f="titulo" value="${esc(b.titulo||'')}" placeholder="Título junto a la imagen (opcional)" aria-label="Título junto a la imagen"><textarea class="form-control form-control-sm bl-lado" rows="3" data-f="texto" placeholder="Texto junto a la imagen… (**negrita**, *cursiva*)" aria-label="Texto junto a la imagen">${esc(b.texto||'')}</textarea>`;
-      const img=`<figure class="doc-fig"><img src="${urlArchivo(b.key)}" alt="${esc(b.nombre)}" data-prev></figure>`;
-      return `<div class="d-flex flex-wrap align-items-center gap-1 mb-1 small text-muted"><span>Diseño:</span><div class="btn-group btn-group-sm">${btn('izq','bi-layout-sidebar','Imagen a la izquierda, texto a la derecha')}${btn('der','bi-layout-sidebar-reverse','Texto a la izquierda, imagen a la derecha')}${btn('completo','bi-image','Imagen sola, de lado a lado')}</div>
-        <input class="form-control form-control-sm ms-auto" style="max-width:220px" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre del archivo" aria-label="Nombre del archivo"></div>
-        <div class="doc" data-b="${k}">${lay==='completo'?`<div class="doc-fig">${img}</div><div class="mt-2">${campos}</div>`:`<div class="doc-split ${lay==='der'?'der':''}">${img}<div class="doc-split-txt">${campos}</div></div>`}</div>`;
-    }
-    return `<div class="doc" data-b="${k}">${archivoHtml(b)}</div><input class="form-control form-control-sm mt-1" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre o pie del archivo" aria-label="Nombre del archivo">`;
-    case 'enlace': return `<div class="row g-1"><div class="col-md-4"><input class="form-control form-control-sm" data-f="nombre" value="${esc(b.nombre||'')}" placeholder="Nombre del enlace" aria-label="Nombre del enlace"></div>
-      <div class="col-md-8"><input class="form-control form-control-sm" data-f="url" data-recarga value="${esc(b.url||'')}" placeholder="https://… (YouTube y Vimeo se ven aquí mismo)" aria-label="Dirección"></div></div><div class="doc" data-b="${k}">${enlaceHtml(b)}</div>`;
-  }
-  return '';
-}
-const BLOQUES_N = {titulo:'Título',subtitulo:'Subtítulo',texto:'Texto',lista:'Lista',numerada:'Lista numerada',destacado:'Nota destacada',separador:'Separador',archivo:'Archivo',enlace:'Enlace'};
-function pintarDoc(foco){
-  const fondo=$('#modDocFondo'), y=fondo.scrollTop;
-  $('#modDoc').innerHTML=modTemp.bloques.map((b,k)=>`<div class="bl" data-k="${k}"><div class="bl-ctrl" role="group" aria-label="Bloque ${k+1}">
-      <button type="button" data-a="up" title="Subir" ${k===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
-      <button type="button" data-a="down" title="Bajar" ${k===modTemp.bloques.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
-      <button type="button" data-a="dup" title="Duplicar"><i class="bi bi-copy"></i></button>
-      <button type="button" data-a="del" title="Quitar"><i class="bi bi-trash"></i></button></div>${editorBloque(b,k)}</div>`).join('');
-  ajustarAlturas();
-  fondo.scrollTop=y;
-  if(foco!==undefined){
-    const f=typeof foco==='number' ? {k:foco} : foco, bl=document.querySelector(`#modDoc [data-k="${f.k}"]`);
-    const t=bl && (f.j!==undefined ? bl.querySelector(`[data-li="${f.j}"]`) : bl.querySelector('textarea, input'));
-    if(t){ t.focus(); const p=f.pos===undefined ? t.value.length : f.pos; if(t.setSelectionRange) t.setSelectionRange(p,p); }
-    bloqueSel=f.k;
-  }
-  actualizarBarra();
-}
-/* Mide cada texto para que crezca con lo que se escribe (si el modal aún no se ve, no mide y queda la altura mínima) */
-function ajustarAlturas(){ document.querySelectorAll('#modDoc textarea').forEach(ta=>{ if(ta.scrollHeight) autoAlto(ta); }); }
-document.getElementById('mModulo').addEventListener('shown.bs.modal',ajustarAlturas);
-const TEXTUALES = ['titulo','subtitulo','texto','lista','numerada','destacado'];
-function actualizarBarra(){
-  const t=bloqueSel!==null ? modTemp.bloques[bloqueSel]?.tipo : null;
-  document.querySelectorAll('#modBarra [data-conv]').forEach(b=>b.classList.toggle('activo',b.dataset.conv===t));
-}
-/* Cambia el tipo del bloque donde estás (como el formato de párrafo de Notas) */
-function convertirBloque(k,tipo,texto){
-  const b=modTemp.bloques[k]; if(!b || !TEXTUALES.includes(b.tipo)) return false;
-  let t = texto!==undefined ? texto : (b.texto||'');
-  if(tipo==='titulo'||tipo==='subtitulo') t=t.replace(/\n+/g,' ');
-  b.tipo=tipo; b.texto=t; pintarDoc({k,pos:t.length}); return true;
-}
-function insertarBloque(tipo, extra){
-  const pos = bloqueSel===null ? modTemp.bloques.length : bloqueSel+1;
-  // si el bloque donde estás está vacío, se reemplaza en vez de dejar un hueco
-  if(bloqueSel===null && modTemp.bloques.length===1) bloqueSel=0;     // documento recién creado: usa el párrafo vacío
-  const act=bloqueSel!==null?modTemp.bloques[bloqueSel]:null;
-  const nuevo={id:'b'+uid(),tipo,...(NUEVO_BLOQUE[tipo]||{}),...(extra||{})};
-  if(act && act.tipo==='texto' && !(act.texto||'').trim() && tipo!=='texto'){ modTemp.bloques.splice(bloqueSel,1,nuevo); }
-  else { modTemp.bloques.splice(pos,0,nuevo); bloqueSel=pos; }
-  pintarDoc(bloqueSel);
-}
+
+/* --- barra de herramientas --- */
+$('#modBarra').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });   // no pierde el cursor ni la selección
+function enEditor(){ const s=window.getSelection(); return s && s.rangeCount && ED().contains(s.getRangeAt(0).startContainer); }
 $('#modBarra').addEventListener('click',e=>{
-  const i=e.target.closest('[data-ins]'); if(i) return insertarBloque(i.dataset.ins);
-  const cv=e.target.closest('[data-conv]');
-  if(cv){
-    const tipo=cv.dataset.conv, act=bloqueSel!==null ? modTemp.bloques[bloqueSel] : null;
-    if(act && TEXTUALES.includes(act.tipo)) convertirBloque(bloqueSel, act.tipo===tipo && tipo!=='texto' ? 'texto' : tipo);   // pulsarlo otra vez lo quita
-    else insertarBloque(tipo);
-    return;
+  const ed=ED(); if(!enEditor()){ ed.focus(); colocarCursor(ed.lastElementChild,true); }
+  const cv=e.target.closest('[data-conv]'); if(cv){ aTipo(cv.dataset.conv); return; }
+  const cmd=e.target.closest('[data-cmd]'); if(cmd){ try{ document.execCommand(cmd.dataset.cmd); }catch(x){} actualizarBarra(); return; }
+  const mv=e.target.closest('[data-mover]'); if(mv){ moverSel(+mv.dataset.mover); return; }
+  const ins=e.target.closest('[data-ins]');
+  if(ins){
+    if(ins.dataset.ins==='separador'){ const cur=bloquesSel().at(-1), hr=document.createElement('hr'); (cur&&esVacio(cur)?cur:cur||ed.lastElementChild).after(hr); asegurarCola(); colocarCursor(hr.nextElementSibling,false); }
+    else insertarAtomo({id:'b'+uid(),tipo:'enlace',nombre:'',url:''},true);
   }
-  const f=e.target.closest('[data-fmt]'); if(!f) return;
-  const ta=document.activeElement; if(!ta || ta.tagName!=='TEXTAREA' || !ta.closest('#modDoc')) { toast('Haz clic dentro de un texto y selecciona lo que quieres resaltar'); return; }
-  const m=f.dataset.fmt, a=ta.selectionStart, z=ta.selectionEnd, sel=ta.value.slice(a,z)||'texto';
-  ta.value=ta.value.slice(0,a)+m+sel+m+ta.value.slice(z); ta.setSelectionRange(a+m.length,a+m.length+sel.length); ta.dispatchEvent(new Event('input',{bubbles:true})); ta.focus();
 });
-$('#modBarra').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });   // no pierde la selección ni el cursor
-$('#modDoc').addEventListener('focusin',e=>{ const bl=e.target.closest('.bl'); if(bl){ bloqueSel=+bl.dataset.k; actualizarBarra(); } });
+/* Sube o baja el bloque (o bloques) donde está el cursor */
+function moverSel(dir){
+  const sel=window.getSelection(), rango=sel.rangeCount?sel.getRangeAt(0).cloneRange():null, bs=bloquesSel(); if(!bs.length) return;
+  if(dir<0){ const p=bs[0].previousElementSibling; if(!p) return; bs.at(-1).after(p); }
+  else { const n=bs.at(-1).nextElementSibling; if(!n) return; bs[0].before(n); }
+  if(rango){ sel.removeAllRanges(); sel.addRange(rango); }
+  asegurarCola();
+}
+function insertarAtomo(b, enfocarCampo){
+  atomos[b.id]=b;
+  const tmp=document.createElement('div'); tmp.innerHTML=atomoHtml(b); const el=tmp.firstElementChild;
+  const cur=enEditor() ? bloquesSel().at(-1) : null;
+  if(cur && esVacio(cur)) cur.replaceWith(el); else if(cur) cur.after(el); else ED().append(el);
+  asegurarCola(); marcarVacio(); ajustarAlturas();
+  if(enfocarCampo){ const i=el.querySelector('input'); if(i) i.focus(); }
+  else colocarCursor(el.nextElementSibling,false);
+}
+function recargarAtomo(el){
+  const b=atomos[el.dataset.id], tmp=document.createElement('div'); tmp.innerHTML=atomoHtml(b); el.replaceWith(tmp.firstElementChild); ajustarAlturas();
+}
+
+/* --- escritura --- */
 const ATAJOS = {'# ':'titulo','## ':'subtitulo','- ':'lista','* ':'lista','1. ':'numerada','> ':'destacado'};
-$('#modDoc').addEventListener('input',e=>{
-  const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, b=modTemp.bloques[k];
-  if(e.target.hasAttribute('data-li')){
-    const L=String(b.texto||'').split('\n'); L[+e.target.dataset.li]=e.target.value.replace(/\n/g,' '); b.texto=L.join('\n'); autoAlto(e.target); return;
+ED().addEventListener('input',e=>{
+  const at=e.target.closest('.ed-atom');
+  if(at){ const b=atomos[at.dataset.id], f=e.target.dataset.f; if(b && f){ b[f]=e.target.value; if(e.target.tagName==='TEXTAREA') autoAlto(e.target); } return; }
+  const bs=bloquesSel();
+  if(bs.length===1 && tipoDe(bs[0])==='texto'){
+    const t=bs[0].textContent.replace(/ /g,' ');
+    if(ATAJOS[t]){ bs[0].innerHTML='<br>'; colocarCursor(bs[0],false); aTipo(ATAJOS[t]); }     // atajos estilo Markdown
   }
-  const f=e.target.dataset.f; if(!f) return;
-  b[f]=e.target.value; if(e.target.tagName==='TEXTAREA') autoAlto(e.target);
-  if(b.tipo==='texto' && f==='texto' && ATAJOS[e.target.value]) convertirBloque(k,ATAJOS[e.target.value],'');   // atajos estilo Markdown
+  normalizar(); marcarVacio();
 });
-$('#modDoc').addEventListener('change',e=>{ if(e.target.hasAttribute('data-recarga')) pintarDoc(); });
-$('#modDoc').addEventListener('keydown',e=>{
-  const ta=e.target; if(ta.tagName!=='TEXTAREA' || e.isComposing) return;
-  const bl=ta.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, b=B[k];
-  const inicio = ta.selectionStart===0 && ta.selectionEnd===0;
-  // --- elementos de lista
-  if(ta.hasAttribute('data-li')){
-    const j=+ta.dataset.li, L=String(b.texto||'').split('\n');
-    if(e.key==='Enter' && !e.shiftKey){
-      e.preventDefault();
-      if(L[j]===''){                                   // Enter en un elemento vacío: sale de la lista
-        if(L.length===1){ convertirBloque(k,'texto',''); return; }
-        L.splice(j,1); b.texto=L.join('\n'); B.splice(k+1,0,{id:'b'+uid(),tipo:'texto',texto:''}); pintarDoc({k:k+1}); return;
-      }
-      const p=ta.selectionStart; L.splice(j,1,L[j].slice(0,p),L[j].slice(ta.selectionEnd)); b.texto=L.join('\n'); pintarDoc({k,j:j+1,pos:0});
-    } else if(e.key==='Backspace' && inicio){
-      e.preventDefault();
-      if(j>0){ const p=L[j-1].length; L.splice(j-1,2,L[j-1]+L[j]); b.texto=L.join('\n'); pintarDoc({k,j:j-1,pos:p}); }
-      else if(L.length===1) convertirBloque(k,'texto');
-      else { const primero=L.shift(); b.texto=L.join('\n'); B.splice(k,0,{id:'b'+uid(),tipo:'texto',texto:primero}); pintarDoc({k,pos:0}); }   // el primer elemento pasa a ser un párrafo
-    } else if(e.key==='ArrowUp' && j>0 && ta.selectionStart===0){ e.preventDefault(); bl.querySelector(`[data-li="${j-1}"]`).focus(); }
-    else if(e.key==='ArrowDown' && ta.selectionStart===ta.value.length){ const sig=bl.querySelector(`[data-li="${j+1}"]`); if(sig){ e.preventDefault(); sig.focus(); } }
-    return;
-  }
-  if(ta.dataset.f!=='texto' || !TEXTUALES.includes(b.tipo)) return;
-  if(e.key==='Enter' && !e.shiftKey){                  // Enter = nuevo párrafo (Shift+Enter = salto de línea)
-    e.preventDefault();
-    const p=ta.selectionStart, antes=ta.value.slice(0,p), despues=ta.value.slice(ta.selectionEnd);
-    b.texto=antes; B.splice(k+1,0,{id:'b'+uid(),tipo:'texto',texto:despues}); pintarDoc({k:k+1,pos:0});
-  } else if(e.key==='Backspace' && inicio){
-    if(b.tipo!=='texto'){ e.preventDefault(); convertirBloque(k,'texto'); return; }       // quita el formato
-    if(k===0) return;
-    const prev=B[k-1];
-    if(TEXTUALES.includes(prev.tipo) && prev.tipo!=='lista' && prev.tipo!=='numerada'){      // une con el párrafo de arriba
-      e.preventDefault(); const p=(prev.texto||'').length; prev.texto=(prev.texto||'')+(b.texto||''); B.splice(k,1); pintarDoc({k:k-1,pos:p});
-    } else if(!(b.texto||'')){ e.preventDefault(); B.splice(k,1); pintarDoc(prev.tipo==='lista'||prev.tipo==='numerada'?undefined:{k:k-1}); }
+ED().addEventListener('change',e=>{ const at=e.target.closest('.ed-atom'); if(at && e.target.hasAttribute('data-recarga')) recargarAtomo(at); });
+ED().addEventListener('keydown',e=>{
+  if(e.target.closest('.ed-atom') || e.isComposing) return;
+  const sel=window.getSelection(); if(!sel.rangeCount) return;
+  const bs=bloquesSel(); if(bs.length!==1) return; const b=bs[0], t=tipoDe(b), r=sel.getRangeAt(0);
+  const alInicio = r.collapsed && (() => { const pre=document.createRange(); pre.selectNodeContents(b); pre.setEnd(r.startContainer,r.startOffset); return pre.toString()===''; })();
+  if(e.key==='Backspace' && alInicio && (t==='titulo'||t==='subtitulo'||t==='destacado')){ e.preventDefault(); aTipo('texto'); return; }   // quita el formato
+  if(e.key==='Enter' && !e.shiftKey && (t==='titulo'||t==='subtitulo'||t==='destacado')){            // Enter en un título/nota: siguiente párrafo normal
+    e.preventDefault(); r.deleteContents();
+    const resto=document.createRange(); resto.setStart(r.endContainer,r.endOffset); if(b.lastChild) resto.setEndAfter(b.lastChild); else resto.setEnd(b,0);
+    const p=document.createElement('p'); p.appendChild(resto.extractContents());
+    if(!p.firstChild || (!p.textContent && !p.querySelector('br'))) p.innerHTML='<br>';
+    if(!b.firstChild || (!b.textContent && !b.querySelector('br'))) b.innerHTML='<br>';
+    b.after(p); colocarCursor(p,false); marcarVacio(); actualizarBarra();
   }
 });
-$('#modDoc').addEventListener('click',e=>{
-  const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, a=e.target.closest('[data-a]')?.dataset.a;
-  const lay=e.target.closest('[data-lay]'); if(lay){ B[k].diseno=lay.dataset.lay; pintarDoc(); return; }
-  if(!a){ docClick(e,B,'mModulo'); return; }
-  if(a==='up' && k>0) [B[k-1],B[k]]=[B[k],B[k-1]];
-  else if(a==='down' && k<B.length-1) [B[k+1],B[k]]=[B[k],B[k+1]];
-  else if(a==='dup') B.splice(k+1,0,{...structuredClone(B[k]),id:'b'+uid()});
-  else if(a==='del'){ B.splice(k,1); if(!B.length) B.push({id:'b'+uid(),tipo:'texto',texto:''}); }
-  else return;
-  bloqueSel=null; pintarDoc();
+/* Pegar: solo texto plano (sin estilos de otras páginas) o archivos/imágenes */
+ED().addEventListener('paste',e=>{
+  const files=[...(e.clipboardData?.files||[])];
+  if(files.length){ e.preventDefault(); agregarArchivos(files); return; }
+  if(e.target.closest('.ed-atom')) return;
+  const txt=e.clipboardData?.getData('text/plain'); if(txt===undefined || txt==='') return;
+  e.preventDefault();
+  if(document.execCommand && document.execCommand('insertText',false,txt)) return;
+  const r=window.getSelection().getRangeAt(0); r.deleteContents(); r.insertNode(document.createTextNode(txt)); r.collapse(false);
+});
+/* Clics en los átomos (ampliar, ver PDF, diseño, subir/bajar/quitar) */
+ED().addEventListener('click',e=>{
+  const at=e.target.closest('.ed-atom'); if(!at) return; const b=atomos[at.dataset.id];
+  const lay=e.target.closest('[data-lay]'); if(lay && b){ b.diseno=lay.dataset.lay; recargarAtomo(at); return; }
+  const a=e.target.closest('[data-a]')?.dataset.a;
+  if(a==='up'){ const p=at.previousElementSibling; if(p) at.after(p); asegurarCola(); return; }
+  if(a==='down'){ const n=at.nextElementSibling; if(n) at.before(n); asegurarCola(); return; }
+  if(a==='del'){ at.remove(); asegurarCola(); marcarVacio(); return; }
+  docClick(e,id=>atomos[id],'mModulo');
 });
 /* Archivos: botón, arrastrar y soltar, o pegar una imagen */
 async function agregarArchivos(files){
   files=[...files]; if(!files.length) return;
   $('#modEstado').textContent=`Subiendo ${files.length} ${files.length===1?'archivo':'archivos'}…`;
   for(const f of files){
-    try{ const it=await subirArchivo(f); modNuevos.push(it.key); insertarBloque('archivo',{nombre:it.nombre,key:it.key,mime:it.mime,size:it.size,...(esImagen(it)?{diseno:'izq'}:{})}); }
+    try{ const it=await subirArchivo(f); modNuevos.push(it.key); insertarAtomo({id:'b'+uid(),tipo:'archivo',nombre:it.nombre,key:it.key,mime:it.mime,size:it.size,...(esImagen(it)?{diseno:'izq'}:{})}); }
     catch(x){ toast(x.message); }
   }
   $('#modEstado').textContent='';
 }
-$('#modArchivos').addEventListener('change',e=>{ const f=e.target.files; agregarArchivos(f).then(()=>{ e.target.value=''; }); });
-const papel=$('#modDocFondo');
-['dragover','dragleave','drop'].forEach(ev=>papel.addEventListener(ev,e=>{ if(![...(e.dataTransfer?.types||[])].includes('Files')) return; e.preventDefault(); papel.style.outline=ev==='dragover'?'2px dashed var(--marca)':''; if(ev==='drop') agregarArchivos(e.dataTransfer.files); }));
-papel.addEventListener('paste',e=>{ const f=[...(e.clipboardData?.files||[])]; if(f.length){ e.preventDefault(); agregarArchivos(f); } });
-function enfocarFinal(){
-  const B=modTemp.bloques, u=B[B.length-1];
-  if(!(u && u.tipo==='texto' && !(u.texto||'').trim())) B.push({id:'b'+uid(),tipo:'texto',texto:''});
-  pintarDoc({k:B.length-1});
-}
+$('#modArchivos').addEventListener('change',e=>{ const f=[...e.target.files]; e.target.value=''; ED().focus(); agregarArchivos(f); });
+const fondoDoc=$('#modDocFondo');
+['dragover','dragleave','drop'].forEach(ev=>fondoDoc.addEventListener(ev,e=>{ if(![...(e.dataTransfer?.types||[])].includes('Files')) return; e.preventDefault(); fondoDoc.style.outline=ev==='dragover'?'2px dashed var(--marca)':''; if(ev==='drop') agregarArchivos(e.dataTransfer.files); }));
+/* Clic en el espacio en blanco: cursor al final */
+function enfocarFinal(){ asegurarCola(); const u=ED().lastElementChild; ED().focus(); colocarCursor(u,true); }
 $('#modPie').addEventListener('click',enfocarFinal);
 $('#modPapel').addEventListener('click',e=>{ if(e.target.id==='modPapel') enfocarFinal(); });
 $('#modDesde').addEventListener('change',()=>{ if(+$('#modHasta').value<+$('#modDesde').value) $('#modHasta').value=$('#modDesde').value; });
@@ -403,7 +517,7 @@ $('#modDesde').addEventListener('change',()=>{ if(+$('#modHasta').value<+$('#mod
 $('#formModulo').addEventListener('submit',ev=>{
   ev.preventDefault();
   const titulo=$('#modTitulo').value.trim(); if(!titulo){ $('#modTitulo').focus(); return; }
-  const bloques=modTemp.bloques.filter(b=>b.tipo==='separador'||b.tipo==='archivo' ? true : b.tipo==='enlace' ? (b.url||'').trim() : (b.texto||'').trim());
+  const bloques=bloquesDesdeEditor().filter(b=>b.tipo!=='enlace' || (b.url||'').trim());
   if(bloques.some(b=>b.tipo==='enlace' && !/^https?:\/\//i.test(b.url.trim()))){ toast('Los enlaces deben empezar por http:// o https://'); return; }
   bloques.forEach(b=>{ if(b.tipo==='enlace'){ b.url=b.url.trim(); if(!(b.nombre||'').trim()) b.nombre=b.url; } if(b.tipo==='archivo' && !(b.nombre||'').trim()) b.nombre='Archivo'; });
   const prev=modulo(modTemp.id), antes=(prev?.items||[]).map(x=>x.key);
@@ -757,12 +871,15 @@ document.getElementById('mExamen').addEventListener('hidden.bs.modal',()=>{ if(!
 /* =========================================================
    Módulos dentro del formulario del curso: tarjetas para agregar y organizar
    ========================================================= */
+let modBuscar='', modAreaF='';
 function pintarModsCurso(){
   const N=Math.max(1,+$('#curNumClases').value||1), usados=new Set(modsTemp.map(r=>r.ref));
   const op=sel=>Array.from({length:N},(_,k)=>`<option value="${k+1}" ${k+1===sel?'selected':''}>${k+1}</option>`).join('');
   const cubiertas=new Set(); modsTemp.forEach(r=>{ for(let n=r.desde;n<=Math.min(r.hasta,N);n++) cubiertas.add(n); });
   const sin=Array.from({length:N},(_,k)=>k+1).filter(n=>!cubiertas.has(n));
-  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id));
+  const q=modBuscar.toLowerCase();
+  const libres=(DB.modulos||[]).filter(m=>!usados.has(m.id) && (!modAreaF || m.areaId===modAreaF) && (!q || [m.titulo,m.descripcion,...(m.temas||[])].join(' ').toLowerCase().includes(q)));
+  const hayFiltro=!!(q||modAreaF), enc=document.activeElement?.id==='curModBuscar';
   $('#curModulos').innerHTML=`
     <div class="row g-2">${modsTemp.map((r,k)=>{ const m=modulo(r.ref); if(!m) return ''; const ar=area(m.areaId);
       return `<div class="col-md-6" data-k="${k}"><div class="mod-card h-100">
@@ -777,12 +894,17 @@ function pintarModsCurso(){
         <div class="d-flex align-items-center gap-1 small mt-2">Clases <select class="form-select form-select-sm w-auto" data-r="desde" aria-label="Desde la clase">${op(Math.min(r.desde,N))}</select> a <select class="form-select form-select-sm w-auto" data-r="hasta" aria-label="Hasta la clase">${op(Math.min(r.hasta,N))}</select></div>
       </div></div>`; }).join('') || '<div class="col-12"><div class="small text-muted border rounded p-3 text-center bg-white">Aún no hay módulos en este curso. Elige uno de la biblioteca o crea uno nuevo.</div></div>'}</div>
     ${modsTemp.length&&sin.length?`<div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle"></i> Clases sin módulo: ${sin.join(', ')}.</div>`:''}
-    <div class="d-flex justify-content-between align-items-center mt-3 mb-2"><b class="small">Biblioteca de módulos</b>
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3 mb-2"><b class="small me-auto">Biblioteca de módulos</b>
+      <input class="form-control form-control-sm" style="max-width:190px" id="curModBuscar" placeholder="Buscar módulo" value="${esc(modBuscar)}" aria-label="Buscar módulo">
+      <select class="form-select form-select-sm w-auto" id="curModArea" aria-label="Filtrar por área"><option value="">Todas las áreas</option>${(DB.areas||[]).map(a=>`<option value="${a.id}" ${a.id===modAreaF?'selected':''}>${esc(a.nombre)}</option>`).join('')}</select>
       <button type="button" class="btn btn-sm btn-outline-secondary" data-a="new"><i class="bi bi-plus-lg"></i> Crear módulo nuevo</button></div>
     <div class="row g-2">${libres.map(m=>`<div class="col-6 col-md-4"><button type="button" class="mod-lib" data-add="${m.id}">
         <div class="fw-semibold small text-truncate">${esc(m.titulo)}</div><div class="small text-muted text-truncate">${area(m.areaId)?esc(area(m.areaId).nombre)+' · ':''}${m.horas?m.horas+' h · ':''}${(m.items||[]).length} arch.</div>
-        <div class="small text-marca mt-1"><i class="bi bi-plus-circle"></i> Agregar</div></button></div>`).join('') || `<div class="col-12 small text-muted">${(DB.modulos||[]).length?'Todos los módulos de la biblioteca ya están en este curso.':'La biblioteca está vacía.'}</div>`}</div>`;
+        <div class="small text-marca mt-1"><i class="bi bi-plus-circle"></i> Agregar</div></button></div>`).join('') || `<div class="col-12 small text-muted">${hayFiltro?'Ningún módulo coincide con el filtro.':(DB.modulos||[]).length?'Todos los módulos de la biblioteca ya están en este curso.':'La biblioteca está vacía.'}</div>`}</div>`;
+  if(enc){ const i=$('#curModBuscar'); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
 }
+$('#curModulos').addEventListener('input',e=>{ if(e.target.id==='curModBuscar'){ modBuscar=e.target.value; pintarModsCurso(); } });
+$('#curModulos').addEventListener('change',e=>{ if(e.target.id==='curModArea'){ modAreaF=e.target.value; pintarModsCurso(); } });
 $('#curModulos').addEventListener('click',e=>{
   const add=e.target.closest('[data-add]');
   if(add){ const N=Math.max(1,+$('#curNumClases').value||1), d=Math.min(N,Math.max(0,...modsTemp.map(r=>r.hasta))+1); modsTemp.push({ref:add.dataset.add,desde:d,hasta:d}); pintarModsCurso(); return; }

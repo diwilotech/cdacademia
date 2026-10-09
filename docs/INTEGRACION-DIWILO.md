@@ -45,6 +45,10 @@ invitaciones `#invite=` (crear/restablecer), bloqueo 5/15, solo lectura con 402 
 - **Códigos de descuento por curso** (`curso.descuentos`): % o valor, vencimiento y límite de usos; se aplican al inscribir.
 - Migración automática al abrir (`migrarEsquema`): `plan` → módulos de la biblioteca; docentes escritos a mano → profesionales; `dias/horaIni/horaFin` → franjas.
 
+- **Calendario único** (`admin-calendario.js`): clases y reposiciones se ven siempre igual: columnas lunes–domingo y filas por momento del día
+  (mañana, media mañana, tarde, muy tarde, noche); cada tarjeta lleva hora, título de la clase, curso, profesor, módulos y estudiantes.
+  Se usa en Reposiciones, en Cursos (vista Calendario) y en cada curso (pestaña Clases). Así seguirán todos los calendarios nuevos.
+
 ## 5. Datos técnicos
 - Etapa 1: todo el estado del negocio es un JSON en `app_state` (con versión, tope ~2 MB).
 - Etapa 2 (pendiente): tablas normalizadas con `business_id`.

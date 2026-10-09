@@ -108,9 +108,14 @@
       <section data-vista="cursos">
         <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
           <h1 class="h2 mb-0">Cursos</h1>
-          <button class="btn btn-marca" onclick="abrirCurso()"><i class="bi bi-plus-lg"></i> Nuevo curso</button>
+          <div class="d-flex gap-2">
+            <div class="btn-group" role="group" aria-label="Vista de cursos">
+              <button type="button" class="btn btn-outline-secondary active" id="vcTarjetas" onclick="setVistaCursos('tarjetas')"><i class="bi bi-grid"></i> Tarjetas</button>
+              <button type="button" class="btn btn-outline-secondary" id="vcCal" onclick="setVistaCursos('cal')"><i class="bi bi-calendar-week"></i> Calendario</button></div>
+            <button class="btn btn-marca" onclick="abrirCurso()"><i class="bi bi-plus-lg"></i> Nuevo curso</button></div>
         </div>
         <div class="row g-3" id="gridCursos"></div>
+        <div id="calCursos" data-cal="calCursos" hidden></div>
       </section>
 
       <!-- ===== DETALLE CURSO / PLAN DE ESTUDIO ===== -->
@@ -206,19 +211,8 @@
         </div>
         <div id="avisoTemas"></div>
         <div class="row g-3 mb-3" id="statsRepo"></div>
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-          <div class="d-flex align-items-center gap-2">
-            <h2 class="h5 mb-0">Disponibilidad</h2>
-            <div class="btn-group btn-group-sm ms-2">
-              <button class="btn btn-outline-secondary" onclick="moverSemana(-1)" title="Semana anterior"><i class="bi bi-chevron-left"></i></button>
-              <button class="btn btn-outline-secondary" onclick="moverSemana(0)">Hoy</button>
-              <button class="btn btn-outline-secondary" onclick="moverSemana(1)" title="Semana siguiente"><i class="bi bi-chevron-right"></i></button>
-            </div>
-            <span class="small fw-semibold tabular" id="semanaLbl"></span>
-          </div>
-          <div class="leyenda"><span><span class="ev ev-clase d-inline-block p-0" style="width:14px;height:14px"></span> Clase del curso</span><span><span class="ev ev-esp d-inline-block p-0" style="width:14px;height:14px"></span> Espacio de reposición</span><span>Toca <b class="text-marca">+</b> en un día para abrir un espacio</span></div>
-        </div>
-        <div class="semana mb-4" id="semanaRepo"></div>
+        <h2 class="h5 mb-2">Calendario</h2>
+        <div class="mb-4" id="calRepo" data-cal="calRepo"></div>
         <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
           <h2 class="h5 mb-0">Clases por reponer</h2>
           <div class="d-flex flex-wrap gap-2" id="filtrosRepo">
@@ -756,6 +750,7 @@
 <script src="/admin-modulos.js"></script>
 <script src="/admin-profesionales.js"></script>
 <script src="/admin-semana.js"></script>
+<script src="/admin-calendario.js"></script>
 <script src="/admin-boot.js"></script>
 </body>
 </html>

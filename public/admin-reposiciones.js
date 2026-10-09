@@ -28,11 +28,10 @@ const reposDeEspacio = id => listaRepos().filter(x=>x.r.espacioId===id);
 const lunesDe = iso => { const d=new Date(iso+'T12:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return isoLocal(d); };
 const isoLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const sumarDias = (iso,n) => { const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return isoLocal(d); };
-let semIni=null, filtroRepo='pendiente';
-function moverSemana(d){ semIni = d===0 ? lunesDe(hoyISO()) : sumarDias(semIni,7*d); pintarReposiciones(); }
+let filtroRepo='pendiente';
 
 function pintarReposiciones(){
-  DB.espacios=DB.espacios||[]; if(!semIni) semIni=lunesDe(hoyISO());
+  DB.espacios=DB.espacios||[];
   const L=listaRepos(), hoy=hoyISO(), cf=DB.config;
   const porAgendar=L.filter(x=>x.estado==='pendiente'), agendadas=L.filter(x=>x.estado==='agendada'), porCobrar=L.filter(x=>!x.pagada);
   $('#badgeRepo').hidden=!porAgendar.length; $('#badgeRepo').textContent=porAgendar.length;
@@ -43,7 +42,7 @@ function pintarReposiciones(){
     <i class="bi bi-exclamation-circle text-marca"></i> Para reponer hay que saber el tema de cada clase. Faltan temas en:
     ${sinTema.map(x=>`<a href="#" class="text-marca fw-semibold" onclick="event.preventDefault();verCurso('${x.c.id}','clases')">${esc(x.c.nombre)} (${x.n})</a>`).join(' · ')}</div>` : '';
 
-  const finSem=sumarDias(semIni,6), espSem=DB.espacios.filter(x=>x.fecha>=semIni && x.fecha<=finSem);
+  const semIni=CALS.calRepo.semana, finSem=sumarDias(semIni,6), espSem=DB.espacios.filter(x=>x.fecha>=semIni && x.fecha<=finSem);
   const libres=espSem.reduce((a,x)=>a+Math.max(0,x.cupos-reposDeEspacio(x.id).length),0);
   $('#statsRepo').innerHTML=[
     ['bi-hourglass-split','Por agendar',porAgendar.length,porAgendar.length?'text-danger':''],
@@ -52,29 +51,6 @@ function pintarReposiciones(){
     ['bi-door-open','Cupos libres esta semana',`${libres}<span class="small text-muted" style="font-family:var(--font-body);font-size:.8rem"> en ${espSem.length} ${espSem.length===1?'espacio':'espacios'}</span>`,'']
   ].map(([ic,e,v,cl])=>`<div class="col-6 col-lg-3"><div class="card stat"><div class="card-body">
     <div class="d-flex justify-content-between"><span class="etq">${e}</span><i class="bi ${ic} text-marca"></i></div><div class="valor tabular mt-2 ${cl}">${v}</div></div></div></div>`).join('');
-
-  // calendario semanal
-  const d0=new Date(semIni+'T12:00'), d6=new Date(finSem+'T12:00');
-  $('#semanaLbl').textContent = d0.getMonth()===d6.getMonth()
-    ? `${d0.getDate()} – ${d6.getDate()} de ${d6.toLocaleDateString('es-CO',{month:'long'})} ${d6.getFullYear()}`
-    : `${fechaMini(semIni)} – ${fechaMini(finSem)} ${d6.getFullYear()}`;
-  const clasesDia = iso => DB.cursos.flatMap(c=>sesionesCurso(c).flatMap((x,k)=>x.fecha===iso?[{c,n:k+1,x}]:[]));
-  $('#semanaRepo').innerHTML=Array.from({length:7},(_,k)=>{
-    const iso=sumarDias(semIni,k), dia=new Date(iso+'T12:00');
-    const items=[
-      ...clasesDia(iso).map(({c,n,x})=>({h:x.ini, html:`<div class="ev ev-clase"><div class="h">${hora12(x.ini)}</div>
-        <div class="t">${n}. ${esc(temaClase(c,n))}</div><div>${esc(c.nombre)}</div></div>`})),
-      ...DB.espacios.filter(x=>x.fecha===iso).map(x=>{ const ins=reposDeEspacio(x.id), lleno=ins.length>=x.cupos, c=curso(x.cursoId);
-        return {h:x.horaIni, html:`<button type="button" class="ev ev-esp ${lleno?'lleno':''} ${iso<hoy?'pasado':''}" onclick="abrirEspacio('${x.id}')">
-          <div class="h"><i class="bi bi-arrow-repeat"></i> ${hora12(x.horaIni)}</div>
-          <div class="t">${x.clase?`${x.clase}. ${esc(temaClase(c,x.clase))}`:'Reposición libre'}</div>
-          <div>${esc(docenteEsp(x))}${c?` · ${esc(c.nombre)}`:''}${area(x.areaId)?` · <b>${esc(area(x.areaId).nombre)}</b>`:''}</div>
-          <div class="cupos">${Array.from({length:x.cupos},(_,j)=>`<i class="${j<ins.length?'o':''}"></i>`).join('')}</div></button>`}; })
-    ].sort((a,b)=>a.h.localeCompare(b.h));
-    return `<div class="dia ${iso===hoy?'hoy':''}"><div class="dia-cab"><span>${DIAS[dia.getDay()]}<b>${dia.getDate()}</b></span>
-      <button type="button" class="mas" title="Abrir espacio este día" onclick="abrirEspacio(null,'${iso}')"><i class="bi bi-plus-circle"></i></button></div>
-      <div class="dia-cuerpo">${items.map(x=>x.html).join('')||'<div class="dia-vacio">Libre</div>'}</div></div>`;
-  }).join('');
 
   // lista
   document.querySelectorAll('#filtrosRepo [data-f]').forEach(b=>b.classList.toggle('active',b.dataset.f===filtroRepo));
@@ -306,7 +282,7 @@ $('#formEsp').addEventListener('submit',e=>{ e.preventDefault();
     for(let k=0;k<veces;k++) nuevos.push({id:'s'+uid(),...datos,fecha:sumarDias(datos.fecha,7*k)});
     DB.espacios.push(...nuevos);
     if(espAsignar){ const r=recRepo(insc(espAsignar.inscId),espAsignar.n); r.espacioId=nuevos[0].id; delete r.estado; }
-    semIni=lunesDe(datos.fecha);
+    CALS.calRepo.semana=lunesDe(datos.fecha);
     toast(veces>1?`${veces} espacios creados`:espAsignar?'Espacio creado y reposición agendada':'Espacio creado');
   }
   espAsignar=null; guardar(); modal('mEsp').hide(); render(); });

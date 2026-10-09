@@ -630,6 +630,7 @@ function render(){
   pintarReposiciones();
   pintarModulos();
   pintarProfesionales();
+  pintarCalendarios();
 
   // pagos
   $('#tablaPagos').innerHTML=[...DB.pagos].sort((a,b)=>b.num-a.num).map(p=>{const i=insc(p.inscId);

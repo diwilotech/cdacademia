@@ -35,7 +35,14 @@ function pintarCurso(){
 function tabClases(c,inf){
   const N=+c.grupo.numClases||0, hoy=hoyISO(), sinTema=Array.from({length:N},(_,k)=>k+1).filter(n=>!(c.clases||[]).find(x=>x.n===n&&x.tema)).length;
   const evPorClase={}; (c.evaluaciones||[]).forEach(e=>{ if(e.clase) (evPorClase[e.clase]=evPorClase[e.clase]||[]).push(e); });
-  $('#cuerpoTab').innerHTML=`
+  const selector=`<div class="btn-group btn-group-sm mb-3" role="group" aria-label="Vista de las clases">
+    <button type="button" class="btn btn-outline-secondary ${vistaClases==='lista'?'active':''}" onclick="vistaClases='lista';pintarCurso()"><i class="bi bi-list-ol"></i> Lista</button>
+    <button type="button" class="btn btn-outline-secondary ${vistaClases==='cal'?'active':''}" onclick="vistaClases='cal';pintarCurso()"><i class="bi bi-calendar-week"></i> Calendario</button></div>`;
+  if(vistaClases==='cal'){
+    const cal=CALS.calCursoUno; if(cal.cursoId!==c.id){ cal.cursoId=c.id; cal.semana=semanaInicialCurso(c); }
+    $('#cuerpoTab').innerHTML=selector+'<div id="calCursoUno" data-cal="calCursoUno"></div>'; pintarCal('calCursoUno'); return;
+  }
+  $('#cuerpoTab').innerHTML=selector+`
     ${sinTema && (c.modulos||[]).length?`<div class="alert bg-marca-suave border-0 d-flex flex-wrap align-items-center gap-2 py-2 small">
       <i class="bi bi-magic text-marca"></i> ${sinTema} ${sinTema===1?'clase no tiene':'clases no tienen'} tema.
       <button class="btn btn-sm btn-marca ms-auto" onclick="accionRepartir()"><i class="bi bi-stars"></i> Poner el tema de los módulos en las clases vacías</button></div>`:''}

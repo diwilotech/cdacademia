@@ -276,8 +276,8 @@ section[data-vista].activa{display:block}
 
 /* ---------- Calendario semanal por momentos del día ---------- */
 .cal-barra{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.6rem}
-.cal{border:1px solid var(--borde);border-radius:.8rem;background:#fff;max-height:78vh;overflow-y:auto;overflow-x:hidden}
-.cal-grid{display:grid;grid-template-columns:96px repeat(7,minmax(0,1fr))}
+.cal{border:1px solid var(--borde);border-radius:.8rem;background:#fff;overflow-x:auto}
+.cal-grid{display:grid;grid-template-columns:96px repeat(7,minmax(170px,1fr));min-width:1290px}
 .cal-cab{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid var(--borde);border-left:1px solid var(--borde);padding:.45rem .5rem;text-align:center;font-size:.8rem;color:#6b5d66;display:flex;justify-content:center;align-items:center;gap:.3rem}
 .cal-cab b{font:400 1.2rem var(--font-display);color:var(--tinta)}
 .cal-cab.hoy{background:var(--marca-suave)} .cal-cab.hoy b{color:var(--marca)}
@@ -302,13 +302,8 @@ section[data-vista].activa{display:block}
 .cal-e{margin-top:.25rem;color:#4b5563}
 .cal-cupos{margin-left:.2rem;font-weight:700;color:#2b4f99}
 
-/* Los calendarios usan todo el ancho (sin barra de abajo); solo en celulares se desplazan de lado */
+/* Calendarios: barra de desplazamiento horizontal (abajo); sin barra vertical, se ven completos de arriba a abajo */
 .cal-ev{min-width:0;overflow-wrap:anywhere}
-@media (max-width:639px){
-  .cal{overflow-x:auto}
-  .cal-grid{grid-template-columns:96px repeat(7,minmax(140px,1fr));min-width:1050px}
-}
-
 
 /* ---------- Horario del curso: lista de las clases de la primera semana ---------- */
 .fila-clase{border:1px solid var(--borde);border-radius:.6rem;background:#fff;padding:.45rem .6rem}

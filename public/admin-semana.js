@@ -28,7 +28,7 @@ function pintarSemana(){
       <label class="sg-hor"><span>Fin</span><input type="time" data-f="fin" value="${x.fin}" aria-label="Hora de fin"></label></div>`;
   cont.innerHTML=`<div class="cal-grid"><div class="cal-cab cal-esq"></div>${ORDEN_DIAS.map(d=>`<div class="cal-cab"><span>${DIAS[d]}</span></div>`).join('')}
     ${MOMENTOS.map((m,i)=>`<div class="cal-mom"><i class="bi ${m.ic}"></i><b>${m.n}</b><small>${m.r}</small></div>`+ORDEN_DIAS.map(d=>
-      `<div class="cal-celda" data-dia="${d}" data-mom="${i}">${franjasTemp.map((x,k)=>x.dia===d && momentoDe(x.ini)===i ? tarjeta(x,k) : '').join('')}
+      `<div class="cal-celda" data-dia="${d}" data-mom="${i}">${franjasTemp.map((x,k)=>({x,k})).filter(({x})=>x.dia===d && momentoDe(x.ini)===i).sort((a,b)=>a.x.ini.localeCompare(b.x.ini)).map(({x,k})=>tarjeta(x,k)).join('')}
         <button type="button" class="sg-add" data-add title="Agregar una clase el ${DIAS_L[d]} en la ${m.n.toLowerCase()}">+ Clase</button></div>`).join('')).join('')}</div>`;
   cont.scrollTop=y;
 }
@@ -78,3 +78,46 @@ $('#curSemana').addEventListener('drop',e=>{
   const c=e.target.closest('.cal-celda'); if(!c || arrastrada===null) return; e.preventDefault();
   const k=arrastrada; arrastrada=null; moverClase(k,+c.dataset.dia,+c.dataset.mom);
 });
+
+/* ---------- Varias clases de un día de una sola vez: «8 a 10, 10 a 1» ---------- */
+function horaTexto(t){
+  const m=String(t).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i); if(!m) return null;
+  let h=+m[1]; const min=+(m[2]||0), mer=(m[3]||'').toLowerCase();
+  if(h>24 || min>59) return null;
+  return {h,min,mer};
+}
+/* Entiende horas sueltas: sin am/pm, las 1–6 se toman como tarde y el fin siempre queda después del inicio */
+function parsearHorarios(txt){
+  const limpio=String(txt).toLowerCase().replace(/a\.\s?m\.?/g,'am').replace(/p\.\s?m\.?/g,'pm').replace(/\bde\s+/g,'');
+  const salida=[], malos=[];
+  limpio.split(/\s*(?:,|;|\n|\sy\s)\s*/).map(x=>x.trim()).filter(Boolean).forEach(seg=>{
+    const par=seg.split(/\s+(?:a|al|hasta)\s+|\s*[-–—]\s*/).map(x=>x.trim()).filter(Boolean);
+    const a=par.length===2 && horaTexto(par[0]), b=par.length===2 && horaTexto(par[1]);
+    if(!a || !b){ malos.push(seg); return; }
+    let ini=a.h; if(a.mer==='pm' && ini<12) ini+=12; else if(a.mer==='am' && ini===12) ini=0; else if(!a.mer && ini>=1 && ini<=6) ini+=12;
+    let fin=b.h; if(b.mer==='pm' && fin<12) fin+=12; else if(b.mer==='am' && fin===12) fin=0;
+    let i=ini*60+a.min, f=fin*60+b.min;
+    if(!b.mer && f<i && f+12*60<=24*60) f+=12*60;       // «10 a 1» = de 10 a. m. a 1 p. m.
+    if(i<0 || f>24*60 || f<=i){ malos.push(seg); return; }
+    salida.push({ini:deMin(i),fin:deMin(f)});
+  });
+  return {horarios:salida,malos};
+}
+function agregarVarias(){
+  const dia=+$('#rapDia').value, msg=$('#rapMsg'), {horarios,malos}=parsearHorarios($('#rapHoras').value);
+  if(!horarios.length && !malos.length){ msg.className='w-100 small text-danger'; msg.textContent='Escribe las horas, por ejemplo: 8 a 10, 10 a 1'; return; }
+  const hechas=[], pisadas=[];
+  horarios.sort((a,b)=>a.ini.localeCompare(b.ini)).forEach(h=>{
+    if(choca(dia,aMin(h.ini),aMin(h.fin),-1)){ pisadas.push(h); return; }
+    franjasTemp.push({dia,ini:h.ini,fin:h.fin}); hechas.push(h);
+  });
+  if(hechas.length){ refrescarHorario(); $('#rapHoras').value=''; }
+  const r=h=>rangoHoras(h.ini,h.fin);
+  const partes=[];
+  if(hechas.length) partes.push(`Agregadas el ${DIAS_L[dia]}: ${hechas.map(r).join(' y ')}`);
+  if(pisadas.length) partes.push(`No se agregaron por cruzarse con otra clase: ${pisadas.map(r).join(', ')}`);
+  if(malos.length) partes.push(`No entendí: «${malos.join('», «')}»`);
+  msg.className='w-100 small '+(hechas.length&&!pisadas.length&&!malos.length?'text-success':'text-danger'); msg.textContent=partes.join(' · ');
+}
+$('#rapAgregar').addEventListener('click',agregarVarias);
+$('#rapHoras').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); agregarVarias(); } });

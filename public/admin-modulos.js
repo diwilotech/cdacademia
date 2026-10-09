@@ -158,7 +158,7 @@ function eliminarModulo(id,b){
    m.bloques = [{id, tipo, texto | nombre,key,mime,size | nombre,url}]  tipos: titulo, subtitulo, texto, lista, numerada,
    destacado, separador, archivo, enlace. m.items, m.temas y m.descripcion se derivan al guardar.
    ========================================================= */
-const inlineMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>').replace(/\n/g,'<br>');
+const inlineMd = t => esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>').replace(/\^\^(.+?)\^\^/g,'<span class="sz-t">$1</span>').replace(/~~(.+?)~~/g,'<span class="sz-h">$1</span>').replace(/\n/g,'<br>');
 const lineas = t => String(t||'').split('\n').map(x=>x.trim()).filter(Boolean);
 /* Módulos viejos (descripción + temas + archivos) se muestran como documento */
 function bloquesDe(m){
@@ -269,6 +269,7 @@ function atomoHtml(b){
   }
   return `<div class="ed-atom" contenteditable="false" data-id="${b.id}" ${idx}><div class="bl-ctrl" role="group" aria-label="Bloque">
       <button type="button" data-a="up" title="Subir"><i class="bi bi-arrow-up"></i></button><button type="button" data-a="down" title="Bajar"><i class="bi bi-arrow-down"></i></button>
+      <button type="button" data-a="par" title="Agregar un párrafo debajo"><i class="bi bi-text-paragraph"></i></button>
       <button type="button" data-a="del" title="Quitar"><i class="bi bi-trash"></i></button></div>${cuerpo}</div>`;
 }
 function editorDesde(bloques){
@@ -298,6 +299,7 @@ function domAMd(n){
     if(t==='BR') o+='\n';
     else if(t==='B'||t==='STRONG'){ const i=domAMd(c); o+=i.trim()?`**${i}**`:i; }
     else if(t==='I'||t==='EM'){ const i=domAMd(c); o+=i.trim()?`*${i}*`:i; }
+    else if(t==='SPAN' && (c.classList.contains('sz-t')||c.classList.contains('sz-h'))){ const i=domAMd(c), m=c.classList.contains('sz-t')?'^^':'~~'; o+=i.trim()?`${m}${i}${m}`:i; }
     else { if((t==='DIV'||t==='P') && o && !o.endsWith('\n')) o+='\n'; o+=domAMd(c); }
   });
   return o.replace(/ /g,' ');
@@ -333,6 +335,7 @@ function bloquesSel(){
   const top=(n,off)=>{ if(n===ed) return ed.children[Math.min(off,ed.children.length-1)]; while(n && n.parentNode!==ed) n=n.parentNode; return n; };
   const a=top(r.startContainer,r.startOffset), z=top(r.endContainer,Math.max(0,r.endOffset-1)); if(!a||!z) return [];
   const out=[]; for(let n=a;n;n=n.nextElementSibling){ out.push(n); if(n===z) break; }
+  if(!r.collapsed && r.endOffset===0 && out.length>1 && out.at(-1).contains(r.endContainer) && !out.at(-1).contains(r.startContainer)) out.pop();   // la selección solo roza el inicio del siguiente
   return out.filter(n=>!esAtomo(n));
 }
 const mover = (a,b) => { while(a.firstChild) b.appendChild(a.firstChild); if(!b.firstChild) b.appendChild(document.createElement('br')); };
@@ -346,10 +349,78 @@ function puntoEn(el,n){
   while(w.nextNode()){ const t=w.currentNode; ult=t; if(acum+t.length>=n) return [t,n-acum]; acum+=t.length; }
   return ult ? [ult,ult.length] : [el,0];
 }
+/* «Línea» que contiene un nodo: el elemento de lista o el bloque */
+function lineaDe(nodo){
+  let n=nodo.nodeType===1?nodo:nodo.parentElement;
+  while(n && n!==ED()){ if(n.tagName==='LI' || n.parentNode===ED()) return n; n=n.parentElement; }
+  return null;
+}
+/* Partes de la selección dentro de una lista: solo los elementos tocados cambian; la lista se parte en dos */
+function partirLista(lst, rango){
+  const lis=[...lst.children].filter(c=>c.tagName==='LI');
+  let tocadas=lis.filter(li=>rango.intersectsNode(li));
+  if(!rango.collapsed && rango.endOffset===0 && tocadas.length>1){ const u=tocadas.at(-1); if(u.contains(rango.endContainer) && !u.contains(rango.startContainer)) tocadas.pop(); }
+  if(!tocadas.length || tocadas.length===lis.length) return;
+  const i=lis.indexOf(tocadas[0]), f=lis.indexOf(tocadas.at(-1));
+  const copia=(items,inicio)=>{ const l=document.createElement(lst.tagName); if(inicio) l.start=inicio; items.forEach(x=>l.appendChild(x)); return l; };
+  if(f<lis.length-1) lst.after(copia(lis.slice(f+1), lst.tagName==='OL' ? (lst.start||1)+f+1 : 0));
+  if(i>0) lst.before(copia(lis.slice(0,i), lst.tagName==='OL' ? (lst.start||1) : 0));
+}
+/* Tamaño de título/encabezado solo a lo seleccionado dentro de una línea (una palabra, una frase…) */
+function corridas(el, fl={}){
+  const out=[];
+  el.childNodes.forEach(n=>{
+    if(n.nodeType===3) out.push({t:n.nodeValue,...fl});
+    else if(n.nodeType===1){
+      if(n.tagName==='BR') { out.push({br:true}); return; }
+      const f={...fl}, T=n.tagName;
+      if(T==='B'||T==='STRONG') f.b=true; if(T==='I'||T==='EM') f.i=true;
+      if(n.classList.contains('sz-t')) f.sz='sz-t'; else if(n.classList.contains('sz-h')) f.sz='sz-h';
+      out.push(...corridas(n,f));
+    }
+  });
+  return out;
+}
+function construirCorridas(runs){
+  const m=[]; runs.forEach(r=>{ const u=m.at(-1); if(u && !r.br && !u.br && u.b===r.b && u.i===r.i && u.sz===r.sz) u.t+=r.t; else m.push({...r}); });
+  return m.map(r=>{ if(r.br) return '<br>'; let h=esc(r.t); if(r.sz) h=`<span class="${r.sz}">${h}</span>`; if(r.i) h=`<i>${h}</i>`; if(r.b) h=`<b>${h}</b>`; return h; }).join('') || '<br>';
+}
+function aplicarTamano(linea, rango, clase){
+  const pre=document.createRange(); pre.selectNodeContents(linea);
+  pre.setEnd(rango.startContainer,rango.startOffset); const a=pre.toString().length;
+  pre.setEnd(rango.endContainer,rango.endOffset); const z=pre.toString().length;
+  const runs=corridas(linea), res=[]; let pos=0, dentro=[];
+  runs.forEach(r=>{
+    if(r.br){ res.push(r); return; }
+    const ini=pos, fin=pos+r.t.length; pos=fin;
+    const x=Math.max(a,ini), y=Math.min(z,fin);
+    if(x>=y){ res.push(r); return; }
+    if(x>ini) res.push({...r,t:r.t.slice(0,x-ini)});
+    const mid={...r,t:r.t.slice(x-ini,y-ini)}; dentro.push(mid); res.push(mid);
+    if(y<fin) res.push({...r,t:r.t.slice(y-ini)});
+  });
+  const quitar = !clase || (dentro.length && dentro.every(r=>r.sz===clase));       // repetir el mismo tamaño lo quita
+  dentro.forEach(r=>{ if(quitar) delete r.sz; else r.sz=clase; });
+  linea.innerHTML=construirCorridas(res);
+  const [n1,o1]=puntoEn(linea,a), [n2,o2]=puntoEn(linea,z), r=document.createRange();
+  r.setStart(n1,o1); r.setEnd(n2,o2); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
 /* Cambia el formato de lo seleccionado, en su lugar */
 function aTipo(tipo){
   const sel=window.getSelection(); if(!sel || !sel.rangeCount) return;
-  const rango=sel.getRangeAt(0), bs=bloquesSel(); if(!bs.length) return;
+  const rango=sel.getRangeAt(0);
+  // texto seleccionado que no es toda la línea: el tamaño se aplica solo a esa parte
+  if(!rango.collapsed && (tipo==='titulo'||tipo==='subtitulo'||tipo==='texto')){
+    const l1=lineaDe(rango.startContainer), l2=lineaDe(rango.endContainer);
+    if(l1 && l1===l2 && !esAtomo(l1) && l1.tagName!=='HR'){
+      const pre=document.createRange(); pre.selectNodeContents(l1); const total=pre.toString().length;
+      pre.setEnd(rango.startContainer,rango.startOffset); const a=pre.toString().length; pre.setEnd(rango.endContainer,rango.endOffset);
+      const z=pre.toString().length;
+      if(z-a>0 && z-a<total){ aplicarTamano(l1,rango,tipo==='titulo'?'sz-t':tipo==='subtitulo'?'sz-h':null); marcarVacio(); actualizarBarra(); return; }
+    }
+  }
+  const bs=bloquesSel(); if(!bs.length) return;
+  bs.forEach(b=>{ if(b.tagName==='UL'||b.tagName==='OL') partirLista(b,rango); });          // solo las líneas tocadas de una lista
   const destino = tipo!=='texto' && bs.every(b=>tipoDe(b)===tipo) ? 'texto' : tipo;      // pulsarlo otra vez lo quita
   const unidades=[];
   bs.forEach(b=>{ if(b.tagName==='UL'||b.tagName==='OL') [...b.children].filter(c=>c.tagName==='LI').forEach(x=>unidades.push(x)); else unidades.push(b); });
@@ -368,8 +439,7 @@ function aTipo(tipo){
 }
 function asegurarCola(){
   const ed=ED(), u=ed.lastElementChild;
-  if(!u || esAtomo(u) || u.tagName==='HR') ed.appendChild(parrafoVacio());
-  [...ed.querySelectorAll('.ed-atom')].forEach(a=>{ if(!a.nextElementSibling || esAtomo(a.nextElementSibling)) a.after(parrafoVacio()); });
+  if(!u || esAtomo(u) || u.tagName==='HR') ed.appendChild(parrafoVacio());      // solo hace falta un párrafo al final para seguir escribiendo
 }
 function normalizar(){
   const ed=ED();
@@ -441,7 +511,7 @@ function insertarAtomo(b, enfocarCampo){
   if(cur && esVacio(cur)) cur.replaceWith(el); else if(cur) cur.after(el); else ED().append(el);
   asegurarCola(); marcarVacio(); ajustarAlturas();
   if(enfocarCampo){ const i=el.querySelector('input'); if(i) i.focus(); }
-  else colocarCursor(el.nextElementSibling,false);
+  else { const n=el.nextElementSibling; if(n && !esAtomo(n)) colocarCursor(n,false); }
 }
 function recargarAtomo(el){
   const b=atomos[el.dataset.id], tmp=document.createElement('div'); tmp.innerHTML=atomoHtml(b); el.replaceWith(tmp.firstElementChild); ajustarAlturas();
@@ -465,6 +535,18 @@ ED().addEventListener('keydown',e=>{
   const sel=window.getSelection(); if(!sel.rangeCount) return;
   const bs=bloquesSel(); if(bs.length!==1) return; const b=bs[0], t=tipoDe(b), r=sel.getRangeAt(0);
   const alInicio = r.collapsed && (() => { const pre=document.createRange(); pre.selectNodeContents(b); pre.setEnd(r.startContainer,r.startOffset); return pre.toString()===''; })();
+  const alFinal = r.collapsed && (() => { const post=document.createRange(); post.selectNodeContents(b); post.setStart(r.startContainer,r.startOffset); return post.toString()===''; })();
+  const prev=b.previousElementSibling, next=b.nextElementSibling;
+  if(e.key==='Backspace' && alInicio && t==='texto' && esVacio(b) && ED().children.length>1){        // borra un párrafo vacío (también entre dos archivos)
+    e.preventDefault(); b.remove();
+    const dest=(prev && !esAtomo(prev) && prev.tagName!=='HR') ? prev : (next && !esAtomo(next) && next.tagName!=='HR') ? next : null;
+    asegurarCola(); marcarVacio(); if(dest) colocarCursor(dest, dest===prev); return;
+  }
+  if(e.key==='Delete' && alFinal && t==='texto' && esVacio(b) && ED().children.length>1){
+    e.preventDefault(); b.remove(); asegurarCola(); marcarVacio(); const dest=(next && !esAtomo(next) && next.tagName!=='HR') ? next : (prev && !esAtomo(prev) && prev.tagName!=='HR') ? prev : null; if(dest) colocarCursor(dest, dest===prev); return;
+  }
+  if(e.key==='Backspace' && alInicio && prev && (esAtomo(prev)||prev.tagName==='HR') && !esVacio(b) && t==='texto'){ e.preventDefault(); return; }   // no borrar el archivo de arriba por accidente
+  if(e.key==='Delete' && alFinal && next && esAtomo(next)){ e.preventDefault(); return; }
   if(e.key==='Backspace' && alInicio && (t==='titulo'||t==='subtitulo'||t==='destacado')){ e.preventDefault(); aTipo('texto'); return; }   // quita el formato
   if(e.key==='Enter' && !e.shiftKey && (t==='titulo'||t==='subtitulo'||t==='destacado')){            // Enter en un título/nota: siguiente párrafo normal
     e.preventDefault(); r.deleteContents();
@@ -492,6 +574,7 @@ ED().addEventListener('click',e=>{
   const a=e.target.closest('[data-a]')?.dataset.a;
   if(a==='up'){ const p=at.previousElementSibling; if(p) at.after(p); asegurarCola(); return; }
   if(a==='down'){ const n=at.nextElementSibling; if(n) at.before(n); asegurarCola(); return; }
+  if(a==='par'){ const p=parrafoVacio(); at.after(p); colocarCursor(p,false); return; }
   if(a==='del'){ at.remove(); asegurarCola(); marcarVacio(); return; }
   docClick(e,id=>atomos[id],'mModulo');
 });

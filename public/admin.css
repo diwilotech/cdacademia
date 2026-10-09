@@ -269,3 +269,7 @@ section[data-vista].activa{display:block}
 .ed-atom:hover>.bl-ctrl,.ed-atom:focus-within>.bl-ctrl{display:flex}
 .ed-atom .doc-fig,.ed-atom .doc-archivo{margin:.3rem 0}
 .doc-papel{min-height:60vh}
+
+/* Palabras con tamaño de título o de encabezado dentro de un párrafo o lista */
+.sz-t{font:400 1.6rem/1.25 var(--font-display)}
+.sz-h{font:700 1.1rem/1.3 var(--font-body)}

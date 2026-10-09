@@ -305,24 +305,12 @@ section[data-vista].activa{display:block}
 /* Los calendarios usan todo el ancho (sin barra de abajo); solo en celulares se desplazan de lado */
 .cal-ev{min-width:0;overflow-wrap:anywhere}
 @media (max-width:639px){
-  .cal,.tt{overflow-x:auto}
+  .cal{overflow-x:auto}
   .cal-grid{grid-template-columns:96px repeat(7,minmax(140px,1fr));min-width:1050px}
-  .tt-cab,.tt-cuerpo{min-width:640px}
 }
 
-/* ---------- Horario semanal del curso: filas por hora, con la mañana, media mañana, tarde, media tarde y noche marcadas ---------- */
-.tt{--th:30px;border:1px solid var(--borde);border-radius:.6rem;background:#fff;max-height:62vh;overflow-y:auto;overflow-x:hidden;user-select:none}
-.tt-cab,.tt-cuerpo{display:grid;grid-template-columns:104px repeat(7,minmax(0,1fr))}
-.tt-cab{position:sticky;top:0;z-index:4;background:#fff;border-bottom:1px solid var(--borde);font-size:.75rem;font-weight:700;color:#6b5d66;text-align:center;padding:.35rem 0}
-.tt-gutter{position:relative;display:grid;grid-template-columns:62px 42px;background:#fcf9fb}
-.tt-bandas,.tt-horas{position:relative}
-.tt-banda-n{position:absolute;left:0;right:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.64rem;line-height:1.15;text-align:center;color:#6b5d66;border-bottom:1px solid var(--borde)}
-.tt-banda-n i{font-size:1rem;color:var(--marca)}
-.tt-horas span{position:absolute;right:5px;font-size:.58rem;color:#9a8c95;transform:translateY(-50%);font-variant-numeric:tabular-nums;white-space:nowrap}
-.tt-col{position:relative;border-left:1px solid var(--borde);background-image:linear-gradient(to bottom,var(--borde) 1px,transparent 1px);background-size:100% var(--th)}
-.tt-banda{position:absolute;left:0;right:0;pointer-events:none;background:rgba(122,46,92,.03)}
-.tt-banda.alt{background:rgba(122,46,92,.075)}
-.tt-clase{position:absolute;left:3px;right:3px;z-index:2;background:var(--marca);color:#fff;border-radius:.4rem;padding:.15rem .35rem;font-size:.68rem;line-height:1.2;overflow:hidden;cursor:pointer;box-shadow:0 2px 6px rgba(42,31,38,.25);border:0;text-align:left}
-.tt-clase b{display:block;font-size:.7rem}
-.tt-clase.editando{box-shadow:0 0 0 2px #fff,0 0 0 4px #b04a86;background:#b04a86}
-.tt-clase .sg-x{position:absolute;top:0;right:2px;border:0;background:none;color:#fff;opacity:.85;font-size:1rem;line-height:1;padding:0 .2rem;cursor:pointer}
+
+/* ---------- Horario del curso: lista de las clases de la primera semana ---------- */
+.fila-clase{border:1px solid var(--borde);border-radius:.6rem;background:#fff;padding:.45rem .6rem}
+.fila-clase .nclase{min-width:68px}
+.fila-clase .fecha-clase{font-size:.78rem;color:#6b5d66;min-width:92px}

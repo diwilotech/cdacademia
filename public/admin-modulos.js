@@ -163,9 +163,15 @@ function embedVideo(url){
 const barraArchivo = (b,extra='') => `<div class="doc-barra"><i class="bi ${iconoArchivo(b)}"></i><span class="text-truncate" title="${esc(b.nombre)}">${esc(b.nombre||'Archivo')}</span><small class="text-muted tabular">${fmtTam(b.size||0)}</small>${extra}
   <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-prev title="Ampliar"><i class="bi bi-arrows-fullscreen"></i></button>
   <a class="btn btn-sm btn-outline-secondary py-0" href="${urlDescarga(b)}" download title="Descargar"><i class="bi bi-download"></i></a></div>`;
+const imagenTexto = b => `${b.titulo?`<h3 class="doc-h2">${inlineMd(b.titulo)}</h3>`:''}${b.texto?`<p>${inlineMd(b.texto)}</p>`:''}`;
 function archivoHtml(b){
   const u=urlArchivo(b.key);
-  if(esImagen(b)) return `<figure class="doc-fig"><img src="${u}" loading="lazy" alt="${esc(b.nombre)}" data-prev><figcaption class="small text-muted mt-1">${esc(b.nombre)}</figcaption></figure>`;
+  if(esImagen(b)){
+    const img=`<img src="${u}" loading="lazy" alt="${esc(b.nombre)}" data-prev>`, lay=b.diseno||'izq';
+    if(lay==='completo') return `<figure class="doc-fig">${img}${b.titulo||b.texto?`<figcaption class="mt-2">${imagenTexto(b)}</figcaption>`:''}</figure>`;
+    // media imagen y media texto: la foto no ocupa todo el ancho
+    return `<div class="doc-split ${lay==='der'?'der':''} ${b.titulo||b.texto?'':'solo'}"><figure class="doc-fig">${img}</figure>${b.titulo||b.texto?`<div class="doc-split-txt">${imagenTexto(b)}</div>`:''}</div>`;
+  }
   if(/^video\/(mp4|webm)$/.test(b.mime||'')) return `<figure class="doc-fig"><video src="${u}" controls preload="metadata"></video><figcaption class="small text-muted mt-1">${esc(b.nombre)}</figcaption></figure>`;
   if(/^audio\//.test(b.mime||'')) return `<div class="doc-archivo">${barraArchivo(b)}<audio src="${u}" controls preload="none" class="w-100 px-2 pb-2"></audio></div>`;
   if(esPdf(b)) return `<div class="doc-archivo">${barraArchivo(b,'<button type="button" class="btn btn-sm btn-marca py-0" data-embed>Ver documento</button>')}<div class="doc-embed" hidden><iframe data-src="${u}" title="${esc(b.nombre)}"></iframe></div></div>`;
@@ -237,7 +243,15 @@ function editorBloque(b,k){
     case 'lista': case 'numerada': return ta('',2);
     case 'destacado': return `<div class="bl-callout">${ta('')}</div>`;
     case 'separador': return '<hr>';
-    case 'archivo': return `<div class="doc" data-b="${k}">${archivoHtml(b)}</div><input class="form-control form-control-sm mt-1" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre o pie del archivo" aria-label="Nombre del archivo">`;
+    case 'archivo': if(esImagen(b)){
+      const lay=b.diseno||'izq', btn=(v,ic,t)=>`<button type="button" class="btn btn-sm ${lay===v?'btn-marca':'btn-outline-secondary'}" data-lay="${v}" title="${t}"><i class="bi ${ic}"></i></button>`;
+      const campos=`<input class="form-control form-control-sm mb-1" data-f="titulo" value="${esc(b.titulo||'')}" placeholder="Título junto a la imagen (opcional)" aria-label="Título junto a la imagen"><textarea class="form-control form-control-sm bl-lado" rows="3" data-f="texto" placeholder="Texto junto a la imagen… (**negrita**, *cursiva*)" aria-label="Texto junto a la imagen">${esc(b.texto||'')}</textarea>`;
+      const img=`<figure class="doc-fig"><img src="${urlArchivo(b.key)}" alt="${esc(b.nombre)}" data-prev></figure>`;
+      return `<div class="d-flex flex-wrap align-items-center gap-1 mb-1 small text-muted"><span>Diseño:</span><div class="btn-group btn-group-sm">${btn('izq','bi-layout-sidebar','Imagen a la izquierda, texto a la derecha')}${btn('der','bi-layout-sidebar-reverse','Texto a la izquierda, imagen a la derecha')}${btn('completo','bi-image','Imagen sola, de lado a lado')}</div>
+        <input class="form-control form-control-sm ms-auto" style="max-width:220px" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre del archivo" aria-label="Nombre del archivo"></div>
+        <div class="doc" data-b="${k}">${lay==='completo'?`<div class="doc-fig">${img}</div><div class="mt-2">${campos}</div>`:`<div class="doc-split ${lay==='der'?'der':''}">${img}<div class="doc-split-txt">${campos}</div></div>`}</div>`;
+    }
+    return `<div class="doc" data-b="${k}">${archivoHtml(b)}</div><input class="form-control form-control-sm mt-1" data-f="nombre" value="${esc(b.nombre)}" placeholder="Nombre o pie del archivo" aria-label="Nombre del archivo">`;
     case 'enlace': return `<div class="row g-1"><div class="col-md-4"><input class="form-control form-control-sm" data-f="nombre" value="${esc(b.nombre||'')}" placeholder="Nombre del enlace" aria-label="Nombre del enlace"></div>
       <div class="col-md-8"><input class="form-control form-control-sm" data-f="url" data-recarga value="${esc(b.url||'')}" placeholder="https://… (YouTube y Vimeo se ven aquí mismo)" aria-label="Dirección"></div></div><div class="doc" data-b="${k}">${enlaceHtml(b)}</div>`;
   }
@@ -286,6 +300,7 @@ $('#modDoc').addEventListener('keydown',e=>{
 });
 $('#modDoc').addEventListener('click',e=>{
   const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, a=e.target.closest('[data-a]')?.dataset.a;
+  const lay=e.target.closest('[data-lay]'); if(lay){ B[k].diseno=lay.dataset.lay; pintarDoc(); return; }
   if(!a){ docClick(e,B,'mModulo'); return; }
   if(a==='up' && k>0) [B[k-1],B[k]]=[B[k],B[k-1]];
   else if(a==='down' && k<B.length-1) [B[k+1],B[k]]=[B[k],B[k+1]];
@@ -299,7 +314,7 @@ async function agregarArchivos(files){
   files=[...files]; if(!files.length) return;
   $('#modEstado').textContent=`Subiendo ${files.length} ${files.length===1?'archivo':'archivos'}…`;
   for(const f of files){
-    try{ const it=await subirArchivo(f); modNuevos.push(it.key); insertarBloque('archivo',{nombre:it.nombre,key:it.key,mime:it.mime,size:it.size}); }
+    try{ const it=await subirArchivo(f); modNuevos.push(it.key); insertarBloque('archivo',{nombre:it.nombre,key:it.key,mime:it.mime,size:it.size,...(esImagen(it)?{diseno:'izq'}:{})}); }
     catch(x){ toast(x.message); }
   }
   $('#modEstado').textContent='';

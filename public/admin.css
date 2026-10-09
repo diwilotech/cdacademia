@@ -232,3 +232,17 @@ section[data-vista].activa{display:block}
 .mod-card{border:1px solid var(--borde);border-radius:.7rem;background:#fff;padding:.7rem .8rem}
 .mod-lib{border:1px dashed #d8cbd3;border-radius:.6rem;background:#fff;padding:.5rem .7rem;text-align:left;width:100%;height:100%}
 .mod-lib:hover{border-color:var(--marca);background:var(--marca-suave)}
+
+/* Imagen a un lado y texto al otro: la foto no ocupa todo el ancho */
+.doc-split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:1.1rem;align-items:center;margin:.7rem 0}
+.doc-split.der .doc-fig{order:2}
+.doc-split .doc-fig{margin:0}
+.doc-split .doc-fig img{max-height:300px;width:auto;max-width:100%;object-fit:contain}
+.doc-split-txt .doc-h2{margin-top:0}
+.doc-split-txt p:last-child{margin-bottom:0}
+.doc-split.solo{grid-template-columns:minmax(0,1fr)}
+.doc-split.solo .doc-fig{max-width:50%;text-align:left}
+.doc-split.solo.der .doc-fig{margin-left:auto;text-align:right}
+.doc-fig img{max-height:340px}
+@media (max-width:575px){ .doc-split{grid-template-columns:1fr} .doc-split.der .doc-fig{order:0} .doc-split.solo .doc-fig{max-width:100%} }
+.bl-lado{resize:vertical}

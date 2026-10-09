@@ -611,16 +611,17 @@
 <div class="modal fade" id="mModulo" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><form class="modal-content" id="formModulo">
   <div class="modal-header py-2"><h2 class="modal-title h6 mb-0" id="tModulo">Módulo</h2>
     <div class="ms-auto d-flex gap-2 align-items-center"><span class="small text-muted d-none d-md-inline" id="modEstado"></span><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div></div>
-  <div class="doc-barra-herr" id="modBarra" role="toolbar" aria-label="Insertar en el documento">
-    <button type="button" class="btn btn-sm" data-ins="titulo" title="Título"><i class="bi bi-type-h1"></i></button>
-    <button type="button" class="btn btn-sm" data-ins="subtitulo" title="Subtítulo"><i class="bi bi-type-h2"></i></button>
-    <button type="button" class="btn btn-sm" data-ins="texto" title="Texto"><i class="bi bi-text-paragraph"></i></button>
-    <button type="button" class="btn btn-sm" data-ins="lista" title="Lista con viñetas"><i class="bi bi-list-ul"></i></button>
-    <button type="button" class="btn btn-sm" data-ins="numerada" title="Lista numerada"><i class="bi bi-list-ol"></i></button>
-    <button type="button" class="btn btn-sm" data-ins="destacado" title="Nota destacada"><i class="bi bi-lightbulb"></i></button>
+  <div class="doc-barra-herr" id="modBarra" role="toolbar" aria-label="Formato del documento">
+    <button type="button" class="btn btn-sm fw-bold" data-conv="titulo" title="Título (también: escribe # y espacio)">Título</button>
+    <button type="button" class="btn btn-sm fw-semibold" data-conv="subtitulo" title="Encabezado (también: ## y espacio)">Encabezado</button>
+    <button type="button" class="btn btn-sm" data-conv="texto" title="Cuerpo de texto">Cuerpo</button>
     <span class="sep"></span>
-    <button type="button" class="btn btn-sm" data-fmt="**" title="Negrita"><i class="bi bi-type-bold"></i></button>
-    <button type="button" class="btn btn-sm" data-fmt="*" title="Cursiva"><i class="bi bi-type-italic"></i></button>
+    <button type="button" class="btn btn-sm" data-conv="lista" title="Lista con viñetas (también: - y espacio)"><i class="bi bi-list-ul"></i></button>
+    <button type="button" class="btn btn-sm" data-conv="numerada" title="Lista numerada (también: 1. y espacio)"><i class="bi bi-list-ol"></i></button>
+    <button type="button" class="btn btn-sm" data-conv="destacado" title="Nota destacada (también: > y espacio)"><i class="bi bi-lightbulb"></i></button>
+    <span class="sep"></span>
+    <button type="button" class="btn btn-sm" data-fmt="**" title="Negrita del texto seleccionado"><i class="bi bi-type-bold"></i></button>
+    <button type="button" class="btn btn-sm" data-fmt="*" title="Cursiva del texto seleccionado"><i class="bi bi-type-italic"></i></button>
     <span class="sep"></span>
     <label class="btn btn-sm mb-0" title="Subir PDF, Word, imagen, audio o video"><i class="bi bi-paperclip"></i> <span class="d-none d-md-inline">Archivo</span><input type="file" id="modArchivos" multiple hidden accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*,video/mp4,video/webm,audio/*"></label>
     <button type="button" class="btn btn-sm" data-ins="enlace" title="Enlace o video de YouTube/Vimeo"><i class="bi bi-link-45deg"></i> <span class="d-none d-md-inline">Enlace</span></button>
@@ -635,7 +636,7 @@
         <label class="d-flex align-items-center gap-1">Horas <input type="number" min="0" step="0.5" class="form-control form-control-sm" style="width:80px" id="modHoras"></label>
         <span class="ms-auto d-none" id="modEnCursos"></span></div>
       <div id="modDoc"></div>
-      <div class="doc-vacio-pie text-muted small" id="modPie">Escribe, pega una imagen o arrastra archivos aquí. Usa la barra de arriba para insertar títulos, listas, PDF, Word, imágenes, audio, video o enlaces.</div>
+      <div class="doc-pie" id="modPie"><span>Escribe aquí. Cambia el formato con la barra de arriba o con atajos: <code>#</code> título, <code>##</code> encabezado, <code>-</code> lista, <code>1.</code> numerada, <code>&gt;</code> nota. También puedes pegar o arrastrar imágenes y archivos.</span></div>
     </div>
     <div class="d-none border rounded p-2 bg-white mt-3 mx-auto" id="modAdjuntar" style="max-width:820px"><div class="small fw-semibold mb-1">Agregar este módulo al curso</div>
       <div class="d-flex flex-wrap gap-2 align-items-center small">Clases <select class="form-select form-select-sm w-auto" id="modDesde"></select> a <select class="form-select form-select-sm w-auto" id="modHasta"></select></div></div>

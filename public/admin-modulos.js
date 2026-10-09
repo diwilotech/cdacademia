@@ -240,7 +240,9 @@ function editorBloque(b,k){
     case 'titulo': return ta('bl-t1');
     case 'subtitulo': return ta('bl-t2');
     case 'texto': return ta('');
-    case 'lista': case 'numerada': return ta('',2);
+    case 'lista': case 'numerada': {
+      const items=String(b.texto||'').split('\n');
+      return `<div class="bl-lista">${items.map((t,j)=>`<div class="li-row"><span class="li-mark">${b.tipo==='lista'?'•':(j+1)+'.'}</span><textarea class="bl-in" rows="1" data-li="${j}" placeholder="${j===0?'Elemento de la lista':''}" aria-label="Elemento ${j+1}">${esc(t)}</textarea></div>`).join('')}</div>`; }
     case 'destacado': return `<div class="bl-callout">${ta('')}</div>`;
     case 'separador': return '<hr>';
     case 'archivo': if(esImagen(b)){
@@ -265,9 +267,30 @@ function pintarDoc(foco){
       <button type="button" data-a="down" title="Bajar" ${k===modTemp.bloques.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
       <button type="button" data-a="dup" title="Duplicar"><i class="bi bi-copy"></i></button>
       <button type="button" data-a="del" title="Quitar"><i class="bi bi-trash"></i></button></div>${editorBloque(b,k)}</div>`).join('');
-  document.querySelectorAll('#modDoc textarea').forEach(autoAlto);
+  ajustarAlturas();
   fondo.scrollTop=y;
-  if(foco!==undefined){ const t=document.querySelector(`#modDoc [data-k="${foco}"] textarea, #modDoc [data-k="${foco}"] input`); if(t) t.focus(); }
+  if(foco!==undefined){
+    const f=typeof foco==='number' ? {k:foco} : foco, bl=document.querySelector(`#modDoc [data-k="${f.k}"]`);
+    const t=bl && (f.j!==undefined ? bl.querySelector(`[data-li="${f.j}"]`) : bl.querySelector('textarea, input'));
+    if(t){ t.focus(); const p=f.pos===undefined ? t.value.length : f.pos; if(t.setSelectionRange) t.setSelectionRange(p,p); }
+    bloqueSel=f.k;
+  }
+  actualizarBarra();
+}
+/* Mide cada texto para que crezca con lo que se escribe (si el modal aún no se ve, no mide y queda la altura mínima) */
+function ajustarAlturas(){ document.querySelectorAll('#modDoc textarea').forEach(ta=>{ if(ta.scrollHeight) autoAlto(ta); }); }
+document.getElementById('mModulo').addEventListener('shown.bs.modal',ajustarAlturas);
+const TEXTUALES = ['titulo','subtitulo','texto','lista','numerada','destacado'];
+function actualizarBarra(){
+  const t=bloqueSel!==null ? modTemp.bloques[bloqueSel]?.tipo : null;
+  document.querySelectorAll('#modBarra [data-conv]').forEach(b=>b.classList.toggle('activo',b.dataset.conv===t));
+}
+/* Cambia el tipo del bloque donde estás (como el formato de párrafo de Notas) */
+function convertirBloque(k,tipo,texto){
+  const b=modTemp.bloques[k]; if(!b || !TEXTUALES.includes(b.tipo)) return false;
+  let t = texto!==undefined ? texto : (b.texto||'');
+  if(tipo==='titulo'||tipo==='subtitulo') t=t.replace(/\n+/g,' ');
+  b.tipo=tipo; b.texto=t; pintarDoc({k,pos:t.length}); return true;
 }
 function insertarBloque(tipo, extra){
   const pos = bloqueSel===null ? modTemp.bloques.length : bloqueSel+1;
@@ -281,22 +304,67 @@ function insertarBloque(tipo, extra){
 }
 $('#modBarra').addEventListener('click',e=>{
   const i=e.target.closest('[data-ins]'); if(i) return insertarBloque(i.dataset.ins);
+  const cv=e.target.closest('[data-conv]');
+  if(cv){
+    const tipo=cv.dataset.conv, act=bloqueSel!==null ? modTemp.bloques[bloqueSel] : null;
+    if(act && TEXTUALES.includes(act.tipo)) convertirBloque(bloqueSel, act.tipo===tipo && tipo!=='texto' ? 'texto' : tipo);   // pulsarlo otra vez lo quita
+    else insertarBloque(tipo);
+    return;
+  }
   const f=e.target.closest('[data-fmt]'); if(!f) return;
   const ta=document.activeElement; if(!ta || ta.tagName!=='TEXTAREA' || !ta.closest('#modDoc')) { toast('Haz clic dentro de un texto y selecciona lo que quieres resaltar'); return; }
   const m=f.dataset.fmt, a=ta.selectionStart, z=ta.selectionEnd, sel=ta.value.slice(a,z)||'texto';
   ta.value=ta.value.slice(0,a)+m+sel+m+ta.value.slice(z); ta.setSelectionRange(a+m.length,a+m.length+sel.length); ta.dispatchEvent(new Event('input',{bubbles:true})); ta.focus();
 });
-$('#modBarra').addEventListener('mousedown',e=>{ if(e.target.closest('[data-fmt]')) e.preventDefault(); });   // no pierde la selección
-$('#modDoc').addEventListener('focusin',e=>{ const bl=e.target.closest('.bl'); if(bl) bloqueSel=+bl.dataset.k; });
+$('#modBarra').addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });   // no pierde la selección ni el cursor
+$('#modDoc').addEventListener('focusin',e=>{ const bl=e.target.closest('.bl'); if(bl){ bloqueSel=+bl.dataset.k; actualizarBarra(); } });
+const ATAJOS = {'# ':'titulo','## ':'subtitulo','- ':'lista','* ':'lista','1. ':'numerada','> ':'destacado'};
 $('#modDoc').addEventListener('input',e=>{
-  const bl=e.target.closest('.bl'), f=e.target.dataset.f; if(!bl||!f) return;
-  modTemp.bloques[+bl.dataset.k][f]=e.target.value; if(e.target.tagName==='TEXTAREA') autoAlto(e.target);
+  const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, b=modTemp.bloques[k];
+  if(e.target.hasAttribute('data-li')){
+    const L=String(b.texto||'').split('\n'); L[+e.target.dataset.li]=e.target.value.replace(/\n/g,' '); b.texto=L.join('\n'); autoAlto(e.target); return;
+  }
+  const f=e.target.dataset.f; if(!f) return;
+  b[f]=e.target.value; if(e.target.tagName==='TEXTAREA') autoAlto(e.target);
+  if(b.tipo==='texto' && f==='texto' && ATAJOS[e.target.value]) convertirBloque(k,ATAJOS[e.target.value],'');   // atajos estilo Markdown
 });
 $('#modDoc').addEventListener('change',e=>{ if(e.target.hasAttribute('data-recarga')) pintarDoc(); });
 $('#modDoc').addEventListener('keydown',e=>{
-  if(e.key!=='Enter' || e.shiftKey || e.target.tagName!=='TEXTAREA') return;
-  const bl=e.target.closest('.bl'), b=modTemp.bloques[+bl.dataset.k];
-  if(b.tipo==='titulo'||b.tipo==='subtitulo'){ e.preventDefault(); insertarBloque('texto'); }   // Enter en un título baja a un párrafo
+  const ta=e.target; if(ta.tagName!=='TEXTAREA' || e.isComposing) return;
+  const bl=ta.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, b=B[k];
+  const inicio = ta.selectionStart===0 && ta.selectionEnd===0;
+  // --- elementos de lista
+  if(ta.hasAttribute('data-li')){
+    const j=+ta.dataset.li, L=String(b.texto||'').split('\n');
+    if(e.key==='Enter' && !e.shiftKey){
+      e.preventDefault();
+      if(L[j]===''){                                   // Enter en un elemento vacío: sale de la lista
+        if(L.length===1){ convertirBloque(k,'texto',''); return; }
+        L.splice(j,1); b.texto=L.join('\n'); B.splice(k+1,0,{id:'b'+uid(),tipo:'texto',texto:''}); pintarDoc({k:k+1}); return;
+      }
+      const p=ta.selectionStart; L.splice(j,1,L[j].slice(0,p),L[j].slice(ta.selectionEnd)); b.texto=L.join('\n'); pintarDoc({k,j:j+1,pos:0});
+    } else if(e.key==='Backspace' && inicio){
+      e.preventDefault();
+      if(j>0){ const p=L[j-1].length; L.splice(j-1,2,L[j-1]+L[j]); b.texto=L.join('\n'); pintarDoc({k,j:j-1,pos:p}); }
+      else if(L.length===1) convertirBloque(k,'texto');
+      else { const primero=L.shift(); b.texto=L.join('\n'); B.splice(k,0,{id:'b'+uid(),tipo:'texto',texto:primero}); pintarDoc({k,pos:0}); }   // el primer elemento pasa a ser un párrafo
+    } else if(e.key==='ArrowUp' && j>0 && ta.selectionStart===0){ e.preventDefault(); bl.querySelector(`[data-li="${j-1}"]`).focus(); }
+    else if(e.key==='ArrowDown' && ta.selectionStart===ta.value.length){ const sig=bl.querySelector(`[data-li="${j+1}"]`); if(sig){ e.preventDefault(); sig.focus(); } }
+    return;
+  }
+  if(ta.dataset.f!=='texto' || !TEXTUALES.includes(b.tipo)) return;
+  if(e.key==='Enter' && !e.shiftKey){                  // Enter = nuevo párrafo (Shift+Enter = salto de línea)
+    e.preventDefault();
+    const p=ta.selectionStart, antes=ta.value.slice(0,p), despues=ta.value.slice(ta.selectionEnd);
+    b.texto=antes; B.splice(k+1,0,{id:'b'+uid(),tipo:'texto',texto:despues}); pintarDoc({k:k+1,pos:0});
+  } else if(e.key==='Backspace' && inicio){
+    if(b.tipo!=='texto'){ e.preventDefault(); convertirBloque(k,'texto'); return; }       // quita el formato
+    if(k===0) return;
+    const prev=B[k-1];
+    if(TEXTUALES.includes(prev.tipo) && prev.tipo!=='lista' && prev.tipo!=='numerada'){      // une con el párrafo de arriba
+      e.preventDefault(); const p=(prev.texto||'').length; prev.texto=(prev.texto||'')+(b.texto||''); B.splice(k,1); pintarDoc({k:k-1,pos:p});
+    } else if(!(b.texto||'')){ e.preventDefault(); B.splice(k,1); pintarDoc(prev.tipo==='lista'||prev.tipo==='numerada'?undefined:{k:k-1}); }
+  }
 });
 $('#modDoc').addEventListener('click',e=>{
   const bl=e.target.closest('.bl'); if(!bl) return; const k=+bl.dataset.k, B=modTemp.bloques, a=e.target.closest('[data-a]')?.dataset.a;
@@ -323,6 +391,13 @@ $('#modArchivos').addEventListener('change',e=>{ const f=e.target.files; agregar
 const papel=$('#modDocFondo');
 ['dragover','dragleave','drop'].forEach(ev=>papel.addEventListener(ev,e=>{ if(![...(e.dataTransfer?.types||[])].includes('Files')) return; e.preventDefault(); papel.style.outline=ev==='dragover'?'2px dashed var(--marca)':''; if(ev==='drop') agregarArchivos(e.dataTransfer.files); }));
 papel.addEventListener('paste',e=>{ const f=[...(e.clipboardData?.files||[])]; if(f.length){ e.preventDefault(); agregarArchivos(f); } });
+function enfocarFinal(){
+  const B=modTemp.bloques, u=B[B.length-1];
+  if(!(u && u.tipo==='texto' && !(u.texto||'').trim())) B.push({id:'b'+uid(),tipo:'texto',texto:''});
+  pintarDoc({k:B.length-1});
+}
+$('#modPie').addEventListener('click',enfocarFinal);
+$('#modPapel').addEventListener('click',e=>{ if(e.target.id==='modPapel') enfocarFinal(); });
 $('#modDesde').addEventListener('change',()=>{ if(+$('#modHasta').value<+$('#modDesde').value) $('#modHasta').value=$('#modDesde').value; });
 
 $('#formModulo').addEventListener('submit',ev=>{

@@ -6,20 +6,21 @@ function pintarCurso(){
   const c=curso(cursoActual); if(!c) return;
   const g=c.grupo, inf=infoCurso(c), ins=DB.inscripciones.filter(i=>i.cursoId===c.id), N=+g.numClases||0;
   const pct=N?Math.round(inf.dictadas/N*100):0;
-  const tabs=[['clases','bi-list-ol','Clases',N],['asistencia','bi-check2-square','Asistencia',ins.length],['notas','bi-mortarboard','Notas',ins.length],['plan','bi-journal-text','Plan de estudio',(c.plan||[]).length]];
+  const tabs=[['clases','bi-list-ol','Clases',N],['asistencia','bi-check2-square','Asistencia',ins.length],['notas','bi-mortarboard','Notas',ins.length],['modulos','bi-collection','Módulos',(c.modulos||[]).length]];
   $('#detalleCurso').innerHTML=`
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
       <div style="min-width:0"><div class="d-flex gap-1 mb-1"><span class="badge bg-marca-suave text-marca">${esc(c.nivel)}</span>
         <span class="badge ${inf.estado==='En curso'?'text-bg-success':'text-bg-light border'}">${inf.estado}</span></div>
         <h1 class="h2 mb-0">${esc(c.nombre)}</h1></div>
       <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" onclick="imprimirHoja('${tabCurso==='clases'||tabCurso==='plan'?'cronograma':'planilla'}')"><i class="bi bi-printer"></i> Imprimir</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="imprimirHoja('${tabCurso==='clases'||tabCurso==='modulos'?'cronograma':'planilla'}')"><i class="bi bi-printer"></i> Imprimir</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="abrirCurso('${c.id}')"><i class="bi bi-pencil"></i> Editar</button></div>
     </div>
     <div class="ficha mb-3">
       <div><div class="k">Docente</div><div class="v">${esc(g.docente||'—')}</div></div>
+      <div><div class="k">Área</div><div class="v">${esc(area(c.areaId)?.nombre||'—')}</div></div>
       <div><div class="k">Jornada</div><div class="v">${esc(g.jornada||'—')}</div></div>
-      <div><div class="k">Horario</div><div class="v" title="${horarioTexto(g)}">${diasTexto(g)||'—'}</div><div class="small text-muted tabular">${horaRango(g)}</div></div>
+      <div><div class="k">Horario</div><div class="v" title="${esc(horarioTexto(g))}">${diasTexto(g)||'—'}</div><div class="small text-muted tabular">${horaRango(g)}</div></div>
       <div><div class="k">Inicia</div><div class="v tabular">${inf.inicio?fechaLarga(inf.inicio):'—'}</div></div>
       <div><div class="k">Termina</div><div class="v tabular">${inf.fin?fechaLarga(inf.fin):'—'}</div></div>
       <div><div class="k">Avance</div><div class="v tabular">${inf.dictadas}/${N} <small>· ${inf.horas} h</small></div><div class="barra mt-1"><i style="width:${pct}%"></i></div></div>
@@ -27,7 +28,7 @@ function pintarCurso(){
     <ul class="nav tabs-curso mb-3">${tabs.map(([k,ic,t,n])=>`<li class="nav-item"><a href="#" class="nav-link ${tabCurso===k?'active':''}" data-tab="${k}"><i class="bi ${ic}"></i> ${t}<span class="cnt">${n}</span></a></li>`).join('')}</ul>
     <div id="cuerpoTab"></div>`;
   document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); tabCurso=a.dataset.tab; pintarCurso();}));
-  ({clases:tabClases, asistencia:tabAsistencia, notas:tabNotas, plan:tabPlan})[tabCurso](c,inf,ins);
+  ({clases:tabClases, asistencia:tabAsistencia, notas:tabNotas, modulos:tabModulos})[tabCurso](c,inf,ins);
 }
 
 /* ---------- Pestaña: clases 1..N ---------- */
@@ -35,18 +36,19 @@ function tabClases(c,inf){
   const N=+c.grupo.numClases||0, hoy=hoyISO(), sinTema=Array.from({length:N},(_,k)=>k+1).filter(n=>!(c.clases||[]).find(x=>x.n===n&&x.tema)).length;
   const evPorClase={}; (c.evaluaciones||[]).forEach(e=>{ if(e.clase) (evPorClase[e.clase]=evPorClase[e.clase]||[]).push(e); });
   $('#cuerpoTab').innerHTML=`
-    ${sinTema && (c.plan||[]).length?`<div class="alert bg-marca-suave border-0 d-flex flex-wrap align-items-center gap-2 py-2 small">
+    ${sinTema && (c.modulos||[]).length?`<div class="alert bg-marca-suave border-0 d-flex flex-wrap align-items-center gap-2 py-2 small">
       <i class="bi bi-magic text-marca"></i> ${sinTema} ${sinTema===1?'clase no tiene':'clases no tienen'} tema.
-      <button class="btn btn-sm btn-marca ms-auto" onclick="accionRepartir()"><i class="bi bi-stars"></i> Repartir plan de estudio en las clases</button></div>`:''}
+      <button class="btn btn-sm btn-marca ms-auto" onclick="accionRepartir()"><i class="bi bi-stars"></i> Poner el tema de los módulos en las clases vacías</button></div>`:''}
     <div class="card">${Array.from({length:N},(_,k)=>{
-      const n=k+1, cl=(c.clases||[]).find(x=>x.n===n)||{}, f=inf.fechas[k];
+      const n=k+1, cl=(c.clases||[]).find(x=>x.n===n)||{}, f=inf.fechas[k], ses=inf.sesiones[k], mods=modulosDeClase(c,n);
       const estC = !f ? '' : f<hoy ? 'pasada' : f===hoy ? 'hoy' : '';
       const ev=evPorClase[n]||[];
       return `<div class="clase ${estC} ${cl.tema?'':'sin-tema'}" onclick="abrirClase(${n})">
         <div class="num">${n}</div>
-        <div class="fecha">${f?`<b>${DIAS[new Date(f+'T12:00').getDay()]} ${fechaMini(f)}</b>${cl.fecha?'<span class="text-warning"><i class="bi bi-arrow-repeat"></i> reprogramada</span>':hora12(c.grupo.horaIni)}`:'<b>—</b>'}</div>
+        <div class="fecha">${f?`<b>${DIAS[new Date(f+'T12:00').getDay()]} ${fechaMini(f)}</b>${cl.fecha?'<span class="text-warning"><i class="bi bi-arrow-repeat"></i> reprogramada</span>':rangoHoras(ses.ini,ses.fin)}`:'<b>—</b>'}</div>
         <div style="min-width:0"><div class="tema">${esc(cl.tema||'Sin tema asignado')}</div>
           ${cl.detalle?`<div class="det">${esc(cl.detalle)}</div>`:''}
+          ${mods.length?`<div class="meta">${mods.map(x=>`<span class="tag" style="border-color:#cdb8ef;color:#5b2ea6"><i class="bi bi-collection" style="color:#5b2ea6"></i> ${esc(x.m.titulo)}${x.m.items?.length?` · ${x.m.items.length} arch.`:''}</span>`).join('')}</div>`:''}
           ${(cl.metodos?.length||cl.materiales||ev.length)?`<div class="meta">
             ${ev.map(e=>`<span class="tag" style="border-color:var(--marca)"><i class="bi bi-award"></i> ${esc(e.nombre)} · ${e.peso}%</span>`).join('')}
             ${(cl.metodos||[]).map(m=>`<span class="tag"><i class="bi bi-easel"></i> ${esc(m)}</span>`).join('')}
@@ -56,14 +58,14 @@ function tabClases(c,inf){
         <div class="estado text-end">${estC==='hoy'?'<span class="pill pill-hoy">Hoy</span>':estC==='pasada'?'<span class="pill pill-pagada"><i class="bi bi-check2"></i> Dictada</span>':''}</div>
       </div>`}).join('') || '<p class="text-muted p-3 mb-0">Define el número de clases en Editar.</p>'}</div>`;
 }
-function accionRepartir(){ const c=curso(cursoActual), n=repartirPlan(c); guardar(); pintarCurso(); toast(n?`${n} clases con tema asignado desde el plan`:'No había clases vacías'); }
+function accionRepartir(){ const c=curso(cursoActual), n=repartirModulos(c); guardar(); pintarCurso(); toast(n?`${n} clases con tema asignado desde los módulos`:'No había clases vacías'); }
 
 function abrirClase(n){
   const c=curso(cursoActual), cl=(c.clases||[]).find(x=>x.n===n)||{}, f=infoCurso(c).fechas[n-1];
   $('#claN').value=n; $('#tClase').textContent=`Clase ${n} de ${c.grupo.numClases}`+(f?` · ${DIAS_L[new Date(f+'T12:00').getDay()]} ${fechaLarga(f)}`:'');
   $('#claTema').value=cl.tema||''; $('#claDetalle').value=cl.detalle||''; $('#claMateriales').value=cl.materiales||''; $('#claObs').value=cl.obs||'';
   $('#claVirtual').checked=!!cl.virtual; $('#claVideo').value=cl.video||'';
-  $('#claFecha').value=f||'';
+  $('#claFecha').value=f||''; const sesN=infoCurso(c).sesiones[n-1]||{}; $('#claIni').value=sesN.ini||''; $('#claFin').value=sesN.fin||'';
   $('#claMetodos').innerHTML=METODOS.map((m,k)=>`<input type="checkbox" class="btn-check" id="met${k}" value="${m}" ${(cl.metodos||[]).includes(m)?'checked':''}>
     <label class="btn btn-sm btn-outline-secondary rounded-pill" for="met${k}">${m}</label>`).join('');
   $('#claAsis').onclick=()=>{ modal('mClase').hide(); tabCurso='asistencia'; pintarCurso(); };
@@ -72,11 +74,15 @@ function abrirClase(n){
 $('#formClase').addEventListener('submit',ev=>{
   ev.preventDefault();
   const c=curso(cursoActual), n=+$('#claN').value, cl=clase(c,n);
-  const calculada=fechasClases({...c,clases:(c.clases||[]).map(x=>x.n===n?{...x,fecha:undefined}:x)})[n-1];
+  const base=sesionesCurso({...c,clases:(c.clases||[]).map(x=>x.n===n?{...x,fecha:undefined,ini:undefined,fin:undefined}:x)})[n-1]||{};
+  const calculada=base.fecha;
   Object.assign(cl,{tema:$('#claTema').value.trim(),detalle:$('#claDetalle').value.trim(),materiales:$('#claMateriales').value.trim(),obs:$('#claObs').value.trim(),
     virtual:$('#claVirtual').checked, video:$('#claVideo').value.trim(),
     metodos:[...document.querySelectorAll('#claMetodos input:checked')].map(x=>x.value)});
   const f=$('#claFecha').value; if(f && f!==calculada) cl.fecha=f; else delete cl.fecha;
+  const hi=$('#claIni').value, hf=$('#claFin').value;
+  if(hi && hi!==base.ini) cl.ini=hi; else delete cl.ini;
+  if(hf && hf!==base.fin) cl.fin=hf; else delete cl.fin;
   guardar(); modal('mClase').hide(); pintarCurso(); toast(`Clase ${n} guardada`);
 });
 
@@ -143,7 +149,7 @@ function tabNotas(c,inf,ins){
         <th class="resumen">Promedio</th><th>Asist.</th><th>Estado</th></tr></thead>
       <tbody>${ins.map(i=>{const e=est(i.estId);
         return `<tr data-insc="${i.id}"><td class="nom" title="${esc(e.nombre)}">${esc(e.nombre)}</td>
-          ${ev.map(x=>{const v=i.notas?.[x.id]; return `<td><input class="nota ${v!==undefined&&v<cf.notaMin?'baja':''}" type="number" inputmode="decimal" step="0.1" min="0" max="${cf.escala}" data-ev="${x.id}" value="${v!==undefined?(+v).toFixed(1):''}" aria-label="${esc(x.nombre)} de ${esc(e.nombre)}"></td>`}).join('')}
+          ${ev.map(x=>{const v=i.notas?.[x.id], tiene=tieneExamen(i,x); return `<td><div class="d-flex align-items-center justify-content-center gap-1"><input class="nota ${v!==undefined&&v<cf.notaMin?'baja':''}" type="number" inputmode="decimal" step="0.1" min="0" max="${cf.escala}" data-ev="${x.id}" value="${v!==undefined?(+v).toFixed(1):''}" aria-label="${esc(x.nombre)} de ${esc(e.nombre)}"><button type="button" class="btn btn-link p-0 ${tiene?'text-marca':'text-secondary'}" data-examen="${x.id}" title="${tiene?'Ver examen':'Cargar examen'}" aria-label="Examen de ${esc(e.nombre)}"><i class="bi ${tiene?'bi-file-earmark-check-fill':'bi-file-earmark-plus'}"></i></button></div></td>`}).join('')}
           ${celdasResumen(i,c)}</tr>`}).join('')}</tbody>
     </table></div>
     <div class="small text-muted mt-2">El promedio se calcula solo con las evaluaciones que ya tienen nota; debajo se ve qué parte del curso va evaluada.</div>` : sinAlumnas();
@@ -159,6 +165,7 @@ function tabNotas(c,inf,ins){
     tr.insertAdjacentHTML('beforeend',celdasResumen(i,c));
     guardar();
   });
+  tabla.addEventListener('click',e=>{ const b=e.target.closest('[data-examen]'); if(b) abrirExamen(b.closest('tr').dataset.insc,b.dataset.examen); });
   // Enter baja a la siguiente fila, como en una hoja de cálculo
   tabla.addEventListener('keydown',e=>{
     if(e.key!=='Enter') return; const inp=e.target.closest('input.nota'); if(!inp) return; e.preventDefault();
@@ -183,6 +190,7 @@ function pintarEvals(){
     <div class="input-group input-group-sm" style="width:100px"><input type="number" min="0" max="100" class="form-control" value="${e.peso}" data-k="${k}" data-f="peso" aria-label="Porcentaje"><span class="input-group-text">%</span></div>
     <select class="form-select form-select-sm" style="width:110px" data-k="${k}" data-f="clase" aria-label="Clase"><option value="">Sin clase</option>
       ${Array.from({length:N},(_,j)=>`<option value="${j+1}" ${e.clase==j+1?'selected':''}>Clase ${j+1}</option>`).join('')}</select>
+    <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" data-preg="${k}" title="Preguntas del examen"><i class="bi bi-card-checklist"></i> Examen${e.examen?.preguntas?.length?` (${e.examen.preguntas.length})`:''}</button>
     <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar"><i class="bi bi-trash"></i></button></div>`).join('');
   const s=evalsTemp.reduce((a,e)=>a+ +e.peso,0);
   $('#sumaPesos').innerHTML = s===100 ? `<span class="text-success"><i class="bi bi-check-circle"></i> Suman 100%</span>` : `<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Suman ${s}%; deben sumar 100%</span>`;
@@ -190,26 +198,12 @@ function pintarEvals(){
 $('#listaEvals').addEventListener('input',e=>{ const t=e.target; if(t.dataset.k===undefined) return;
   const ev=evalsTemp[+t.dataset.k]; ev[t.dataset.f]= t.dataset.f==='nombre'?t.value : t.value===''?null:+t.value;
   if(t.dataset.f==='peso'){ const s=evalsTemp.reduce((a,x)=>a+ +x.peso,0); $('#sumaPesos').innerHTML = s===100?`<span class="text-success"><i class="bi bi-check-circle"></i> Suman 100%</span>`:`<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Suman ${s}%; deben sumar 100%</span>`; } });
-$('#listaEvals').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(b){ evalsTemp.splice(+b.dataset.del,1); pintarEvals(); } });
+$('#listaEvals').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(b){ evalsTemp.splice(+b.dataset.del,1); pintarEvals(); return; }
+  const p=e.target.closest('[data-preg]'); if(p) abrirPreguntas(+p.dataset.preg); });
 $('#addEval').addEventListener('click',()=>{ evalsTemp.push({id:'ev'+uid(),nombre:'',peso:0,clase:null}); pintarEvals(); [...document.querySelectorAll('#listaEvals input[data-f="nombre"]')].at(-1)?.focus(); });
 $('#formEvals').addEventListener('submit',e=>{ e.preventDefault();
   curso(cursoActual).evaluaciones=evalsTemp.filter(x=>x.nombre.trim()).map(x=>({...x,peso:+x.peso||0}));
   guardar(); modal('mEvals').hide(); pintarCurso(); toast('Evaluaciones guardadas'); });
-
-/* ---------- Pestaña: plan de estudio ---------- */
-function tabPlan(c){
-  const h=(c.plan||[]).reduce((a,m)=>a+(+m.horas||0),0);
-  $('#cuerpoTab').innerHTML=`<div class="card"><div class="card-body">
-    ${c.plan.length?`<div class="small text-muted mb-2">${c.plan.length} módulos${h?` · ${h} h`:''}</div><div class="accordion accordion-flush" id="accPlan">${c.plan.map((m,k)=>`
-      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button ${k?'collapsed':''}" type="button" data-bs-toggle="collapse" data-bs-target="#m${k}">
-        <span class="me-3 text-marca fw-bold tabular">${String(k+1).padStart(2,'0')}</span>${esc(m.titulo)}
-        ${m.horas?`<span class="ms-auto me-3 small text-muted">${m.horas} h</span>`:''}</button></h3>
-      <div id="m${k}" class="accordion-collapse collapse ${k?'':'show'}" data-bs-parent="#accPlan"><div class="accordion-body">
-        <ul class="mb-0">${m.temas.map(t=>`<li>${esc(t)}</li>`).join('')||'<li class="text-muted">Sin temas</li>'}</ul></div></div></div>`).join('')}</div>`
-    :`<div class="text-center py-4 text-muted"><i class="bi bi-file-earmark-text fs-1"></i><p>Este curso aún no tiene plan de estudio.</p>
-        <button class="btn btn-marca" onclick="abrirCurso('${c.id}')">Subir plan de estudio</button></div>`}
-  </div></div>`;
-}
 
 /* ---------- Hojas imprimibles ---------- */
 function imprimirHoja(tipo){
@@ -230,7 +224,7 @@ function imprimirHoja(tipo){
   } else {
     cuerpo=`<table><thead><tr><th>Clase</th><th>Fecha</th><th class="l">Tema y contenido</th><th class="l">Metodología</th><th class="l">Materiales</th><th class="l">Evaluación</th></tr></thead>
       <tbody>${Array.from({length:N},(_,k)=>{const cl=(c.clases||[]).find(x=>x.n===k+1)||{}, f=inf.fechas[k], e=ev.filter(x=>x.clase==k+1);
-        return `<tr><td><b>${k+1}</b></td><td>${f?DIAS[new Date(f+'T12:00').getDay()]+' '+fechaMini(f):''}</td><td class="l"><b>${esc(cl.tema||'')}</b>${cl.detalle?'<br>'+esc(cl.detalle):''}</td>
+        return `<tr><td><b>${k+1}</b></td><td>${f?DIAS[new Date(f+'T12:00').getDay()]+' '+fechaMini(f)+'<br>'+rangoHoras(inf.sesiones[k].ini,inf.sesiones[k].fin):''}</td><td class="l"><b>${esc(cl.tema||'')}</b>${cl.detalle?'<br>'+esc(cl.detalle):''}${modulosDeClase(c,k+1).map(x=>'<br><i>Módulo: '+esc(x.m.titulo)+'</i>').join('')}</td>
           <td class="l">${esc((cl.metodos||[]).join(', '))}</td><td class="l">${esc(cl.materiales||'')}</td><td class="l">${e.map(x=>esc(x.nombre)+' ('+x.peso+'%)').join('<br>')}</td></tr>`}).join('')}</tbody></table>`;
   }
   $('#areaRecibo').innerHTML=`<div class="hoja">${cab}${cuerpo}</div>`;
@@ -323,11 +317,11 @@ function exportar(){
   a.download=`academia-${hoyISO()}.json`; a.click();
 }
 function importar(inp){
-  const r=new FileReader(); r.onload=()=>{ try{ DB=JSON.parse(r.result); guardar(); cargarConfig(); render(); toast('Datos importados'); }catch(e){ toast('El archivo no es un respaldo válido'); } };
+  const r=new FileReader(); r.onload=()=>{ try{ DB=JSON.parse(r.result); migrarEsquema(); guardar(); cargarConfig(); render(); toast('Datos importados'); }catch(e){ toast('El archivo no es un respaldo válido'); } };
   r.readAsText(inp.files[0]); inp.value='';
 }
 function reiniciar(){
   const b=event.target.closest('button');
-  if(b.dataset.ok){ DB=datosEjemplo(); guardar(); cargarConfig(); render(); toast('Datos de ejemplo cargados'); delete b.dataset.ok; b.innerHTML='<i class="bi bi-arrow-counterclockwise"></i> Cargar datos de ejemplo'; }
+  if(b.dataset.ok){ DB=datosEjemplo(); migrarEsquema(); guardar(); cargarConfig(); render(); toast('Datos de ejemplo cargados'); delete b.dataset.ok; b.innerHTML='<i class="bi bi-arrow-counterclockwise"></i> Cargar datos de ejemplo'; }
   else { b.dataset.ok=1; b.textContent='¿Seguro? Borra todo. Clic otra vez'; setTimeout(()=>{delete b.dataset.ok;b.innerHTML='<i class="bi bi-arrow-counterclockwise"></i> Cargar datos de ejemplo';},4000); }
 }

@@ -28,6 +28,8 @@
       <a class="nav-link active" href="#" data-ir="inicio"><i class="bi bi-grid-1x2"></i> Inicio</a>
       <a class="nav-link" href="#" data-ir="estudiantes"><i class="bi bi-people"></i> <span data-term="Estudiantes">Estudiantes</span></a>
       <a class="nav-link" href="#" data-ir="cursos"><i class="bi bi-journal-bookmark"></i> Cursos</a>
+      <a class="nav-link" href="#" data-ir="modulos"><i class="bi bi-collection"></i> Módulos</a>
+      <a class="nav-link" href="#" data-ir="profesionales"><i class="bi bi-person-badge"></i> Profesionales</a>
       <a class="nav-link" href="#" data-ir="reposiciones"><i class="bi bi-arrow-repeat"></i> Reposiciones <span class="badge rounded-pill bg-marca-suave text-marca ms-auto" id="badgeRepo" hidden></span></a>
       <a class="nav-link" href="#" data-ir="cuotas"><i class="bi bi-calendar-check"></i> Cuotas <span class="badge rounded-pill text-bg-danger ms-auto" id="badgeVencidas" hidden></span></a>
       <a class="nav-link" href="#" data-ir="pagos"><i class="bi bi-cash-coin"></i> Pagos y recibos</a>
@@ -48,7 +50,7 @@
       <span class="navbar-brand display-font" id="lblNegocioM">Studio</span>
       <select class="form-select form-select-sm w-auto" id="menuMovil">
         <option value="inicio">Inicio</option><option value="estudiantes">Estudiantes</option>
-        <option value="cursos">Cursos</option><option value="reposiciones">Reposiciones</option><option value="cuotas">Cuotas</option><option value="pagos">Pagos</option><option value="marketing">Marketing</option><option value="config">Configuración</option>
+        <option value="cursos">Cursos</option><option value="modulos">Módulos</option><option value="profesionales">Profesionales</option><option value="reposiciones">Reposiciones</option><option value="cuotas">Cuotas</option><option value="pagos">Pagos</option><option value="marketing">Marketing</option><option value="config">Configuración</option>
       </select>
     </nav>
 
@@ -115,6 +117,41 @@
       <section data-vista="curso">
         <button class="btn btn-link text-marca px-0 mb-2" onclick="ir('cursos')"><i class="bi bi-arrow-left"></i> Volver a cursos</button>
         <div id="detalleCurso"></div>
+      </section>
+
+      <!-- ===== BIBLIOTECA DE MÓDULOS ===== -->
+      <section data-vista="modulos">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div><h1 class="h2 mb-0">Módulos</h1><small class="text-muted">Biblioteca general: cada módulo se crea una vez y se puede usar en varios cursos, indicando en qué clases va.</small></div>
+          <div class="d-flex gap-2">
+            <div class="input-group"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input class="form-control" id="buscarMod" placeholder="Buscar módulo"></div>
+            <button class="btn btn-marca text-nowrap" onclick="abrirModulo()"><i class="bi bi-plus-lg"></i> Nuevo módulo</button>
+          </div>
+        </div>
+        <div class="row g-3" id="gridModulos"></div>
+      </section>
+
+      <!-- ===== PROFESIONALES Y ÁREAS ===== -->
+      <section data-vista="profesionales">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div><h1 class="h2 mb-0">Profesionales</h1><small class="text-muted">Cada profesional dicta una o varias áreas, con su nivel y su horario. Marca en qué áreas y niveles puede hacer reposiciones.</small></div>
+          <button class="btn btn-marca" onclick="abrirProf()"><i class="bi bi-plus-lg"></i> Nuevo profesional</button>
+        </div>
+        <div class="card mb-3"><div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h5 mb-0">Áreas</h2><small class="text-muted">Los cursos y las reposiciones se anclan a un área</small></div>
+          <div class="d-flex flex-wrap gap-2 mb-3" id="listaAreas"></div>
+          <form class="d-flex flex-wrap gap-2 align-items-center" id="formArea">
+            <input class="form-control form-control-sm" style="max-width:240px" id="areaNombre" placeholder="Nueva área (ej. Spa de manos)" required maxlength="40" aria-label="Nombre del área">
+            <input type="color" class="form-control form-control-sm form-control-color" id="areaColor" value="#7a2e5c" aria-label="Color del área">
+            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-plus-lg"></i> Agregar área</button>
+          </form>
+        </div></div>
+        <div class="card"><div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Profesional</th><th>Áreas y niveles</th><th>Horario</th><th>Cursos</th><th></th></tr></thead>
+            <tbody id="tablaProf"></tbody>
+          </table>
+        </div></div>
       </section>
 
       <!-- ===== CUOTAS ===== -->
@@ -366,6 +403,9 @@
     <div class="col-md-6"><label class="form-label small" for="estCurso">Curso</label><select class="form-select" id="estCurso"><option value="">— Ninguno por ahora —</option></select></div>
     <div class="col-md-3"><label class="form-label small" for="estValor">Valor acordado</label><input type="number" class="form-control" id="estValor" min="0"></div>
     <div class="col-md-3"><label class="form-label small" for="estDesc">Descuento</label><input type="number" class="form-control" id="estDesc" min="0" value="0"></div>
+    <div class="col-12" id="estCodigoWrap" hidden><label class="form-label small" for="estCodigo">Código de descuento del curso</label>
+      <div class="input-group" style="max-width:360px"><input class="form-control text-uppercase" id="estCodigo" autocomplete="off" placeholder="Ej: BIENVENIDA10"><button type="button" class="btn btn-outline-secondary" id="estCodigoBtn">Aplicar</button></div>
+      <div class="small" id="estCodigoMsg"></div></div>
     <div class="col-12" id="bloqueCuotasEst" hidden>
       <div class="bg-marca-suave rounded p-3 mt-2">
         <div class="row g-2" data-cuotas="est"></div>
@@ -403,7 +443,9 @@
     <div class="col-12"><span class="form-label small d-block mb-1">Metodología</span><div class="d-flex flex-wrap gap-1" id="claMetodos"></div></div>
     <div class="col-12"><label class="form-label small" for="claMateriales">Materiales</label><input class="form-control" id="claMateriales" placeholder="Separados por coma: brochas, bases, esponjas…"></div>
     <div class="col-6"><label class="form-label small" for="claFecha">Fecha</label><input type="date" class="form-control" id="claFecha"></div>
-    <div class="col-6 d-flex align-items-end"><small class="text-muted" id="claFechaNota">Cámbiala solo si la clase se reprograma.</small></div>
+    <div class="col-6 d-flex align-items-end"><small class="text-muted" id="claFechaNota">Cambia fecha u hora solo si la clase se reprograma.</small></div>
+    <div class="col-6"><label class="form-label small" for="claIni">Desde</label><input type="time" class="form-control" id="claIni"></div>
+    <div class="col-6"><label class="form-label small" for="claFin">Hasta</label><input type="time" class="form-control" id="claFin"></div>
     <div class="col-12"><label class="form-label small" for="claObs">Observaciones de la docente</label><textarea class="form-control" id="claObs" rows="2"></textarea></div>
     <div class="col-12"><div class="border rounded p-2">
       <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="claVirtual"><label class="form-check-label small fw-semibold" for="claVirtual">Se puede reponer viendo la grabación</label></div>
@@ -418,7 +460,7 @@
 </form></div></div>
 
 <!-- ===== Modal evaluaciones ===== -->
-<div class="modal fade" id="mEvals" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formEvals">
+<div class="modal fade" id="mEvals" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formEvals">
   <div class="modal-header"><h2 class="modal-title h5">Evaluaciones del curso</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body">
     <div class="small text-muted mb-2">Nombre, porcentaje y clase en la que se hace.</div>
@@ -438,7 +480,9 @@
       <div class="col-md-4"><label class="form-label small" for="espFecha">Fecha</label><input type="date" class="form-control" id="espFecha" required></div>
       <div class="col-6 col-md-4"><label class="form-label small" for="espIni">Desde</label><input type="time" class="form-control" id="espIni" required></div>
       <div class="col-6 col-md-4"><label class="form-label small" for="espFin">Hasta</label><input type="time" class="form-control" id="espFin" required></div>
-      <div class="col-md-6"><label class="form-label small" for="espDocente">Docente</label><input class="form-control" id="espDocente" list="listaDocentes2"><datalist id="listaDocentes2"></datalist></div>
+      <div class="col-md-6"><label class="form-label small" for="espArea">Área</label><select class="form-select" id="espArea"></select></div>
+      <div class="col-md-6"><label class="form-label small" for="espProf">Profesional que repone</label><select class="form-select" id="espProf"></select></div>
+      <div class="col-12" id="espAviso"></div>
       <div class="col-6 col-md-3"><label class="form-label small" for="espCupos">Cupos</label><input type="number" min="1" max="30" class="form-control" id="espCupos" value="4"></div>
       <div class="col-6 col-md-3"><label class="form-label small" for="espNotas">Lugar / nota</label><input class="form-control" id="espNotas" placeholder="Sala 2"></div>
       <div class="col-md-6"><label class="form-label small" for="espCurso">Curso</label><select class="form-select" id="espCurso"></select></div>
@@ -510,33 +554,26 @@
     <div class="col-md-8"><label class="form-label small" for="curNombre">Nombre del curso</label><input class="form-control" id="curNombre" required></div>
     <div class="col-md-4"><label class="form-label small" for="curPrecio">Precio</label><input type="number" class="form-control" id="curPrecio" min="0" required></div>
     <div class="col-md-4"><label class="form-label small" for="curNivel">Nivel</label><select class="form-select" id="curNivel"><option>Básico</option><option>Intermedio</option><option>Avanzado</option><option>Profesional</option></select></div>
-    <div class="col-md-8"><label class="form-label small" for="curDocente">Docente</label><input class="form-control" id="curDocente" list="listaDocentes" placeholder="Nombre de la docente"><datalist id="listaDocentes"></datalist></div>
+    <div class="col-md-4"><label class="form-label small" for="curArea">Área</label><select class="form-select" id="curArea"></select></div>
+    <div class="col-md-4"><label class="form-label small" for="curProf">Docente</label><select class="form-select" id="curProf"></select></div>
+    <div class="col-12"><small class="text-muted" id="curProfNota"></small></div>
 
     <div class="col-12 mt-3"><h3 class="h6 mb-0">Grupo y horario</h3></div>
     <div class="col-md-4"><label class="form-label small" for="curJornada">Jornada</label>
       <select class="form-select" id="curJornada"><option>Mañana</option><option>Tarde</option><option>Noche</option><option>Sabatina</option><option>Dominical</option></select></div>
-    <div class="col-6 col-md-4"><label class="form-label small" for="curHoraIni">Hora inicio</label><input type="time" class="form-control" id="curHoraIni" value="09:00"></div>
-    <div class="col-6 col-md-4"><label class="form-label small" for="curHoraFin">Hora fin</label><input type="time" class="form-control" id="curHoraFin" value="12:00"></div>
-    <div class="col-12"><span class="form-label small d-block mb-1">Días de clase</span>
-      <div class="btn-group flex-wrap" role="group" id="curDias"></div></div>
     <div class="col-6 col-md-4"><label class="form-label small" for="curInicio">Primera clase</label><input type="date" class="form-control" id="curInicio"></div>
     <div class="col-6 col-md-4"><label class="form-label small" for="curNumClases">N.º de clases</label><input type="number" min="1" max="200" class="form-control" id="curNumClases" value="16"></div>
-    <div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
+    <div class="col-12"><span class="form-label small d-block mb-1">Horario semanal <span class="text-muted">· cada fila es una clase; un mismo día puede tener varias a distintas horas</span></span>
+      <div id="curFranjas" class="d-flex flex-column gap-2"></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="curAddFranja"><i class="bi bi-plus-lg"></i> Agregar horario</button></div>
+    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="curFestivos" checked><label class="form-check-label small" for="curFestivos">Saltar festivos de Colombia</label></div></div>
     <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>
     <div class="col-12"><label class="form-label small" for="curDesc">Descripción</label><textarea class="form-control" id="curDesc" rows="2"></textarea></div>
 
-    <div class="col-12 mt-3 d-flex justify-content-between align-items-center">
-      <h3 class="h6 mb-0">Plan de estudio</h3>
-      <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-file-earmark-arrow-up"></i> Subir .txt / .md<input type="file" accept=".txt,.md" hidden onchange="cargarPlanArchivo(this)"></label>
-    </div>
-    <div class="col-12">
-      <textarea class="form-control font-monospace small" id="curPlanTexto" rows="8" placeholder="Pega aquí el plan de estudio tal como lo tengas. Ej:&#10;Módulo 1: Teoría del color (4h)&#10;- Círculo cromático&#10;- Subtonos de piel&#10;Módulo 2: Preparación de la piel..."></textarea>
-      <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
-        <button type="button" class="btn btn-sm ia-badge" onclick="organizarPlanIA()"><i class="bi bi-stars"></i> Organizar con IA</button>
-        <small class="text-muted" id="iaEstado">Convierte el texto en módulos con temas y horas.</small>
-      </div>
-      <div id="previewPlan" class="mt-3"></div>
-    </div>
+    <div class="col-12 mt-3 d-flex justify-content-between align-items-center"><h3 class="h6 mb-0">Códigos de descuento</h3>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="curAddDesc"><i class="bi bi-plus-lg"></i> Agregar código</button></div>
+    <div class="col-12"><div id="curDescuentos" class="d-flex flex-column gap-2"></div>
+      <small class="text-muted d-block mt-1">Se escriben al inscribir al estudiante en este curso. Los módulos se manejan en la pestaña «Módulos» del curso.</small></div>
   </div>
   <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar curso</button></div>
 </form></div></div>
@@ -557,6 +594,112 @@
   <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca"><i class="bi bi-printer"></i> Guardar pago</button></div>
 </form></div></div>
 
+<!-- ===== Modal módulo (biblioteca) ===== -->
+<div class="modal fade" id="mModulo" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formModulo">
+  <div class="modal-header"><h2 class="modal-title h5" id="tModulo">Módulo</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <input type="hidden" id="modId">
+    <div class="col-md-8"><label class="form-label small" for="modTitulo">Título</label><input class="form-control" id="modTitulo" required maxlength="120"></div>
+    <div class="col-6 col-md-2"><label class="form-label small" for="modHoras">Horas</label><input type="number" min="0" step="0.5" class="form-control" id="modHoras"></div>
+    <div class="col-6 col-md-2"><label class="form-label small" for="modArea">Área</label><select class="form-select" id="modArea"></select></div>
+    <div class="col-12"><label class="form-label small" for="modDesc">Descripción</label><textarea class="form-control" id="modDesc" rows="2"></textarea></div>
+    <div class="col-12"><label class="form-label small" for="modTemas">Temas <span class="text-muted">(uno por línea)</span></label><textarea class="form-control" id="modTemas" rows="4"></textarea></div>
+    <div class="col-12 mt-2 d-flex flex-wrap justify-content-between align-items-center gap-2"><h3 class="h6 mb-0">Material</h3>
+      <div class="d-flex gap-2"><label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-paperclip"></i> Subir archivos<input type="file" id="modArchivos" multiple hidden accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*,video/mp4,audio/*"></label>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="modAddLink"><i class="bi bi-link-45deg"></i> Agregar enlace</button></div></div>
+    <div class="col-12"><div id="modItems" class="d-flex flex-column gap-2"></div>
+      <small class="text-muted d-block mt-1">PDF, Word, Excel, PowerPoint, imágenes, audio y video (hasta 20 MB cada uno). Usa las flechas para ordenar.</small></div>
+    <div class="col-12 d-none" id="modEnCursos"></div>
+    <div class="col-12 d-none border rounded p-2" id="modAdjuntar"><div class="small fw-semibold mb-1">Agregar este módulo al curso</div>
+      <div class="d-flex flex-wrap gap-2 align-items-center small">Clases <select class="form-select form-select-sm w-auto" id="modDesde"></select> a <select class="form-select form-select-sm w-auto" id="modHasta"></select></div></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar módulo</button></div>
+</form></div></div>
+
+<!-- ===== Modal agregar módulo de la biblioteca a un curso ===== -->
+<div class="modal fade" id="mModAgregar" tabindex="-1"><div class="modal-dialog"><form class="modal-content" id="formModAgregar">
+  <div class="modal-header"><h2 class="modal-title h5">Agregar módulo al curso</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <div class="col-12"><label class="form-label small" for="maModulo">Módulo de la biblioteca</label><select class="form-select" id="maModulo" required></select></div>
+    <div class="col-12"><span class="form-label small d-block">¿En qué clases va?</span>
+      <div class="d-flex flex-wrap gap-2 align-items-center small">Desde la clase <select class="form-select form-select-sm w-auto" id="maDesde"></select> hasta la <select class="form-select form-select-sm w-auto" id="maHasta"></select></div>
+      <small class="text-muted">Puede cruzarse con otro módulo (por ejemplo, uno en las clases 1–2 y otro en la 2–3).</small></div>
+    <div class="col-12" id="maVista"></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Agregar</button></div>
+</form></div></div>
+
+<!-- ===== Modal importar plan de estudio (texto) ===== -->
+<div class="modal fade" id="mPlan" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formPlan">
+  <div class="modal-header"><h2 class="modal-title h5">Crear módulos desde un plan de estudio</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="d-flex justify-content-between align-items-center mb-2"><span class="small text-muted">Pega el plan o sube un .txt / .md. Cada «Módulo» o «Unidad» será un módulo de la biblioteca.</span>
+      <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-file-earmark-arrow-up"></i> Subir archivo<input type="file" accept=".txt,.md" hidden id="planArchivo"></label></div>
+    <textarea class="form-control font-monospace small" id="planTexto" rows="8" placeholder="Módulo 1: Teoría del color (4h)&#10;- Círculo cromático&#10;- Subtonos de piel&#10;Módulo 2: Preparación de la piel..."></textarea>
+    <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+      <button type="button" class="btn btn-sm ia-badge" id="planOrganizar"><i class="bi bi-stars"></i> Organizar</button>
+      <small class="text-muted" id="planEstado">Convierte el texto en módulos con temas y horas.</small></div>
+    <div id="planPreview" class="mt-3"></div>
+    <div class="form-check mt-2" id="planReemplazaWrap"><input class="form-check-input" type="checkbox" id="planReemplaza"><label class="form-check-label small" for="planReemplaza">Quitar del curso los módulos actuales antes de agregar estos</label></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Crear y repartir en las clases</button></div>
+</form></div></div>
+
+<!-- ===== Vista previa de archivo ===== -->
+<div class="modal fade" id="mVista" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h2 class="modal-title h6 text-truncate" id="tVista"></h2>
+    <a class="btn btn-sm btn-outline-secondary ms-auto me-2" id="vistaDescarga"><i class="bi bi-download"></i> Descargar</a><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body p-0" id="cuerpoVista" style="min-height:60vh"></div>
+</div></div></div>
+
+<!-- ===== Modal preguntas del examen ===== -->
+<div class="modal fade" id="mPreguntas" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" id="formPreguntas">
+  <div class="modal-header"><h2 class="modal-title h5" id="tPreguntas">Examen</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <label class="form-label small" for="exInstr">Instrucciones</label><input class="form-control mb-3" id="exInstr" maxlength="300" placeholder="Ej: Marca la respuesta correcta. Tiempo sugerido: 30 min.">
+    <div id="listaPreguntas" class="d-flex flex-column gap-3"></div>
+    <div class="d-flex flex-wrap gap-2 mt-3" id="addPregunta"></div>
+    <div class="small text-muted mt-3"><i class="bi bi-shield-lock"></i> Si alguien copia las preguntas, el texto copiado incluye un aviso de que no se debe resolver el examen con ayuda externa.</div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary me-auto" id="exCopiar"><i class="bi bi-clipboard"></i> Copiar preguntas</button>
+    <button type="button" class="btn btn-light" id="exCancelar">Cancelar</button><button class="btn btn-marca">Guardar preguntas</button></div>
+</form></div></div>
+
+<!-- ===== Modal examen de un estudiante ===== -->
+<div class="modal fade" id="mExamen" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h2 class="modal-title h5" id="tExamen">Examen</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><div class="row g-3">
+    <div class="col-lg-5"><div class="d-flex justify-content-between align-items-center mb-2"><h3 class="h6 mb-0">Examen escaneado o fotografiado</h3>
+      <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-camera"></i> Subir foto o PDF<input type="file" id="exArchivos" multiple hidden accept="image/*,application/pdf"></label></div>
+      <div id="exLista" class="d-flex flex-column gap-2"></div></div>
+    <div class="col-lg-7"><h3 class="h6">Respuestas</h3><div id="exRespuestas" class="examen-prot"></div></div>
+  </div></div>
+  <div class="modal-footer"><div class="me-auto small tabular" id="exResumen"></div>
+    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+    <button type="button" class="btn btn-outline-secondary" id="exAplicar"><i class="bi bi-check2-circle"></i> Poner esta nota</button>
+    <button type="button" class="btn btn-marca" id="exGuardar">Guardar</button></div>
+</div></div></div>
+
+<!-- ===== Modal profesional ===== -->
+<div class="modal fade" id="mProf" tabindex="-1"><div class="modal-dialog modal-lg"><form class="modal-content" id="formProf">
+  <div class="modal-header"><h2 class="modal-title h5" id="tProf">Profesional</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body row g-2">
+    <input type="hidden" id="profId">
+    <div class="col-md-5"><label class="form-label small" for="profNombre">Nombre</label><input class="form-control" id="profNombre" required maxlength="80"></div>
+    <div class="col-md-4"><label class="form-label small" for="profTel">WhatsApp</label><input class="form-control" id="profTel"></div>
+    <div class="col-md-3 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="profActivo" checked><label class="form-check-label small" for="profActivo">Activo</label></div></div>
+    <div class="col-12 mt-3 d-flex justify-content-between align-items-center"><h3 class="h6 mb-0">Áreas que dicta</h3>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="profAddArea"><i class="bi bi-plus-lg"></i> Agregar área</button></div>
+    <div class="col-12"><div id="profAreas" class="d-flex flex-column gap-2"></div>
+      <small class="text-muted">Marca los niveles que dicta en cada área y si puede hacer reposiciones de ese nivel.</small></div>
+    <div class="col-12 mt-3 d-flex justify-content-between align-items-center"><h3 class="h6 mb-0">Horario semanal</h3>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="profAddHorario"><i class="bi bi-plus-lg"></i> Agregar horario</button></div>
+    <div class="col-12"><div id="profHorario" class="d-flex flex-column gap-2"></div></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-danger me-auto" id="profEliminar" onclick="eliminarProf(this)"><i class="bi bi-trash"></i> Eliminar</button>
+    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-marca">Guardar</button></div>
+</form></div></div>
+
 <div id="areaRecibo"></div>
 <div class="toast-container position-fixed bottom-0 end-0 p-3"><div class="toast text-bg-dark" id="toast"><div class="toast-body" id="toastTxt"></div></div></div>
 
@@ -565,6 +708,8 @@
 <script src="/admin-curso.js"></script>
 <script src="/admin-marketing.js"></script>
 <script src="/admin-reposiciones.js"></script>
+<script src="/admin-modulos.js"></script>
+<script src="/admin-profesionales.js"></script>
 <script src="/admin-boot.js"></script>
 </body>
 </html>

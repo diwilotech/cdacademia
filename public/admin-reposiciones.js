@@ -58,17 +58,17 @@ function pintarReposiciones(){
   $('#semanaLbl').textContent = d0.getMonth()===d6.getMonth()
     ? `${d0.getDate()} – ${d6.getDate()} de ${d6.toLocaleDateString('es-CO',{month:'long'})} ${d6.getFullYear()}`
     : `${fechaMini(semIni)} – ${fechaMini(finSem)} ${d6.getFullYear()}`;
-  const clasesDia = iso => DB.cursos.flatMap(c=>{ const k=fechasClases(c).indexOf(iso); return k<0?[]:[{c,n:k+1}]; });
+  const clasesDia = iso => DB.cursos.flatMap(c=>sesionesCurso(c).flatMap((x,k)=>x.fecha===iso?[{c,n:k+1,x}]:[]));
   $('#semanaRepo').innerHTML=Array.from({length:7},(_,k)=>{
     const iso=sumarDias(semIni,k), dia=new Date(iso+'T12:00');
     const items=[
-      ...clasesDia(iso).map(({c,n})=>({h:c.grupo.horaIni, html:`<div class="ev ev-clase"><div class="h">${hora12(c.grupo.horaIni)}</div>
+      ...clasesDia(iso).map(({c,n,x})=>({h:x.ini, html:`<div class="ev ev-clase"><div class="h">${hora12(x.ini)}</div>
         <div class="t">${n}. ${esc(temaClase(c,n))}</div><div>${esc(c.nombre)}</div></div>`})),
       ...DB.espacios.filter(x=>x.fecha===iso).map(x=>{ const ins=reposDeEspacio(x.id), lleno=ins.length>=x.cupos, c=curso(x.cursoId);
         return {h:x.horaIni, html:`<button type="button" class="ev ev-esp ${lleno?'lleno':''} ${iso<hoy?'pasado':''}" onclick="abrirEspacio('${x.id}')">
           <div class="h"><i class="bi bi-arrow-repeat"></i> ${hora12(x.horaIni)}</div>
           <div class="t">${x.clase?`${x.clase}. ${esc(temaClase(c,x.clase))}`:'Reposición libre'}</div>
-          <div>${esc(x.docente||'')}${c?` · ${esc(c.nombre)}`:''}</div>
+          <div>${esc(docenteEsp(x))}${c?` · ${esc(c.nombre)}`:''}${area(x.areaId)?` · <b>${esc(area(x.areaId).nombre)}</b>`:''}</div>
           <div class="cupos">${Array.from({length:x.cupos},(_,j)=>`<i class="${j<ins.length?'o':''}"></i>`).join('')}</div></button>`}; })
     ].sort((a,b)=>a.h.localeCompare(b.h));
     return `<div class="dia ${iso===hoy?'hoy':''}"><div class="dia-cab"><span>${DIAS[dia.getDay()]}<b>${dia.getDate()}</b></span>
@@ -112,7 +112,7 @@ function botonWARepo(x){
   let txt;
   if(x.esp){
     const costo = x.costo===0 ? (x.motivo==='J'?'No tiene costo por la excusa médica.':'No tiene costo.') : x.pago ? 'Ya está paga.' : `Valor: ${money(x.costo)}.`;
-    txt=`Hola ${nombre} 👋 Tu reposición de la clase ${x.n} (${x.tema}) de ${x.c.nombre} quedó para el ${DIAS_L[new Date(x.esp.fecha+'T12:00').getDay()]} ${fechaLarga(x.esp.fecha)} a las ${hora12(x.esp.horaIni)}${x.esp.docente?` con ${x.esp.docente}`:''}. ${costo} — ${cf.nombre}`;
+    txt=`Hola ${nombre} 👋 Tu reposición de la clase ${x.n} (${x.tema}) de ${x.c.nombre} quedó para el ${DIAS_L[new Date(x.esp.fecha+'T12:00').getDay()]} ${fechaLarga(x.esp.fecha)} a las ${hora12(x.esp.horaIni)}${docenteEsp(x.esp)?` con ${docenteEsp(x.esp)}`:''}. ${costo} — ${cf.nombre}`;
   } else {
     const prox=opcionesEspacio(x).filter(o=>!o.lleno && o.score<3).slice(0,3);
     txt=`Hola ${nombre} 👋 Te quedó pendiente reponer la clase ${x.n} (${x.tema}) de ${x.c.nombre}.${prox.length?` Tenemos estos espacios:\n${prox.map(o=>`• ${DIAS_L[new Date(o.x.fecha+'T12:00').getDay()]} ${fechaLarga(o.x.fecha)}, ${hora12(o.x.horaIni)}`).join('\n')}\n¿Cuál te sirve?`:' ¿Qué día te queda bien?'}${x.costo?` La reposición tiene un valor de ${money(x.costo)}.`:''} — ${cf.nombre}`;
@@ -126,7 +126,10 @@ function opcionesEspacio(x){
   return (DB.espacios||[]).filter(s=>s.fecha>=hoy).map(s=>{
     const ocup=reposDeEspacio(s.id).filter(y=>!(y.i.id===x.i.id&&y.n===x.n)).length, lleno=ocup>=s.cupos;
     let score, nota;
-    if(s.cursoId===x.c.id && s.clase===x.n){ score=0; nota='<span class="text-success fw-semibold"><i class="bi bi-star-fill"></i> Es justo esta clase</span>'; }
+    const pro=profesional(s.profesionalId), areaX=x.c.areaId;
+    if(areaX && s.areaId && s.areaId!==areaX){ score=3; nota=`<span class="text-danger">Es de otra área (${esc(area(s.areaId)?.nombre||'')})</span>`; }
+    else if(areaX && pro && !puedeReponer(pro,areaX,x.c.nivel)){ score=3; nota=`<span class="text-danger">${esc(pro.nombre)} no repone ${esc(area(areaX)?.nombre||'esta área')} nivel ${esc(x.c.nivel)}</span>`; }
+    else if(s.cursoId===x.c.id && s.clase===x.n){ score=0; nota='<span class="text-success fw-semibold"><i class="bi bi-star-fill"></i> Es justo esta clase</span>'; }
     else if(!s.clase && (s.cursoId===x.c.id)){ score=1; nota='Libre del curso: repone su propio tema'; }
     else if(!s.clase && !s.cursoId){ score=2; nota='Libre: repone su propio tema'; }
     else { score=3; nota=`<span class="text-danger">Es para ${s.clase?`la clase ${s.clase}`:'otro curso'}</span>`; }
@@ -154,7 +157,7 @@ function abrirAgendar(inscId,n){
   $('#agLista').innerHTML = virtualHtml + (ops.length ? ops.map((o,k)=>`<label class="slot ${o.lleno?'opacity-50':''}" style="cursor:${o.lleno?'not-allowed':'pointer'}">
       <input type="radio" class="form-check-input mt-0" name="agEsp" value="${o.x.id}" ${o.lleno?'disabled':''} ${x.r.espacioId===o.x.id||(!x.r.espacioId&&k===0&&!o.lleno&&o.score<3)?'checked':''}>
       <div class="flex-grow-1 small"><div class="fw-semibold">${DIAS[new Date(o.x.fecha+'T12:00').getDay()]} ${fechaLarga(o.x.fecha)} · ${horaRango(o.x)}</div>
-        <div>${o.x.clase?`Clase ${o.x.clase} · ${esc(temaClase(curso(o.x.cursoId),o.x.clase))}`:'Reposición libre'} · ${esc(o.x.docente||'')}</div>
+        <div>${o.x.clase?`Clase ${o.x.clase} · ${esc(temaClase(curso(o.x.cursoId),o.x.clase))}`:'Reposición libre'} · ${esc(docenteEsp(o.x))}${area(o.x.areaId)?` · ${esc(area(o.x.areaId).nombre)}`:''}</div>
         <div>${o.nota}</div></div>
       <span class="small tabular text-nowrap ${o.lleno?'text-danger':'text-muted'}">${o.lleno?'Lleno':`${o.x.cupos-o.ocup} libres`}</span></label>`).join('')
     : '<div class="small text-muted">No hay espacios presenciales abiertos desde hoy. Abre uno nuevo.</div>');
@@ -238,17 +241,40 @@ function opcionesClaseEsp(cursoId,sel){
 function abrirEspacio(id,fecha,pre){
   const x=id?espacio(id):null; espActual=id; espAsignar=pre?.asignar||null;
   const base = x || {fecha:fecha||hoyISO(), horaIni:'13:00', horaFin:'16:00', docente:'', cursoId:pre?.cursoId||'', clase:pre?.clase||null, cupos:4, notas:''};
-  if(!x && pre?.cursoId){ const g=curso(pre.cursoId).grupo; base.docente=g.docente||''; }
+  if(!x && pre?.cursoId){ const cc=curso(pre.cursoId); base.areaId=cc.areaId||''; base.profesionalId=cc.grupo?.profesionalId||''; }
   $('#tEsp').textContent = x ? `Espacio · ${DIAS_L[new Date(x.fecha+'T12:00').getDay()]} ${fechaLarga(x.fecha)}` : 'Nuevo espacio de reposición';
   $('#espId').value=id||''; $('#espFecha').value=base.fecha; $('#espIni').value=base.horaIni; $('#espFin').value=base.horaFin;
-  $('#espDocente').value=base.docente; $('#espCupos').value=base.cupos; $('#espNotas').value=base.notas||'';
-  $('#listaDocentes2').innerHTML=[...new Set(DB.cursos.map(c=>c.grupo?.docente).filter(Boolean))].map(d=>`<option value="${esc(d)}">`).join('');
+  $('#espCupos').value=base.cupos; $('#espNotas').value=base.notas||'';
+  $('#espArea').innerHTML='<option value="">Cualquier área</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
+  $('#espArea').value=base.areaId||'';
   $('#espCurso').innerHTML='<option value="">Cualquier curso</option>'+DB.cursos.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
   $('#espCurso').value=base.cursoId||''; opcionesClaseEsp(base.cursoId,base.clase);
+  refrescarProfEsp(base.profesionalId||'');
   $('#espRepetirWrap').hidden=!!x; $('#espRepetir').checked=false; $('#espEliminar').hidden=!x;
   pintarDetalleEspacio(); modal('mEsp').show();
 }
-$('#espCurso').addEventListener('change',e=>opcionesClaseEsp(e.target.value,''));
+$('#espCurso').addEventListener('change',e=>{ opcionesClaseEsp(e.target.value,'');
+  const c=curso(e.target.value); if(c?.areaId) $('#espArea').value=c.areaId;
+  refrescarProfEsp(c?.grupo?.profesionalId||''); });
+$('#espArea').addEventListener('change',()=>refrescarProfEsp());
+['#espProf','#espFecha','#espIni','#espFin'].forEach(q=>$(q).addEventListener('change',avisoEspacio));
+/* Solo se ofrecen los profesionales que reponen esa área (y el nivel del curso, si hay curso) */
+function refrescarProfEsp(sel){
+  const areaId=$('#espArea').value, c=curso($('#espCurso').value);
+  const lista=profesionalesReponen(areaId,c?.nivel||null), actual=sel!==undefined?sel:$('#espProf').value;
+  const extra=actual && !lista.some(p=>p.id===actual) ? [profesional(actual)].filter(Boolean) : [];
+  $('#espProf').innerHTML='<option value="">— Sin asignar —</option>'+[...lista,...extra].map(p=>`<option value="${p.id}">${esc(p.nombre)}${extra.includes(p)?' (no repone esta área/nivel)':''}</option>`).join('');
+  $('#espProf').value=actual||''; avisoEspacio();
+}
+/* Avisos (no bloquean): fuera del horario del profesional o cruce con sus propias clases */
+function avisoEspacio(){
+  const p=profesional($('#espProf').value), f=$('#espFecha').value, i=$('#espIni').value, fi=$('#espFin').value, av=[];
+  if(p && f && i && fi){
+    if(!dentroDeHorario(p,f,i,fi)) av.push(`${p.nombre} no tiene este horario disponible (${DIAS_L[new Date(f+'T12:00').getDay()]}).`);
+    const ch=choqueClase(p,f,i,fi,); if(ch) av.push(`Se cruza con la clase ${ch.n} de ${ch.c.nombre} (${rangoHoras(ch.x.ini,ch.x.fin)}).`);
+  }
+  $('#espAviso').innerHTML=av.map(t=>`<div class="small text-warning"><i class="bi bi-exclamation-triangle"></i> ${esc(t)}</div>`).join('');
+}
 function pintarDetalleEspacio(){
   if(!espActual){ $('#espDetalle').innerHTML = espAsignar ? `<div class="small bg-marca-suave rounded p-2"><i class="bi bi-info-circle"></i> Al guardar, la reposición de la clase ${espAsignar.n} queda agendada aquí.</div>` : ''; return; }
   const x=espacio(espActual), c=curso(x.cursoId), ins=reposDeEspacio(x.id), hoy=hoyISO();
@@ -272,7 +298,7 @@ function pintarDetalleEspacio(){
 function agregarAEspacio(){ const [iid,n]=$('#espAgregar').value.split('|'); const r=recRepo(insc(iid),+n); r.espacioId=espActual; delete r.estado; guardar(); render(); pintarDetalleEspacio(); toast('Agregada al espacio'); }
 $('#formEsp').addEventListener('submit',e=>{ e.preventDefault();
   if($('#espFin').value<=$('#espIni').value){ toast('La hora final debe ser después de la inicial'); return; }
-  const datos={fecha:$('#espFecha').value,horaIni:$('#espIni').value,horaFin:$('#espFin').value,docente:$('#espDocente').value.trim(),
+  const datos={fecha:$('#espFecha').value,horaIni:$('#espIni').value,horaFin:$('#espFin').value,areaId:$('#espArea').value,profesionalId:$('#espProf').value,docente:profesional($('#espProf').value)?.nombre||'',
     cursoId:$('#espCurso').value,clase:$('#espClase').value?+$('#espClase').value:null,cupos:Math.max(1,+$('#espCupos').value||1),notas:$('#espNotas').value.trim()};
   if(espActual){ Object.assign(espacio(espActual),datos); }
   else {

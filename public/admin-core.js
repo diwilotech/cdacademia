@@ -11,6 +11,17 @@ const RUBROS = {
   otro:       {nombre:'Otro', icono:'bi-mortarboard', s:'estudiante', p:'estudiantes', color:'#444'}
 };
 
+/* Áreas base: cada curso, profesional y espacio de reposición pertenece a un área */
+const AREAS_BASE = [
+  {id:'ar_maq', nombre:'Maquillaje', color:'#7a2e5c'},
+  {id:'ar_cej', nombre:'Cejas y Pestañas', color:'#b0476a'},
+  {id:'ar_cab', nombre:'Cabello (peluquería)', color:'#1f4e5f'},
+  {id:'ar_man', nombre:'Manicure', color:'#a3461f'},
+  {id:'ar_ped', nombre:'Pedicure', color:'#2b5aa8'},
+  {id:'ar_fac', nombre:'Estética facial', color:'#6b4b2a'}
+];
+const NIVELES = ['Básico','Intermedio','Avanzado','Profesional'];
+
 /* =========================================================
    DATOS — el Worker incrusta window.__BOOT__ con el estado del negocio (D1, siempre con business_id).
    Sin __BOOT__ (archivo abierto suelto) usa localStorage con datos de ejemplo.
@@ -52,6 +63,12 @@ function datosEjemplo(){
     ['i7','e7','PPPPPPPPPJ',[4.4,4.7]],
     ['i8','e8','PAPPAPTAPP',[3.2,2.6]]
   ];
+  const EXAMEN_EJ = {instrucciones:'Marca la respuesta correcta. Tiempo sugerido: 30 minutos.', preguntas:[
+    {id:'q1',tipo:'unica',enunciado:'¿Qué color es complementario del azul?',puntos:2,opciones:[{id:'a',texto:'Naranja',ok:true},{id:'b',texto:'Verde'},{id:'c',texto:'Violeta'}]},
+    {id:'q2',tipo:'multiple',enunciado:'Selecciona los tipos de rostro que se trabajan con contorno para afinar:',puntos:3,opciones:[{id:'a',texto:'Redondo',ok:true},{id:'b',texto:'Cuadrado',ok:true},{id:'c',texto:'Ovalado (sin correcciones)'}]},
+    {id:'q3',tipo:'vf',enunciado:'Un subtono frío se ve mejor con joyería y tonos dorados.',puntos:1,vf:false},
+    {id:'q4',tipo:'corta',enunciado:'¿Cómo se llama el círculo que ordena los colores?',puntos:2,respuesta:'círculo cromático, circulo cromatico'},
+    {id:'q5',tipo:'abierta',enunciado:'Describe cómo elegirías la base para una piel mixta.',puntos:2}]};
   const asis = s => Object.fromEntries([...s].map((v,k)=>[k+1,v]));
   // Reposiciones ya gestionadas (A = falla con costo, J = excusa médica sin costo)
   const REPOS = {
@@ -67,10 +84,26 @@ function datosEjemplo(){
     config:{nombre:'Bella Studio Academy', nit:'900.123.456-7', tel:'300 123 4567', dir:'Cra 43A #10-20, Medellín',
             color:'#7a2e5c', recibo:'ticket', pie:'Gracias por formarte con nosotros ✨', rubro:'maquillaje', termS:'estudiante', termP:'estudiantes',
             consecutivo:11, valorRepo:60000, valorRepoVirtual:35000, horasVirtual:4, dominio:'', escala:5, notaMin:3.0, asisMin:80, ig:'@bellastudio.academy', web:''},
+    areas: AREAS_BASE.map(a=>({...a})),
+    profesionales:[
+      {id:'pr1',nombre:'Natalia Herrera',tel:'300 555 0101',email:'',activo:true,
+       areas:[{areaId:'ar_maq',niveles:['Intermedio','Avanzado','Profesional'],reponer:true},{areaId:'ar_cej',niveles:['Básico','Intermedio'],reponer:true}],
+       horario:[{dia:2,ini:'18:00',fin:'21:00'},{dia:3,ini:'15:00',fin:'18:00'},{dia:4,ini:'18:00',fin:'21:00'},{dia:5,ini:'14:00',fin:'18:00'},{dia:6,ini:'13:00',fin:'17:00'}]},
+      {id:'pr2',nombre:'Paola Vélez',tel:'300 555 0102',email:'',activo:true,
+       areas:[{areaId:'ar_maq',niveles:['Básico','Intermedio'],reponer:true}],
+       horario:[{dia:3,ini:'14:00',fin:'17:00'},{dia:6,ini:'09:00',fin:'12:00'}]},
+      {id:'pr3',nombre:'Camila Duarte',tel:'300 555 0103',email:'',activo:true,
+       areas:[{areaId:'ar_cab',niveles:['Básico','Intermedio','Avanzado'],reponer:false}],
+       horario:[1,2,3,4,5].map(d=>({dia:d,ini:'09:00',fin:'13:00'}))},
+      {id:'pr4',nombre:'Luz Marina Gil',tel:'300 555 0104',email:'',activo:true,
+       areas:[{areaId:'ar_man',niveles:['Básico','Intermedio','Avanzado','Profesional'],reponer:true},{areaId:'ar_ped',niveles:['Básico','Intermedio'],reponer:true}],
+       horario:[{dia:1,ini:'14:00',fin:'18:00'},{dia:3,ini:'09:00',fin:'13:00'}]}
+    ],
     cursos:[
       {id:c1, nombre:'Automaquillaje Social', precio:450000, nivel:'Básico',
        desc:'Aprende a maquillarte para el día a día y eventos.',
-       grupo:{docente:'Paola Vélez',jornada:'Sabatina',dias:[6],horaIni:'09:00',horaFin:'12:00',inicio:'2026-09-19',numClases:4,festivos:true},
+       areaId:'ar_maq', descuentos:[{id:'d1',codigo:'AMIGA50',tipo:'valor',valor:50000,hasta:'',max:0,usos:0}],
+       grupo:{docente:'Paola Vélez',profesionalId:'pr2',jornada:'Sabatina',slots:[{dia:6,ini:'09:00',fin:'12:00'}],inicio:'2026-09-19',numClases:4,festivos:true},
        clases:[
          {n:1,tema:'Preparación de la piel',detalle:'Tipos de piel, limpieza e hidratación, primers',metodos:['Demostración','Práctica guiada'],materiales:'Limpiador, hidratante, primer, espejo'},
          {n:2,tema:'Base y corrección',detalle:'Subtonos, correctores de color, sellado',metodos:['Práctica guiada'],materiales:'Base, corrector, esponja, polvo traslúcido'},
@@ -83,16 +116,18 @@ function datosEjemplo(){
              {titulo:'Look completo',horas:3,temas:['Labios','Contorno suave','Práctica final']}]},
       {id:c2, nombre:'Maquillaje Profesional', precio:1800000, nivel:'Profesional',
        desc:'Formación completa para trabajar como maquilladora profesional.',
-       grupo:{docente:'Natalia Herrera',jornada:'Noche',dias:[2,4],horaIni:'18:00',horaFin:'21:00',inicio:'2026-09-01',numClases:16,festivos:true},
+       areaId:'ar_maq', descuentos:[{id:'d2',codigo:'BIENVENIDA10',tipo:'pct',valor:10,hasta:'2026-12-31',max:0,usos:0},{id:'d3',codigo:'REFERIDA100',tipo:'valor',valor:100000,hasta:'',max:5,usos:1}],
+       grupo:{docente:'Natalia Herrera',profesionalId:'pr1',jornada:'Noche',slots:[{dia:2,ini:'18:00',fin:'21:00'},{dia:4,ini:'18:00',fin:'21:00'}],inicio:'2026-09-01',numClases:16,festivos:true},
        clases:MP,
-       evaluaciones:[{id:'ev1',nombre:'Teoría y visagismo',peso:15,clase:3},{id:'ev2',nombre:'Piel perfecta',peso:25,clase:8},
+       evaluaciones:[{id:'ev1',nombre:'Teoría y visagismo',peso:15,clase:3,examen:EXAMEN_EJ},{id:'ev2',nombre:'Piel perfecta',peso:25,clase:8},
                      {id:'ev3',nombre:'Ojos y cejas',peso:20,clase:11},{id:'ev4',nombre:'Novia',peso:15,clase:14},{id:'ev5',nombre:'Examen final',peso:25,clase:16}],
        plan:[{titulo:'Fundamentos',horas:9,temas:['Bioseguridad','Teoría del color','Visagismo']},
              {titulo:'Piel',horas:15,temas:['Preparación','Bases','Corrección','Contorno']},
              {titulo:'Ojos, cejas y labios',horas:12,temas:['Cejas','Sombras','Delineados y pestañas','Labios']},
              {titulo:'Looks profesionales',horas:12,temas:['Social','Novia','Editorial','Evaluación final']}]},
       {id:c3, nombre:'Cejas y Pestañas', precio:650000, nivel:'Intermedio', desc:'Diseño de cejas, laminado y lifting.',
-       grupo:{docente:'Natalia Herrera',jornada:'Tarde',dias:[5],horaIni:'14:00',horaFin:'18:00',inicio:'2026-10-09',numClases:6,festivos:true},
+       areaId:'ar_cej', descuentos:[],
+       grupo:{docente:'Natalia Herrera',profesionalId:'pr1',jornada:'Tarde',slots:[{dia:5,ini:'14:00',fin:'16:00'},{dia:5,ini:'16:00',fin:'18:00'}],inicio:'2026-10-09',numClases:6,festivos:true},
        clases:[
          {n:1,tema:'Visagismo y medición de cejas',detalle:'Proporciones, puntos de inicio, arco y final',metodos:['Clase magistral','Demostración'],materiales:'Regla de cejas, lápiz blanco, espejo'},
          {n:2,tema:'Diseño y depilación',detalle:'Pinza, hilo y cera; cuidados posteriores',metodos:['Práctica en modelo'],materiales:'Pinzas, hilo, cera tibia, aloe'},
@@ -114,7 +149,8 @@ function datosEjemplo(){
     ],
     inscripciones:[
       ...grupoMP.map(([id,estId,a,[n1,n2]])=>({id,estId,cursoId:c2,valor:1800000,desc:id==='i1'?100000:0,fecha:'2026-09-01',estado:'activa',
-         planCuotas:{inicial:500000,n:6,frecuencia:'mensual',primera:'2026-10-01'}, asistencia:asis(a), notas:{ev1:n1,ev2:n2}, repos:REPOS[id]||{}})),
+         planCuotas:{inicial:500000,n:6,frecuencia:'mensual',primera:'2026-10-01'}, asistencia:asis(a), notas:{ev1:n1,ev2:n2}, repos:REPOS[id]||{},
+         ...(id==='i4'?{examenes:{ev1:{archivos:[],resp:{q1:'a',q2:['a','b'],q3:true,q4:'Circulo cromatico',q5:'Usaría una base ligera, fluida, y sellaría solo la zona T.'},manual:{q5:2}}}}:{})})),
       {id:'i2',estId:e2,cursoId:c1,valor:450000,desc:0,fecha:'2026-09-15',estado:'activa',
        planCuotas:{inicial:0,n:1,frecuencia:'mensual',primera:'2026-09-15'}, asistencia:asis('PPP'), notas:{ev1:4.6}},
       {id:'i3',estId:e3,cursoId:c3,valor:650000,desc:0,fecha:'2026-09-20',estado:'activa',
@@ -133,11 +169,11 @@ function datosEjemplo(){
       {id:'p10',num:10,inscId:'i8',valor:60000,metodo:'Efectivo',concepto:'Reposición clase 2 · Teoría del color',fecha:'2026-09-19',tipo:'reposicion'}
     ],
     espacios:[
-      {id:'s1',fecha:'2026-09-19',horaIni:'14:00',horaFin:'17:00',docente:'Natalia Herrera',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
-      {id:'s2',fecha:'2026-10-10',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
-      {id:'s3',fecha:'2026-10-14',horaIni:'15:00',horaFin:'18:00',docente:'Natalia Herrera',cursoId:c2,clase:8,cupos:3,notas:'Traer modelo'},
-      {id:'s4',fecha:'2026-10-17',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
-      {id:'s5',fecha:'2026-10-24',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'}
+      {id:'s1',fecha:'2026-09-19',horaIni:'14:00',horaFin:'17:00',docente:'Natalia Herrera',profesionalId:'pr1',areaId:'ar_maq',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
+      {id:'s2',fecha:'2026-10-10',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',profesionalId:'pr1',areaId:'ar_maq',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
+      {id:'s3',fecha:'2026-10-14',horaIni:'15:00',horaFin:'18:00',docente:'Natalia Herrera',profesionalId:'pr1',areaId:'ar_maq',cursoId:c2,clase:8,cupos:3,notas:'Traer modelo'},
+      {id:'s4',fecha:'2026-10-17',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',profesionalId:'pr1',areaId:'ar_maq',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'},
+      {id:'s5',fecha:'2026-10-24',horaIni:'13:00',horaFin:'16:00',docente:'Natalia Herrera',profesionalId:'pr1',areaId:'ar_maq',cursoId:c2,clase:null,cupos:4,notas:'Sala 2'}
     ],
     campanas:[
       {id:'k1',codigo:'MP-AGO26',nombre:'Lanzamiento Maquillaje Profesional',cursoId:c2,formato:'post45',plantilla:'portada',estilo:'marca',
@@ -156,6 +192,7 @@ function datosEjemplo(){
 function datosVacios(nombre){
   const d=datosEjemplo();
   return {business_id:'', config:{...d.config, nombre:nombre||'Mi academia', nit:'', tel:'', dir:'', consecutivo:1, ig:'', web:''},
+          areas:AREAS_BASE.map(a=>({...a})), profesionales:[], modulos:[],
           cursos:[], estudiantes:[], inscripciones:[], pagos:[], espacios:[], campanas:[]};
 }
 let DB;
@@ -322,34 +359,47 @@ function festivosCO(y){
 }
 const esFestivo = iso => festivosCO(+iso.slice(0,4)).has(iso);
 
-/* Fechas de las clases según días, festivos y reprogramaciones */
-function fechasClases(c){
-  const g=c.grupo||{}; const N=+g.numClases||0;
-  if(!g.inicio || !(g.dias||[]).length || !N) return Array(N).fill(null);
+/* Horario del grupo: lista de franjas {dia, ini, fin}. Cada franja es una clase, así que un mismo día puede
+   tener varias clases a distintas horas y cada día de la semana puede tener su propio horario. */
+const slotsDe = g => (g && g.slots && g.slots.length) ? g.slots : ((g && g.dias) || []).map(d=>({dia:d,ini:g.horaIni||'09:00',fin:g.horaFin||'12:00'}));
+const ordenDia = d => (d+6)%7;
+function sesionesGrupo(g, clases){
+  g=g||{}; const N=+g.numClases||0, slots=slotsDe(g);
+  if(!g.inicio || !slots.length || !N) return Array.from({length:N},()=>({fecha:null,ini:slots[0]?.ini||'',fin:slots[0]?.fin||''}));
+  const porDia={}; slots.forEach(x=>(porDia[x.dia]=porDia[x.dia]||[]).push(x)); Object.values(porDia).forEach(arr=>arr.sort((p,q)=>p.ini.localeCompare(q.ini)));
   const out=[]; let [y,m,d]=g.inicio.split('-').map(Number); let t=new Date(Date.UTC(y,m-1,d));
-  for(let guard=0; out.length<N && guard<1500; guard++){
-    const iso=t.toISOString().slice(0,10);
-    if(g.dias.includes(t.getUTCDay()) && !(g.festivos && esFestivo(iso))) out.push(iso);
+  for(let guard=0; out.length<N && guard<3000; guard++){
+    const iso=t.toISOString().slice(0,10), del=porDia[t.getUTCDay()];
+    if(del && !(g.festivos && esFestivo(iso))) for(const x of del){ if(out.length<N) out.push({fecha:iso,ini:x.ini,fin:x.fin}); }
     t.setUTCDate(t.getUTCDate()+1);
   }
-  (c.clases||[]).forEach(cl=>{ if(cl.fecha && cl.n<=N) out[cl.n-1]=cl.fecha; });
+  (clases||[]).forEach(cl=>{ const o=out[cl.n-1]; if(o && cl.n<=N){ if(cl.fecha) o.fecha=cl.fecha; if(cl.ini) o.ini=cl.ini; if(cl.fin) o.fin=cl.fin; } });
   return out;
 }
+const sesionesCurso = c => sesionesGrupo(c.grupo, c.clases);
+const fechasClases = c => sesionesCurso(c).map(x=>x.fecha);
 const minutos = h => { const [a,b]=(h||'0:0').split(':').map(Number); return a*60+b; };
-const horasClase = g => Math.max(0,(minutos(g.horaFin)-minutos(g.horaIni))/60);
+const horasSesion = x => Math.max(0,(minutos(x.fin)-minutos(x.ini))/60);
 const hora12 = h => { if(!h) return ''; let [a,b]=h.split(':').map(Number); const s=a>=12?'p. m.':'a. m.'; a=a%12||12; return `${a}:${String(b).padStart(2,'0')} ${s}`; };
-const diasTexto = g => (g.dias||[]).slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(d=>DIAS[d]).join(' y ').replace(/ y (?=.* y )/g,', ');
-const horaRango = g => { const a=hora12(g.horaIni), b=hora12(g.horaFin); return a.slice(-5)===b.slice(-5) ? `${a.slice(0,-6)} – ${b}` : `${a} – ${b}`; };
-const horarioTexto = g => g && g.dias?.length ? `${diasTexto(g)} · ${horaRango(g)}` : '—';
+const rangoHoras = (ini,fin) => { const a=hora12(ini), b=hora12(fin); return a.slice(-5)===b.slice(-5) ? `${a.slice(0,-6)} – ${b}` : `${a} – ${b}`; };
+const diasTexto = g => [...new Set(slotsDe(g).map(x=>x.dia))].sort((p,q)=>ordenDia(p)-ordenDia(q)).map(d=>DIAS[d]).join(' y ').replace(/ y (?=.* y )/g,', ');
+const horaRango = g => { const r=[...new Set(slotsDe(g).map(x=>rangoHoras(x.ini,x.fin)))]; return r.length===1 ? r[0] : r.length ? 'Varios horarios' : ''; };
+const horarioTexto = g => { const sl=slotsDe(g||{}).slice().sort((p,q)=>ordenDia(p.dia)-ordenDia(q.dia)||p.ini.localeCompare(q.ini)); return sl.length ? sl.map(x=>`${DIAS[x.dia]} ${rangoHoras(x.ini,x.fin)}`).join(' · ') : '—'; };
+/* Mantiene dias/horaIni/horaFin (formato viejo) en sincronía con las franjas */
+function normGrupo(g){
+  g.slots = slotsDe(g).map(x=>({dia:+x.dia,ini:x.ini,fin:x.fin}));
+  g.dias = [...new Set(g.slots.map(x=>x.dia))]; g.horaIni = g.slots[0]?.ini||'09:00'; g.horaFin = g.slots[0]?.fin||'12:00';
+  return g;
+}
 function clase(c,n){ let cl=(c.clases||[]).find(x=>x.n===n); if(!cl){ cl={n,tema:'',detalle:'',metodos:[],materiales:'',obs:''}; (c.clases=c.clases||[]).push(cl); } return cl; }
 function infoCurso(c){
-  const fechas=fechasClases(c), hoy=hoyISO(), g=c.grupo||{};
+  const ses=sesionesCurso(c), fechas=ses.map(x=>x.fecha), hoy=hoyISO(), g=c.grupo||{};
   const dictadas=fechas.filter(f=>f && f<hoy).length;
-  const idxHoy=fechas.indexOf(hoy);
+  const idxsHoy=fechas.map((f,k)=>f===hoy?k:-1).filter(k=>k>=0), idxHoy=idxsHoy.length?idxsHoy[0]:-1;
   const proxima=fechas.findIndex(f=>f && f>=hoy);
   const fin=fechas.filter(Boolean).sort().at(-1)||null;
   const estado = !g.inicio ? 'Sin programar' : hoy<g.inicio ? 'Por iniciar' : fin && hoy>fin ? 'Finalizado' : 'En curso';
-  return {fechas, dictadas, idxHoy, proxima, inicio:fechas[0], fin, estado, horas:horasClase(g)*(+g.numClases||0)};
+  return {fechas, sesiones:ses, dictadas, idxHoy, idxsHoy, proxima, inicio:fechas[0], fin, estado, horas:ses.reduce((a,x)=>a+horasSesion(x),0)};
 }
 
 /* Asistencia: tarde y excusa cuentan como asistida; solo se cuentan clases ya marcadas */
@@ -379,24 +429,27 @@ function estadoAcad(i,c){
 }
 const fmtNota = n => n===null||n===undefined||n==='' ? '—' : (+n).toFixed(1);
 
-/* Reparte el plan de estudio (módulos y temas) entre las clases sin tema */
-function repartirPlan(c){
-  const N=+c.grupo?.numClases||0, mods=(c.plan||[]).filter(m=>m.temas.length||m.titulo);
-  if(!N || !mods.length) return 0;
-  const pesos=mods.map(m=>+m.horas||m.temas.length||1), tot=pesos.reduce((a,b)=>a+b,0);
+/* Rellena el tema y el contenido de las clases vacías con el módulo que las cubre */
+function repartirModulos(c){
+  let llenadas=0;
+  for(let n=1;n<=(+c.grupo?.numClases||0);n++){
+    const cl=clase(c,n); if(cl.tema) continue;
+    const ms=modulosDeClase(c,n); if(!ms.length) continue;
+    const {m,desde,hasta}=ms[0], total=hasta-desde+1, pos=n-desde, temas=m.temas||[];
+    cl.tema = total>1 ? `${m.titulo} (${pos+1}/${total})` : m.titulo;
+    if(!cl.detalle && temas.length){ const por=Math.ceil(temas.length/total); cl.detalle=temas.slice(pos*por,(pos+1)*por).join(', '); }
+    llenadas++;
+  }
+  return llenadas;
+}
+/* Cuántas clases le tocan a cada módulo (proporcional a sus horas o temas) */
+function distribuirClases(mods, N){
+  const pesos=mods.map(m=>+m.horas||(m.temas||[]).length||1), tot=pesos.reduce((a,b)=>a+b,0);
   let asig=pesos.map(p=>Math.max(1,Math.floor(p/tot*N)));
-  while(asig.reduce((a,b)=>a+b,0)>N){ const k=asig.indexOf(Math.max(...asig)); asig[k]--; }
+  while(asig.reduce((a,b)=>a+b,0)>N && Math.max(...asig)>1){ const k=asig.indexOf(Math.max(...asig)); asig[k]--; }
   const resto=pesos.map((p,k)=>p/tot*N-asig[k]);
   while(asig.reduce((a,b)=>a+b,0)<N){ const k=resto.indexOf(Math.max(...resto)); asig[k]++; resto[k]=-1; }
-  const salida=[];
-  mods.forEach((m,k)=>{ const n=asig[k]; if(!n) return;
-    const temas=m.temas.length?m.temas:[m.titulo]; const porClase=Math.ceil(temas.length/n);
-    for(let j=0;j<n;j++){ const trozo=temas.slice(j*porClase,(j+1)*porClase);
-      salida.push({tema: n>1 ? `${m.titulo}${trozo.length?': '+trozo[0]:` (${j+1}/${n})`}` : m.titulo, detalle: trozo.join(', ')}); }
-  });
-  let llenadas=0;
-  salida.slice(0,N).forEach((s,k)=>{ const cl=clase(c,k+1); if(!cl.tema){ cl.tema=s.tema; cl.detalle=cl.detalle||s.detalle; llenadas++; } });
-  return llenadas;
+  return asig;
 }
 
 /* Migración académica para datos guardados en versiones anteriores */
@@ -557,24 +610,26 @@ function render(){
     </div></div></div>`}).join('');
 
   // clases de hoy
-  const hoyC=DB.cursos.map(cu=>({cu,inf:infoCurso(cu)})).filter(x=>x.inf.idxHoy>=0);
+  const hoyC=DB.cursos.flatMap(cu=>{ const inf=infoCurso(cu); return inf.idxsHoy.map(k=>({cu,inf,k})); });
   const espHoy=(DB.espacios||[]).filter(x=>x.fecha===hoyISO()).sort((a,b)=>a.horaIni.localeCompare(b.horaIni));
   $('#clasesHoy').innerHTML = (hoyC.length||espHoy.length) ? `<h2 class="h5 mb-2">Clases de hoy</h2><div class="row g-2">${espHoy.map(x=>{ const n=reposDeEspacio(x.id).length;
       return `<div class="col-md-6"><div class="card hoy-card" style="border-left-color:#2b4f99"><div class="card-body py-2 d-flex align-items-center gap-3">
         <i class="bi bi-arrow-repeat fs-3" style="color:#2b4f99"></i>
         <div class="flex-grow-1" style="min-width:0"><div class="fw-semibold text-truncate">Reposición${x.clase?` · ${esc(temaClase(curso(x.cursoId),x.clase))}`:''}</div>
           <small class="text-muted">${hora12(x.horaIni)} · ${esc(x.docente||'')} · ${n} ${n===1?DB.config.termS:DB.config.termP}</small></div>
-        <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="abrirEspacio('${x.id}')">Ver</button></div></div></div>`}).join('')}${hoyC.map(({cu,inf})=>{
-      const n=inf.idxHoy+1, cl=(cu.clases||[]).find(x=>x.n===n)||{};
+        <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="abrirEspacio('${x.id}')">Ver</button></div></div></div>`}).join('')}${hoyC.map(({cu,inf,k})=>{
+      const n=k+1, cl=(cu.clases||[]).find(x=>x.n===n)||{};
       return `<div class="col-md-6"><div class="card hoy-card"><div class="card-body py-2 d-flex align-items-center gap-3">
         <div class="text-center"><div class="display-font fs-3 text-marca lh-1">${n}</div><small class="text-muted">de ${cu.grupo.numClases}</small></div>
         <div class="flex-grow-1" style="min-width:0"><div class="fw-semibold text-truncate">${esc(cl.tema||'Clase '+n)}</div>
-          <small class="text-muted">${esc(cu.nombre)} · ${hora12(cu.grupo.horaIni)} · ${esc(cu.grupo.docente)}</small></div>
+          <small class="text-muted">${esc(cu.nombre)} · ${hora12(inf.sesiones[k].ini)} · ${esc(cu.grupo.docente)}</small></div>
         <button class="btn btn-sm btn-marca text-nowrap" onclick="verCurso('${cu.id}','asistencia')"><i class="bi bi-check2-square"></i> Asistencia</button>
       </div></div></div>`}).join('')}</div>` : '';
 
   pintarMarketing();
   pintarReposiciones();
+  pintarModulos();
+  pintarProfesionales();
 
   // pagos
   $('#tablaPagos').innerHTML=[...DB.pagos].sort((a,b)=>b.num-a.num).map(p=>{const i=insc(p.inscId);
@@ -662,7 +717,7 @@ $('#formCuotas').addEventListener('submit',ev=>{
 function llenarCursos(sel){ sel.innerHTML='<option value="">— Ninguno por ahora —</option>'+DB.cursos.map(c=>`<option value="${c.id}">${esc(c.nombre)} (${money(c.precio)})</option>`).join(''); }
 function abrirEstudiante(id){
   $('#formEst').reset(); llenarCursos($('#estCurso'));
-  contCuotasEst().innerHTML=''; $('#bloqueCuotasEst').hidden=true;
+  contCuotasEst().innerHTML=''; $('#bloqueCuotasEst').hidden=true; codigoAplicado=null; $('#estCodigoMsg').textContent='';
   const e=id?est(id):{}; $('#estId').value=id||'';
   $('#tEst').textContent=(id?'Editar ':'Nuevo ')+DB.config.termS;
   ['Nombre','Doc','Tel','Email','Notas'].forEach(k=>$('#est'+k).value=e[k.toLowerCase()]||'');
@@ -677,20 +732,43 @@ function refrescarCuotasEst(){
   if(!cont.firstElementChild) montarFormCuotas(cont,total,null,hoyISO());
   else { cont.dataset.total=total; cont.actualizar(); }
 }
-$('#estCurso').addEventListener('change',e=>{ const c=curso(e.target.value); $('#estValor').value=c?c.precio:''; refrescarCuotasEst(); });
+let codigoAplicado=null;
+$('#estCurso').addEventListener('change',e=>{ const c=curso(e.target.value); $('#estValor').value=c?c.precio:''; codigoAplicado=null; $('#estCodigo').value=''; $('#estCodigoMsg').textContent=''; $('#estCodigoWrap').hidden=!c; refrescarCuotasEst(); });
+/* Valida un código del curso (vigencia y usos) y calcula el descuento */
+function validarCodigo(c,codigo,base){
+  const cod=(c.descuentos||[]).find(d=>d.codigo===String(codigo||'').trim().toUpperCase());
+  if(!cod) return {error:'Ese código no existe en este curso.'};
+  if(cod.hasta && cod.hasta<hoyISO()) return {error:`El código venció el ${fechaLarga(cod.hasta)}.`};
+  if(cod.max && (cod.usos||0)>=cod.max) return {error:'El código ya llegó a su límite de usos.'};
+  const monto = cod.tipo==='pct' ? Math.round(base*Math.min(100,cod.valor)/100) : Math.min(base,cod.valor);
+  return {cod, monto};
+}
+$('#estCodigoBtn').addEventListener('click',()=>{
+  const c=curso($('#estCurso').value); if(!c) return;
+  const base=+$('#estValor').value||c.precio, r=validarCodigo(c,$('#estCodigo').value,base), msg=$('#estCodigoMsg');
+  if(r.error){ codigoAplicado=null; msg.className='small text-danger'; msg.textContent=r.error; return; }
+  codigoAplicado={cursoId:c.id,codigo:r.cod.codigo}; $('#estDesc').value=r.monto; refrescarCuotasEst();
+  msg.className='small text-success'; msg.textContent=`${r.cod.codigo}: ${r.cod.tipo==='pct'?r.cod.valor+' %':money(r.cod.valor)} aplicado (−${money(r.monto)}).`;
+});
 ['#estValor','#estDesc'].forEach(s=>$(s).addEventListener('input',refrescarCuotasEst));
 $('#formEst').addEventListener('submit',ev=>{
   ev.preventDefault();
   const id=$('#estId').value||uid();
   const data={id,nombre:$('#estNombre').value.trim(),doc:$('#estDoc').value,tel:$('#estTel').value,email:$('#estEmail').value,notas:$('#estNotas').value,origen:$('#estOrigen').value};
-  const idx=DB.estudiantes.findIndex(e=>e.id===id); idx>=0?DB.estudiantes[idx]=data:DB.estudiantes.push(data);
   const cid=$('#estCurso').value;
   if(cid){
     const valor=+$('#estValor').value||curso(cid).precio, desc=+$('#estDesc').value||0;
     const plan=leerPlan(contCuotasEst());
-    DB.inscripciones.push({id:uid(),estId:id,cursoId:cid,valor,desc,fecha:hoyISO(),estado:'activa',
+    let codigoDesc='';
+    if(codigoAplicado && codigoAplicado.cursoId===cid){
+      const r=validarCodigo(curso(cid),codigoAplicado.codigo,valor);
+      if(r.error){ toast(r.error); return; }
+      r.cod.usos=(r.cod.usos||0)+1; codigoDesc=r.cod.codigo;
+    }
+    DB.inscripciones.push({id:uid(),estId:id,cursoId:cid,valor,desc,codigoDesc,fecha:hoyISO(),estado:'activa',
                            planCuotas:plan,cuotas:generarCuotas(valor-desc,plan,hoyISO())});
   }
+  const idx=DB.estudiantes.findIndex(e=>e.id===id); idx>=0?DB.estudiantes[idx]=data:DB.estudiantes.push(data);
   guardar(); modal('mEst').hide(); render(); toast('Guardado');
 });
 function verFicha(id){
@@ -703,7 +781,7 @@ function verFicha(id){
     ${e.notas?`<div class="col-12"><span class="text-muted">Notas</span><br>${esc(e.notas)}</div>`:''}</div>
     ${ins.map(i=>{const cu=curso(i.cursoId),ps=DB.pagos.filter(p=>p.inscId===i.id);
       return `<div class="card mb-2"><div class="card-body">
-        <div class="d-flex justify-content-between flex-wrap gap-2"><div><div class="fw-semibold">${esc(cu?.nombre)}</div><small class="text-muted">Inscrito ${i.fecha}${cu?.grupo?.docente?' · '+esc(cu.grupo.docente):''}</small>
+        <div class="d-flex justify-content-between flex-wrap gap-2"><div><div class="fw-semibold">${esc(cu?.nombre)}</div><small class="text-muted">Inscrito ${i.fecha}${i.codigoDesc?` · código ${esc(i.codigoDesc)}`:''}${cu?.grupo?.docente?' · '+esc(cu.grupo.docente):''}</small>
           ${cu?(()=>{const a=resumenAsis(i), n=resumenNotas(i,cu), [cls,txt]=estadoAcad(i,cu);
             return `<div class="small mt-1 d-flex flex-wrap gap-2 align-items-center tabular"><span><i class="bi bi-check2-square text-marca"></i> Asistencia ${a.pct??'—'}${a.pct!==null?'%':''}</span>
               <span><i class="bi bi-mortarboard text-marca"></i> Promedio ${fmtNota(n.prom)}</span><span class="pill pill-${cls}">${txt}</span></div>`})():''}</div>
@@ -722,42 +800,61 @@ function verFicha(id){
   modal('mFicha').show();
 }
 
-/* ===== cursos y plan de estudio ===== */
-let planTemp=[];
+/* ===== cursos ===== */
+let franjasTemp=[], descTemp=[];
+const opcionesDia = sel => [1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${d===sel?'selected':''}>${DIAS_L[d]}</option>`).join('');
+function pintarFranjas(){
+  $('#curFranjas').innerHTML=franjasTemp.map((x,k)=>`<div class="d-flex flex-wrap gap-2 align-items-center" data-k="${k}">
+    <select class="form-select form-select-sm" style="width:130px" data-f="dia" aria-label="Día">${opcionesDia(x.dia)}</select>
+    <input type="time" class="form-control form-control-sm" style="width:115px" data-f="ini" value="${x.ini}" aria-label="Desde">
+    <span class="text-muted small">a</span>
+    <input type="time" class="form-control form-control-sm" style="width:115px" data-f="fin" value="${x.fin}" aria-label="Hasta">
+    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar horario" ${franjasTemp.length<2?'disabled':''}><i class="bi bi-trash"></i></button></div>`).join('');
+}
+function pintarDescCurso(){
+  $('#curDescuentos').innerHTML=descTemp.length ? descTemp.map((d,k)=>`<div class="d-flex flex-wrap gap-2 align-items-center" data-k="${k}">
+    <input class="form-control form-control-sm text-uppercase" style="width:150px" data-f="codigo" value="${esc(d.codigo)}" placeholder="CÓDIGO" aria-label="Código" maxlength="24">
+    <select class="form-select form-select-sm" style="width:80px" data-f="tipo" aria-label="Tipo"><option value="pct" ${d.tipo==='pct'?'selected':''}>%</option><option value="valor" ${d.tipo==='valor'?'selected':''}>$</option></select>
+    <input type="number" min="0" class="form-control form-control-sm" style="width:110px" data-f="valor" value="${d.valor}" aria-label="Valor">
+    <label class="small text-muted d-flex align-items-center gap-1">Vence <input type="date" class="form-control form-control-sm" style="width:140px" data-f="hasta" value="${d.hasta||''}"></label>
+    <label class="small text-muted d-flex align-items-center gap-1">Usos máx. <input type="number" min="0" class="form-control form-control-sm" style="width:80px" data-f="max" value="${d.max||0}" title="0 = sin límite"></label>
+    <span class="small text-muted tabular">${d.usos||0} usados</span>
+    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar código"><i class="bi bi-trash"></i></button></div>`).join('')
+    : '<div class="small text-muted">Sin códigos para este curso.</div>';
+}
 function abrirCurso(id){
   $('#formCurso').reset(); const c=id?curso(id):{};
   $('#curId').value=id||''; $('#curNombre').value=c.nombre||''; $('#curPrecio').value=c.precio||'';
   $('#curNivel').value=c.nivel||'Básico'; $('#curDesc').value=c.desc||'';
-  const g=c.grupo||{jornada:'Mañana',dias:[],horaIni:'09:00',horaFin:'12:00',inicio:'',numClases:16,festivos:true};
-  $('#listaDocentes').innerHTML=[...new Set(DB.cursos.map(x=>x.grupo?.docente).filter(Boolean))].map(d=>`<option value="${esc(d)}">`).join('');
-  $('#curDocente').value=g.docente||''; $('#curJornada').value=g.jornada||'Mañana';
-  $('#curHoraIni').value=g.horaIni||'09:00'; $('#curHoraFin').value=g.horaFin||'12:00';
+  const g=c.grupo||{jornada:'Mañana',slots:[{dia:1,ini:'09:00',fin:'12:00'}],inicio:'',numClases:16,festivos:true};
+  $('#curArea').innerHTML='<option value="">— Sin área —</option>'+(DB.areas||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
+  $('#curArea').value=c.areaId||'';
+  refrescarProfCurso(g.profesionalId||'');
+  $('#curJornada').value=g.jornada||'Mañana';
   $('#curInicio').value=g.inicio||''; $('#curNumClases').value=g.numClases||16; $('#curFestivos').checked=g.festivos!==false;
-  $('#curDias').innerHTML=[1,2,3,4,5,6,0].map(d=>`<input type="checkbox" class="btn-check" id="dia${d}" value="${d}" ${(g.dias||[]).includes(d)?'checked':''}>
-    <label class="btn btn-sm btn-outline-secondary" for="dia${d}">${DIAS[d]}</label>`).join('');
-  resumenFechasForm();
-  planTemp=structuredClone(c.plan||[]);
-  $('#curPlanTexto').value=planTemp.map((m,k)=>`Módulo ${k+1}: ${m.titulo} (${m.horas}h)\n`+m.temas.map(t=>'- '+t).join('\n')).join('\n');
-  previewPlan(); modal('mCurso').show();
+  franjasTemp=slotsDe(g).map(x=>({...x})); if(!franjasTemp.length) franjasTemp=[{dia:1,ini:'09:00',fin:'12:00'}];
+  descTemp=structuredClone(c.descuentos||[]);
+  pintarFranjas(); pintarDescCurso(); resumenFechasForm();
+  modal('mCurso').show();
 }
-function cargarPlanArchivo(inp){
-  const f=inp.files[0]; if(!f) return;
-  const r=new FileReader(); r.onload=()=>{ $('#curPlanTexto').value=r.result; organizarPlanIA(); }; r.readAsText(f); inp.value='';
+/* Docentes que dictan esa área y nivel (los que no, no se ofrecen) */
+function refrescarProfCurso(sel){
+  const area=$('#curArea').value, nivel=$('#curNivel').value;
+  const lista=profesionalesDe(area,nivel), actual=sel!==undefined?sel:$('#curProf').value;
+  const extra=actual && !lista.some(p=>p.id===actual) ? [profesional(actual)].filter(Boolean) : [];
+  $('#curProf').innerHTML='<option value="">— Sin asignar —</option>'+[...lista,...extra].map(p=>`<option value="${p.id}">${esc(p.nombre)}${extra.includes(p)?' (no dicta esta área/nivel)':''}</option>`).join('');
+  $('#curProf').value=actual||'';
+  $('#curProfNota').textContent = !DB.profesionales?.length ? 'Aún no hay profesionales: créalos en la sección Profesionales.' : !lista.length ? 'Ningún profesional dicta esta área y nivel todavía.' : '';
 }
+['#curArea','#curNivel'].forEach(q=>$(q).addEventListener('change',()=>refrescarProfCurso()));
+$('#curAddFranja').addEventListener('click',()=>{ const u=franjasTemp.at(-1)||{dia:1,ini:'09:00',fin:'12:00'}; franjasTemp.push({...u}); pintarFranjas(); resumenFechasForm(); });
+$('#curFranjas').addEventListener('input',e=>{ const row=e.target.closest('[data-k]'); if(!row||!e.target.dataset.f) return; const f=e.target.dataset.f; franjasTemp[+row.dataset.k][f]= f==='dia'?+e.target.value:e.target.value; resumenFechasForm(); });
+$('#curFranjas').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(!b) return; franjasTemp.splice(+b.dataset.del,1); pintarFranjas(); resumenFechasForm(); });
+$('#curAddDesc').addEventListener('click',()=>{ descTemp.push({id:'d'+uid(),codigo:'',tipo:'pct',valor:10,hasta:'',max:0,usos:0}); pintarDescCurso(); });
+$('#curDescuentos').addEventListener('input',e=>{ const row=e.target.closest('[data-k]'); if(!row||!e.target.dataset.f) return; const f=e.target.dataset.f, d=descTemp[+row.dataset.k];
+  d[f]= f==='codigo' ? e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'') : (f==='valor'||f==='max') ? +e.target.value||0 : e.target.value; if(f==='codigo') e.target.value=d.codigo; });
+$('#curDescuentos').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(!b) return; descTemp.splice(+b.dataset.del,1); pintarDescCurso(); });
 
-/* "Organizar con IA"
-   Por ahora usa un analizador local. Para conectarlo a IA real, reemplaza
-   el cuerpo por: const r = await fetch('/staff/ia/plan',{method:'POST',body:texto});
-   planTemp = await r.json();   // [{titulo, horas, temas:[]}]
-   (el Worker llama al modelo con la clave guardada como secreto, nunca en el HTML) */
-async function organizarPlanIA(){
-  const texto=$('#curPlanTexto').value.trim(); if(!texto){ $('#iaEstado').textContent='Pega o sube un plan primero.'; return; }
-  $('#iaEstado').innerHTML='<span class="spinner-border spinner-border-sm"></span> Organizando…';
-  await new Promise(r=>setTimeout(r,500));
-  planTemp=analizarPlan(texto);
-  $('#iaEstado').textContent=`Listo: ${planTemp.length} módulos detectados. Revisa y guarda.`;
-  previewPlan();
-}
 function analizarPlan(texto){
   const mods=[]; let actual=null;
   const esTitulo=l=>/^(m[oó]dulo|semana|unidad|clase|sesi[oó]n|tema|nivel)\b/i.test(l)||/^#+\s/.test(l)||/^\d+[\.\)]\s/.test(l);
@@ -774,22 +871,20 @@ function analizarPlan(texto){
   });
   return mods;
 }
-function previewPlan(){
-  $('#previewPlan').innerHTML=planTemp.length?`<div class="small text-muted mb-2">Vista previa (${planTemp.length} módulos)</div>`+
-    planTemp.map((m,k)=>`<div class="modulo mb-2"><b>${k+1}. ${esc(m.titulo)}</b> ${m.horas?`<span class="text-muted small">· ${m.horas} h</span>`:''}
-    <div class="small text-muted">${m.temas.map(esc).join(' · ')}</div></div>`).join(''):'';
-}
+
 $('#formCurso').addEventListener('submit',ev=>{
   ev.preventDefault();
-  if($('#curPlanTexto').value.trim() && !planTemp.length) planTemp=analizarPlan($('#curPlanTexto').value);
+  if(franjasTemp.some(x=>!x.ini||!x.fin||x.fin<=x.ini)){ toast('En cada horario, la hora final debe ser después de la inicial'); return; }
+  const dc=descTemp.filter(d=>d.codigo.trim());
+  if(new Set(dc.map(d=>d.codigo)).size!==dc.length){ toast('Hay códigos de descuento repetidos'); return; }
   const id=$('#curId').value||uid();
   const prev=curso(id)||{};
-  const grupo={docente:$('#curDocente').value.trim(),jornada:$('#curJornada').value,
-    dias:[...document.querySelectorAll('#curDias input:checked')].map(x=>+x.value),
-    horaIni:$('#curHoraIni').value,horaFin:$('#curHoraFin').value,inicio:$('#curInicio').value,
-    numClases:Math.max(1,+$('#curNumClases').value||16),festivos:$('#curFestivos').checked};
-  const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,nivel:$('#curNivel').value,
-              desc:$('#curDesc').value,plan:planTemp,grupo,clases:prev.clases||[],
+  const pro=profesional($('#curProf').value);
+  const grupo=normGrupo({docente:pro?pro.nombre:'',profesionalId:pro?pro.id:'',jornada:$('#curJornada').value,
+    slots:franjasTemp.map(x=>({...x})),inicio:$('#curInicio').value,
+    numClases:Math.max(1,+$('#curNumClases').value||16),festivos:$('#curFestivos').checked});
+  const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,nivel:$('#curNivel').value,areaId:$('#curArea').value,
+              desc:$('#curDesc').value,grupo,clases:prev.clases||[],modulos:prev.modulos||[],descuentos:dc,
               evaluaciones:prev.evaluaciones||[{id:'ev1',nombre:'Prácticas',peso:40,clase:null},{id:'ev2',nombre:'Evaluación final',peso:60,clase:grupo.numClases}]};
   const idx=DB.cursos.findIndex(c=>c.id===id); idx>=0?DB.cursos[idx]=data:DB.cursos.push(data);
   guardar(); modal('mCurso').hide(); render(); if(cursoActual===id) pintarCurso(); toast('Curso guardado');
@@ -797,25 +892,23 @@ $('#formCurso').addEventListener('submit',ev=>{
 
 /* Resumen de fechas en vivo dentro del formulario */
 function resumenFechasForm(){
-  const g={dias:[...document.querySelectorAll('#curDias input:checked')].map(x=>+x.value),inicio:$('#curInicio').value,
-           numClases:+$('#curNumClases').value||0,festivos:$('#curFestivos').checked,horaIni:$('#curHoraIni').value,horaFin:$('#curHoraFin').value};
+  const g={slots:franjasTemp,inicio:$('#curInicio').value,numClases:+$('#curNumClases').value||0,festivos:$('#curFestivos').checked};
   const prev=curso($('#curId').value);
-  const f=fechasClases({grupo:g,clases:prev?.clases||[]}).filter(Boolean);
-  if(!g.inicio || !g.dias.length){ $('#curResumenFechas').innerHTML='<i class="bi bi-info-circle"></i> Elige los días y la primera clase para calcular cuándo termina.'; return; }
-  if(g.inicio && !g.dias.includes(new Date(g.inicio+'T12:00').getDay())){
-    $('#curResumenFechas').innerHTML=`<i class="bi bi-exclamation-triangle"></i> La primera clase cae ${DIAS_L[new Date(g.inicio+'T12:00').getDay()]}, que no es un día de clase. Empezará el ${fechaLarga(f[0])}.`; }
-  else {
-    const fin=f.at(-1), semanas=Math.ceil((new Date(fin)-new Date(f[0]))/864e5/7)+1, h=horasClase(g)*g.numClases;
-    const saltados=[]; if(g.festivos){ let t=new Date(f[0]); while(t.toISOString().slice(0,10)<=fin){ const iso=t.toISOString().slice(0,10); if(g.dias.includes(t.getUTCDay())&&esFestivo(iso)) saltados.push(iso); t.setUTCDate(t.getUTCDate()+1);} }
-    $('#curResumenFechas').innerHTML=`<b>Termina el ${DIAS_L[new Date(fin+'T12:00').getDay()]} ${fechaLarga(fin)}</b> · ${semanas} semanas · ${g.numClases} clases de ${horasClase(g)} h = <b>${h} h</b>`+
-      (saltados.length?`<div class="text-muted mt-1"><i class="bi bi-calendar-x"></i> Se saltan festivos: ${saltados.map(fechaCorta).join(', ')}</div>`:'');
-  }
+  const ses=sesionesGrupo(g,prev?.clases||[]), f=ses.map(x=>x.fecha).filter(Boolean);
+  const caja=$('#curResumenFechas');
+  if(!g.inicio || !franjasTemp.length || !f.length){ caja.innerHTML='<i class="bi bi-info-circle"></i> Elige el horario y la primera clase para calcular cuándo termina.'; return; }
+  const diasConClase=new Set(franjasTemp.map(x=>x.dia)), dia0=new Date(g.inicio+'T12:00').getDay();
+  const aviso = diasConClase.has(dia0) ? '' : `<div class="text-warning"><i class="bi bi-exclamation-triangle"></i> La primera clase cae ${DIAS_L[dia0]}, que no tiene horario. Empezará el ${fechaLarga(f[0])}.</div>`;
+  const fin=f.at(-1), semanas=Math.ceil((new Date(fin)-new Date(f[0]))/864e5/7)+1, h=ses.reduce((a,x)=>a+horasSesion(x),0);
+  const saltados=[]; if(g.festivos){ let t=new Date(f[0]+'T12:00Z'); while(t.toISOString().slice(0,10)<=fin){ const iso=t.toISOString().slice(0,10); if(diasConClase.has(t.getUTCDay())&&esFestivo(iso)) saltados.push(iso); t.setUTCDate(t.getUTCDate()+1);} }
+  caja.innerHTML=aviso+`<b>Termina el ${DIAS_L[new Date(fin+'T12:00').getDay()]} ${fechaLarga(fin)}</b> · ${semanas} semanas · ${g.numClases} clases = <b>${h} h</b>`+
+    (saltados.length?`<div class="text-muted mt-1"><i class="bi bi-calendar-x"></i> Se saltan festivos: ${saltados.map(fechaCorta).join(', ')}</div>`:'');
 }
-['#curInicio','#curNumClases','#curFestivos','#curHoraIni','#curHoraFin'].forEach(s=>$(s).addEventListener('input',resumenFechasForm));
-$('#curDias').addEventListener('change',resumenFechasForm);
+['#curInicio','#curNumClases','#curFestivos'].forEach(q=>$(q).addEventListener('input',resumenFechasForm));
 
 function duplicarCurso(id){
   const c=structuredClone(curso(id)); c.id=uid(); c.nombre=c.nombre+' (otro grupo)';
-  c.grupo.docente=''; c.grupo.inicio=''; (c.clases||[]).forEach(cl=>{ delete cl.fecha; cl.obs=''; });
+  c.grupo.docente=''; c.grupo.profesionalId=''; c.grupo.inicio=''; (c.clases||[]).forEach(cl=>{ delete cl.fecha; delete cl.ini; delete cl.fin; cl.obs=''; });
+  (c.descuentos||[]).forEach(d=>{ d.usos=0; });
   DB.cursos.push(c); guardar(); render(); abrirCurso(c.id); toast('Curso duplicado: ajusta docente, jornada y fechas');
 }

@@ -16,7 +16,9 @@ function migrarEsquema(){
   let cambio=false;
   DB.areas=DB.areas||[]; DB.profesionales=DB.profesionales||[]; DB.modulos=DB.modulos||[]; DB.espacios=DB.espacios||[];
   if(!DB.areas.length){ DB.areas=AREAS_BASE.map(a=>({...a})); cambio=true; }
+  const PISTAS=[['ar_maq',/maquill/],['ar_cej',/ceja|pesta/],['ar_cab',/cabell|pelo|peluq|corte|barber/],['ar_man',/manicur|unas|nail/],['ar_ped',/pedicur/],['ar_fac',/facial|estetic|limpieza/]];
   DB.cursos.forEach(c=>{
+    if(!c.areaId){ const t=norm(c.nombre), h=PISTAS.find(([id,re])=>re.test(t) && area(id)); if(h){ c.areaId=h[0]; cambio=true; } }  // área sugerida por el nombre del curso
     if(c.grupo){ if(!c.grupo.slots) cambio=true; normGrupo(c.grupo); }
     if(!c.descuentos){ c.descuentos=[]; cambio=true; }
     const nom=(c.grupo?.docente||'').trim();

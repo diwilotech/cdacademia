@@ -568,15 +568,23 @@ function render(){
     ['Próximos 30 días',TODAS.filter(q=>q.falta>0&&q.fecha>=hoy&&q.fecha<=proxMes).reduce((a,q)=>a+q.falta,0),'']];
   $('#statsCuotas').innerHTML=sCuo.map(([e,v,cl])=>`<div class="col-md-4"><div class="card stat"><div class="card-body py-3">
     <span class="etq">${e}</span><div class="valor tabular mt-1 ${cl}" style="font-size:1.5rem">${money(v)}</div></div></div></div>`).join('');
-  $('#tablaCuotas').innerHTML = lista.map(q=>{const e=est(q.insc.estId), cu=curso(q.insc.cursoId);
+  // avance del plan de cada inscripción (cuotas pagadas / total) y fechas de inicio y fin de cada curso
+  const plan={}; TODAS.forEach(q=>{ const p=plan[q.insc.id]=plan[q.insc.id]||{pagadas:0,total:0}; p.total++; if(q.estado==='pagada') p.pagadas++; });
+  const fechasCurso={}; DB.cursos.forEach(cu=>{ const inf=infoCurso(cu); fechasCurso[cu.id]=inf.inicio ? `${fechaMini(inf.inicio)} → ${inf.fin?fechaMini(inf.fin):'—'}` : 'Sin fechas'; });
+  $('#tablaCuotas').innerHTML = lista.map(q=>{const e=est(q.insc.estId), cu=curso(q.insc.cursoId), p=plan[q.insc.id]||{pagadas:0,total:1};
+    const regulares=(q.insc.cuotas||[]).filter(x=>x.n>0).length;
+    const cuota = q.n===0 ? 'Inicial' : regulares<=1 ? 'Pago único' : `${q.n} de ${regulares}`, pct=p.total?Math.round(p.pagadas/p.total*100):0;
     return `<tr><td class="tabular text-nowrap">${fechaLarga(q.fecha)}</td>
-      <td><a href="#" class="text-reset fw-semibold text-decoration-none" onclick="event.preventDefault();verFicha('${e.id}')">${esc(e.nombre)}</a></td>
-      <td><small>${esc(cu?.nombre)}</small></td><td><small>${esc(q.etiqueta)}</small></td>
-      <td class="text-end tabular">${money(q.valor)}</td>
-      <td class="text-end tabular fw-semibold">${q.falta>0?money(q.falta):'—'}</td>
+      <td><a href="#" class="text-reset fw-semibold text-decoration-none" onclick="event.preventDefault();verFicha('${e.id}')">${esc(e.nombre)}</a>
+        <div class="small text-muted text-truncate" style="max-width:260px">${esc(cu?.nombre||'')}</div>
+        <div class="small text-muted tabular"><i class="bi bi-calendar-range"></i> ${fechasCurso[q.insc.cursoId]||''}</div></td>
+      <td style="min-width:110px"><div class="small fw-semibold tabular">${cuota}</div>
+        <div class="barra mt-1" title="${p.pagadas} de ${p.total} cuotas pagadas"><i style="width:${pct}%"></i></div></td>
+      <td class="text-end tabular"><div class="fw-semibold">${money(q.valor)}</div>
+        <div class="small ${q.falta>0?'text-danger':'text-success'}">${q.falta>0?'Falta '+money(q.falta):'Pagada'}</div></td>
       <td>${pill(q)}</td>
       <td class="text-end text-nowrap">${q.falta>0?`${botonWA(q)} <button class="btn btn-sm btn-marca" onclick="abrirPago('${q.insc.id}')">Cobrar</button>`:''}</td></tr>`}).join('')
-    || '<tr><td colspan="8" class="text-center text-muted py-4">No hay cuotas en este filtro.</td></tr>';
+    || '<tr><td colspan="6" class="text-center text-muted py-4">No hay cuotas en este filtro.</td></tr>';
 
   // últimos pagos
   const ult=[...DB.pagos].sort((a,b)=>b.num-a.num).slice(0,5);

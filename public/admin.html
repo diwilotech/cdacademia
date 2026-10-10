@@ -587,16 +587,10 @@
               <div class="col-12 col-md-9"><div class="small text-muted" id="curAyudaSemana"></div></div></div>
             <div id="curFranjas" class="d-flex flex-column gap-2"></div>
           </div>
-          <div class="col-12"><div class="form-check">
-            <input class="form-check-input" type="checkbox" id="curModoVarChk"><label class="form-check-label small" for="curModoVarChk">Las semanas no son iguales: poner la fecha de cada clase por separado</label></div></div>
-
-          <div class="col-12" id="curBloqueVariable" hidden>
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-              <small class="text-muted">Pon la fecha y la hora de cada clase. Pueden caer en días distintos cada semana: por ejemplo la clase 1 un sábado y la clase 2 un martes.</small>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="curRellenar"><i class="bi bi-magic"></i> Rellenar con el horario semanal</button></div>
-            <div id="curFechasClases" class="d-flex flex-column gap-2"></div></div>
           <div class="col-12"><div class="bg-marca-suave rounded px-3 py-2 small tabular" id="curResumenFechas">—</div></div>
-          <div class="col-12"><details><summary class="small text-marca" style="cursor:pointer">Ver todas las clases con su fecha y hora</summary><div class="d-flex flex-wrap gap-1 mt-2" id="curListaClases" style="max-height:160px;overflow:auto"></div></details></div>
+          <div class="col-12"><button type="button" class="btn btn-sm btn-outline-secondary" id="curCalcular"><i class="bi bi-calculator"></i> Calcular clases y revisar choques</button>
+            <small class="text-muted ms-2">Arma todas las fechas y revisa si chocan con otras clases del área o del profesor.</small></div>
+          <div class="col-12" id="curCalculo" hidden></div>
         </div></div>
 
       <div class="paso"><h2><span class="n">3</span> Módulos</h2>

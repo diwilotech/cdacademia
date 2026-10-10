@@ -37,7 +37,7 @@ invitaciones `#invite=` (crear/restablecer), bloqueo 5/15, solo lectura con 402 
 - **Profesionales** (`DB.profesionales`): por área, niveles que dicta (Básico…Profesional) y si **puede reponer**; horario semanal.
   Solo ellos se ofrecen como docente de un curso y como responsables de una reposición de esa área y nivel.
 - **Horario del curso**: se llena como lista la primera semana («Clase 1: sábado, Clase 2: martes», con «días de clase por semana»); la fecha de la primera clase marca el inicio
-  y el resto de las clases se llenan solas con ese patrón (`grupo.slots`). Opción «las semanas no son iguales»: cada clase con su fecha y hora (`grupo.modo='variable'`, `grupo.sesiones`).
+  y el resto de las clases se llenan solas con ese patrón (`grupo.slots`). El botón «Calcular clases» arma todas las fechas y revisa si chocan con clases futuras de otros cursos de la misma área o del mismo profesor (y con espacios de reposición); al guardar con choques avisa una vez.
 - **Módulos** (`DB.modulos`, biblioteca general): se construyen como un documento de bloques (`bloques`: título, subtítulo, texto con **negrita**/*cursiva*, listas, nota destacada,
   archivos con vista previa incrustada —imagen, PDF completo, audio, video—, enlaces y videos de YouTube/Vimeo, separador). `items`, `temas` y `descripcion` se derivan al guardar.
   Un curso los referencia con `curso.modulos = [{ref, desde, hasta}]` (orden = orden del arreglo). El formulario del curso muestra los módulos como tarjetas para agregar y ordenar.

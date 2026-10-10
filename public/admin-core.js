@@ -875,7 +875,7 @@ function abrirCurso(id){
   franjasTemp=slotsDe(g).map(x=>({...x})); if(!franjasTemp.length && g.modo!=='variable') franjasTemp=[{dia:6,ini:'08:00',fin:'10:00'}];
   descTemp=structuredClone(c.descuentos||[]); modsTemp=structuredClone(c.modulos||[]);
   modAreaTodas=false; modBuscar='';
-  modoCurso=g.modo==='variable'?'variable':'semanal'; sesionesTemp=structuredClone(g.sesiones||[]); aplicarModoCurso();
+  calculado=false; $('#curCalculo').hidden=true;
   refrescarHorario(); pintarDescCurso(); pintarModsCurso();
   modal('mCurso').show();
 }
@@ -914,6 +914,7 @@ function analizarPlan(texto){
 $('#formCurso').addEventListener('submit',ev=>{
   ev.preventDefault();
   const errHorario=validarHorario(); if(errHorario){ toast(errHorario); return; }
+  if(frenarPorChoques()) return;
   const dc=descTemp.filter(d=>d.codigo.trim());
   if(new Set(dc.map(d=>d.codigo)).size!==dc.length){ toast('Hay cupones repetidos'); return; }
   const id=$('#curId').value||uid();

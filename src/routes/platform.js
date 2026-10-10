@@ -2,12 +2,14 @@ import { json, error, readJson } from "../lib/http.js";
 import { first, all, uid } from "../lib/db.js";
 import { sha256Hex, randomToken } from "../lib/password.js";
 import { requirePlatform, isExpired } from "../lib/auth.js";
+import { RESERVADOS } from "../lib/slug.js";
 
 // API de plataforma para Diwilo Web: solo por RPC (ver lib/platform-rpc.js). Sin cookies ni CSRF.
 const ROLES = ["owner", "admin", "staff"];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const inviteTo = (token) => `/#invite=${token}`;
+// el link de invitación lleva la dirección del negocio: /<slug>#invite=<token>
+const inviteTo = (slug, token) => `/${slug}#invite=${token}`;
 
 const slugify = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36) || "academia";
 
@@ -15,7 +17,7 @@ async function uniqueSlug(env, name) {
   const base = slugify(name);
   for (let i = 0; i < 6; i++) {
     const slug = i === 0 ? base : `${base}-${randomToken().slice(0, 4)}`;
-    if (!(await first(env, `SELECT 1 FROM businesses WHERE slug = ?`, slug))) return slug;
+    if (!RESERVADOS.has(slug) && !(await first(env, `SELECT 1 FROM businesses WHERE slug = ?`, slug))) return slug;
   }
   return `${base}-${randomToken().slice(0, 8)}`;
 }
@@ -53,13 +55,13 @@ export function registerPlatform(router) {
     if (!nombre) return error("Falta el nombre del negocio");
     if (!EMAIL.test(mail)) return error("El correo del dueño no es válido");
     if (paid_until != null && paid_until !== "" && !DATE.test(paid_until)) return error("La fecha debe ser AAAA-MM-DD");
-    const bizId = uid(), userId = uid(), token = randomToken();
+    const bizId = uid(), userId = uid(), token = randomToken(), slug = await uniqueSlug(env, nombre);
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO businesses (id, slug, name, paid_until) VALUES (?,?,?,?)`).bind(bizId, await uniqueSlug(env, nombre), nombre, paid_until || null),
+      env.DB.prepare(`INSERT INTO businesses (id, slug, name, paid_until) VALUES (?,?,?,?)`).bind(bizId, slug, nombre, paid_until || null),
       env.DB.prepare(`INSERT INTO users (id, business_id, email, name, role, invite_hash) VALUES (?,?,?,?, 'owner', ?)`)
         .bind(userId, bizId, mail, String(owner_name || "").trim().slice(0, 120) || mail, await sha256Hex(token)),
     ]);
-    return json({ id: bizId, invite_path: inviteTo(token) }, { status: 201 });
+    return json({ id: bizId, invite_path: inviteTo(slug, token) }, { status: 201 });
   }));
 
   router.get("/api/platform/businesses/:id", guard(async (request, env, ctx) => {
@@ -85,7 +87,8 @@ export function registerPlatform(router) {
 
   // Crea al usuario sin contraseña; si ya existe, actualiza su rol y genera un link nuevo (restablecer).
   router.post("/api/platform/businesses/:id/users", guard(async (request, env, ctx) => {
-    if (!(await first(env, `SELECT 1 FROM businesses WHERE id = ?`, ctx.params.id))) return error("Negocio no encontrado", 404);
+    const negocio = await first(env, `SELECT slug FROM businesses WHERE id = ?`, ctx.params.id);
+    if (!negocio) return error("Negocio no encontrado", 404);
     const { email, name, role } = await readJson(request);
     const mail = String(email || "").trim().toLowerCase();
     if (!EMAIL.test(mail)) return error("El correo no es válido");
@@ -101,7 +104,7 @@ export function registerPlatform(router) {
       await env.DB.prepare(`INSERT INTO users (id, business_id, email, name, role, invite_hash) VALUES (?,?,?,?,?,?)`)
         .bind(id, ctx.params.id, mail, String(name || "").trim().slice(0, 120) || mail, rol, hash).run();
     }
-    return json({ id, invite_path: inviteTo(token) });
+    return json({ id, invite_path: inviteTo(negocio.slug, token) });
   }));
 
   // Cambia solo el rol (permisos), sin link nuevo ni tocar la contraseña. 'owner' pasa la propiedad

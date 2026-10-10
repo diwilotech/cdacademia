@@ -56,3 +56,23 @@ invitaciones `#invite=` (crear/restablecer), bloqueo 5/15, solo lectura con 402 
 - Archivos: R2 `cdacademia-files`, hasta 20 MB; solo PDF/imágenes/audio/video se muestran en línea, lo demás se descarga.
 - Fotos de marketing: aún en el navegador (IndexedDB).
 - Stubs: reposición virtual (Cloudflare Stream) y organizar plan con IA (hoy analizador local).
+
+## Dirección de cada negocio (slug)
+
+Cada negocio se atiende en su propia dirección, con el `slug` que crea Diwilo (ej. `academia-de-prueba`):
+
+| Ruta | Qué hace |
+| --- | --- |
+| `/<slug>` | Login del negocio (si ya hay sesión de ese negocio, va al panel). 404 si el slug no existe. |
+| `/<slug>/admin` | Panel del negocio. Sin sesión redirige a `/<slug>`; con sesión de otro negocio, al suyo. |
+| `/admin` | Compatibilidad: redirige a `/<slug>/admin` de la sesión. |
+
+- `invite_path` que devuelve la app es `/<slug>#invite=<token>`; Diwilo lo antepone con `ACADEMIA_URL`.
+- Slugs reservados (no se asignan): `admin, login, api, staff, assets, index, favicon`.
+- El login acepta `slug` para entrar solo a ese negocio (si el correo está en varios).
+
+## Personal con acceso
+
+Configuración → "Personal con acceso" (solo dueño/administrador) usa `/staff/team` sobre la tabla `users`,
+la misma que lista Diwilo, así que el personal creado en la app aparece en Diwilo y viceversa.
+Roles asignables en la app: `admin`, `staff`. El dueño se gestiona solo desde Diwilo.

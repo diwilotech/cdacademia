@@ -10,7 +10,7 @@ export function registerAuth(router) {
   // Login con correo + contraseña. Bloquea 15 min tras 5 intentos fallidos del mismo correo.
   // Si la cuenta está en varios negocios responde { choose: [...] } y el cliente repite con business_id.
   router.post("/api/auth/login", async (request, env) => {
-    const { email, password, business_id } = await readJson(request);
+    const { email, password, business_id, slug } = await readJson(request);
     const mail = String(email || "").trim().toLowerCase();
     if (!mail || !password) return error("Escribe tu correo y tu contraseña");
 
@@ -18,9 +18,9 @@ export function registerAuth(router) {
     if (intento?.locked_until && intento.locked_until > nowIso()) return error("Demasiados intentos. Prueba en unos minutos.", 429);
 
     const users = await all(env,
-      `SELECT u.*, b.name AS business_name FROM users u JOIN businesses b ON b.id = u.business_id
-       WHERE u.email = ? AND u.active = 1 ${business_id ? "AND u.business_id = ?" : ""}`,
-      ...(business_id ? [mail, business_id] : [mail]));
+      `SELECT u.*, b.name AS business_name, b.slug AS business_slug FROM users u JOIN businesses b ON b.id = u.business_id
+       WHERE u.email = ? AND u.active = 1 ${business_id ? "AND u.business_id = ?" : slug ? "AND b.slug = ?" : ""}`,
+      ...(business_id ? [mail, business_id] : slug ? [mail, String(slug)] : [mail]));
     const matches = [];
     for (const u of users) if (await verifyPassword(String(password), u.password_salt, u.password_hash)) matches.push(u);
 
@@ -33,9 +33,9 @@ export function registerAuth(router) {
       return error(GENERIC, 401);
     }
     await run(env, `DELETE FROM login_attempts WHERE email = ?`, mail);
-    if (matches.length > 1) return json({ choose: matches.map((u) => ({ id: u.business_id, name: u.business_name })) });
+    if (matches.length > 1) return json({ choose: matches.map((u) => ({ id: u.business_id, name: u.business_name, slug: u.business_slug })) });
     const token = await createSession(env, matches[0].id, matches[0].business_id);
-    return json({ ok: true }, { headers: { "set-cookie": sessionCookie(token) } });
+    return json({ ok: true, slug: matches[0].business_slug }, { headers: { "set-cookie": sessionCookie(token) } });
   });
 
   router.post("/api/logout", async (request, env) => {
@@ -64,7 +64,8 @@ export function registerAuth(router) {
       env.DB.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(u.id),
     ]);
     const session = await createSession(env, u.id, u.business_id);
-    return json({ ok: true }, { headers: { "set-cookie": sessionCookie(session) } });
+    const negocio = await first(env, `SELECT slug FROM businesses WHERE id = ?`, u.business_id);
+    return json({ ok: true, slug: negocio?.slug }, { headers: { "set-cookie": sessionCookie(session) } });
   });
 
   // Cambiar la contraseña desde el panel (sirve aunque la suscripción esté vencida). Cierra las demás sesiones.
@@ -86,7 +87,7 @@ export function registerAuth(router) {
 
   router.get("/staff/me", async (request, env) => {
     const s = await currentSession(request, env);
-    return s ? json({ email: s.email, name: s.name, role: s.role, negocio: s.business_name, readOnly: s.read_only, paidUntil: s.paid_until })
+    return s ? json({ email: s.email, name: s.name, role: s.role, negocio: s.business_name, slug: s.slug, readOnly: s.read_only, paidUntil: s.paid_until })
              : error("No autorizado", 401);
   });
 }

@@ -17,8 +17,9 @@ command = "sh -c 'if [ -n \"$WORKERS_CI\" ]; then npx wrangler d1 migrations app
 [assets]
 directory = "./public"
 binding = "ASSETS"
-# "/", "/login" y "/admin" pasan primero por el Worker (sirve el login o el panel con el estado incrustado).
-run_worker_first = ["/", "/login", "/admin", "/admin.html"]
+# Todo pasa primero por el Worker: sirve el login, el panel de cada negocio (/<slug>/admin) con su estado incrustado
+# y deja pasar los archivos estáticos.
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"

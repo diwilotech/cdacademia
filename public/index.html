@@ -78,12 +78,14 @@
     if (!r.ok) throw new Error(d.error || 'No se pudo entrar.');
     return d;
   }
-  const go = () => location.replace('/admin');
+  // La dirección del negocio es /<slug>; sin slug en la URL se resuelve por el correo.
+  const slug = (location.pathname.match(/^\/([a-z0-9][a-z0-9-]*)\/?$/) || [])[1];
+  const go = (s) => location.replace(s ? '/' + s + '/admin' : '/admin');
   const invite = (location.hash.match(/^#invite=([a-f0-9]{64})$/) || [])[1];
 
   if (!invite) {
     // Con sesión abierta: directo al panel.
-    fetch('/staff/me', { credentials: 'include' }).then((r) => { if (r.ok) go(); }).catch(() => {});
+    fetch('/staff/me', { credentials: 'include' }).then((r) => { if (r.ok) r.json().then((d) => go(d.slug)); }).catch(() => {});
   } else {
     // Link de invitación: crear contraseña (o restablecerla).
     $('loginForm').classList.add('d-none'); $('help').classList.add('d-none');
@@ -99,12 +101,12 @@
       if ($('invPass').value.length < 8) { $('invErr').textContent = 'Mínimo 8 caracteres.'; return; }
       if ($('invPass').value !== $('invPass2').value) { $('invErr').textContent = 'Las contraseñas no coinciden.'; return; }
       $('invBtn').disabled = true;
-      try { await call('/api/auth/invite', { token: invite, password: $('invPass').value, name: $('invName').value }); history.replaceState(null, '', '/'); go(); }
+      try { await call('/api/auth/invite', { token: invite, password: $('invPass').value, name: $('invName').value }); history.replaceState(null, '', location.pathname); go((await call('/staff/me')).slug); }
       catch (x) { $('invErr').textContent = x.message; $('invBtn').disabled = false; }
     });
   }
 
-  const creds = () => ({ email: $('email').value.trim(), password: $('password').value });
+  const creds = () => ({ email: $('email').value.trim(), password: $('password').value, ...(slug ? { slug } : {}) });
 
   $('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -114,12 +116,12 @@
     $('btn').disabled = true;
     try {
       const r = await call('/api/auth/login', c);
-      if (!r.choose) return go();
+      if (!r.choose) return go(r.slug);
       // La misma cuenta en varios negocios: elegir a cuál entrar.
       $('loginForm').classList.add('d-none'); $('help').classList.add('d-none'); $('pick').classList.remove('d-none');
       $('title').textContent = '¿A qué negocio entras?';
       $('sub').textContent = c.email;
-      $('pickList').innerHTML = r.choose.map((b) => `<button type="button" data-id="${esc(b.id)}"><i class="bi bi-shop"></i>${esc(b.name)}</button>`).join('');
+      $('pickList').innerHTML = r.choose.map((b) => `<button type="button" data-id="${esc(b.id)}" data-slug="${esc(b.slug)}"><i class="bi bi-shop"></i>${esc(b.name)}</button>`).join('');
     } catch (x) {
       $('err').textContent = x.message;
       $('password').value = ''; $('password').focus();
@@ -129,7 +131,7 @@
   $('pickList').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-id]'); if (!b) return;
     b.disabled = true;
-    try { await call('/api/auth/login', { ...creds(), business_id: b.dataset.id }); go(); }
+    try { await call('/api/auth/login', { ...creds(), business_id: b.dataset.id }); go(b.dataset.slug); }
     catch (x) { $('sub').textContent = x.message; b.disabled = false; }
   });
 

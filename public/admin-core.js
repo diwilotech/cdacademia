@@ -220,7 +220,7 @@ async function sincronizar(){
     const r=await fetch('/staff/state',{method:'PUT',headers:{'content-type':'application/json','x-requested-with':'cda'},body:JSON.stringify({data:DB,version:VERSION})});
     const d=await r.json().catch(()=>({}));
     if(r.ok){ VERSION=d.version; if(!_sucio) estadoSync('ok'); }
-    else if(r.status===401){ location.href='/'; }
+    else if(r.status===401){ location.href='/'+(window.__BOOT__?.slug||''); }
     else if(r.status===402){ _bloqueado=true; document.getElementById('barraVencida').hidden=false; estadoSync('error', d.error); }
     else { if(r.status===409) _bloqueado=true; estadoSync('error', d.error); }
   }catch(e){ _sucio=true; estadoSync('error','Sin conexión; reintentando…'); _tSync=setTimeout(sincronizar,5000); }
@@ -271,7 +271,7 @@ function cambiarClave(ev){
 async function cerrarSesion(ev){
   ev?.preventDefault();
   try{ await fetch('/api/logout',{method:'POST',headers:{'x-requested-with':'cda'}}); }catch(e){}
-  location.href='/';
+  location.href='/'+(window.__BOOT__?.slug||'');
 }
 
 /* =========================================================

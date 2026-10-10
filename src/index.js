@@ -8,6 +8,8 @@ import { registerAuth } from "./routes/auth.js";
 import { registerState } from "./routes/state.js";
 import { registerFiles } from "./routes/files.js";
 import { registerIA } from "./routes/ia.js";
+import { registerTeam } from "./routes/team.js";
+import { slugValido } from "./lib/slug.js";
 
 const router = new Router();
 registerPlatform(router); // primero: /api/platform/* no debe caer en otras rutas
@@ -15,6 +17,7 @@ registerAuth(router);
 registerState(router);
 registerFiles(router);
 registerIA(router);
+registerTeam(router);
 
 // JSON seguro para incrustar dentro de <script>
 const inline = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -24,7 +27,7 @@ async function servirAdmin(request, env, session) {
   const url = new URL(request.url); url.pathname = "/admin"; // los assets resuelven /admin -> admin.html (pedir .html redirige)
   const res = await env.ASSETS.fetch(new Request(url, request));
   const row = await env.DB.prepare(`SELECT data, version FROM app_state WHERE business_id = ?`).bind(session.business_id).first();
-  const boot = { estado: row ? JSON.parse(row.data) : null, version: row?.version || 0, negocio: session.business_name, usuario: session.name, readOnly: session.read_only, paidUntil: session.paid_until };
+  const boot = { estado: row ? JSON.parse(row.data) : null, version: row?.version || 0, negocio: session.business_name, usuario: session.name, rol: session.role, slug: session.slug, readOnly: session.read_only, paidUntil: session.paid_until };
   return new HTMLRewriter()
     .on("head", { element(el) { el.append(`<script>window.__BOOT__=${inline(boot)};</script>`, { html: true }); } })
     .transform(new Response(res.body, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }));
@@ -34,15 +37,28 @@ const worker = {
   async fetch(request, env) {
     const url = new URL(request.url), path = url.pathname;
 
-    // Páginas protegidas
+    const partes = path.split("/").filter(Boolean);
+    const ir = (a) => Response.redirect(new URL(a, url), 302);
+    const paginaLogin = () => { const u = new URL(request.url); u.pathname = "/"; return env.ASSETS.fetch(new Request(u, request)); };   // index.html sin volver a pasar por el Worker
+
+    // Compatibilidad: /admin y /admin.html llevan al panel del negocio de la sesión
     if (path === "/admin" || path === "/admin.html") {
       const s = await currentSession(request, env);
-      return s ? servirAdmin(request, env, s) : Response.redirect(new URL("/", url), 302);
+      return ir(s ? `/${s.slug}/admin` : "/");
     }
-    // Login en la raíz (la página manda al panel si ya hay sesión y no trae #invite)
-    if (path === "/" || path === "/login") {
-      url.pathname = "/"; // el binding de assets sirve index.html en "/" sin volver a pasar por el Worker
-      return env.ASSETS.fetch(new Request(url, request));
+    // Login general (sin negocio en la URL) y login de un negocio: /<slug>
+    if (path === "/" || path === "/login") return paginaLogin();
+    if (partes.length === 1 && slugValido(partes[0])) {
+      const negocio = await env.DB.prepare(`SELECT slug FROM businesses WHERE slug = ?`).bind(partes[0]).first();
+      if (!negocio) return new Response("No encontramos este negocio.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+      const s = await currentSession(request, env);
+      return s && s.slug === partes[0] ? ir(`/${s.slug}/admin`) : paginaLogin();
+    }
+    // Panel de un negocio: /<slug>/admin (solo con sesión de ese negocio)
+    if (partes.length === 2 && partes[1] === "admin" && slugValido(partes[0])) {
+      const s = await currentSession(request, env);
+      if (!s) return ir(`/${partes[0]}`);
+      return s.slug === partes[0] ? servirAdmin(request, env, s) : ir(`/${s.slug}/admin`);
     }
 
     if (!path.startsWith("/api/") && !path.startsWith("/staff/")) return env.ASSETS.fetch(request);

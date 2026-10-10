@@ -364,6 +364,19 @@
               </form>
             </div></div>
           </div>
+          <div class="col-lg-6" id="cardPersonal" hidden>
+            <div class="card mb-3"><div class="card-body">
+              <h2 class="h5">Personal con acceso</h2>
+              <p class="small text-muted">Quién puede entrar al panel. También aparece en Diwilo. Se les da un link para crear su contraseña.</p>
+              <div id="listaPersonal" class="mb-3"></div>
+              <form id="formPersonal" class="row g-2">
+                <div class="col-sm-5"><input class="form-control form-control-sm" id="perMail" type="email" placeholder="Correo" required aria-label="Correo"></div>
+                <div class="col-sm-4"><input class="form-control form-control-sm" id="perNombre" placeholder="Nombre" aria-label="Nombre"></div>
+                <div class="col-sm-3"><select class="form-select form-select-sm" id="perRol" aria-label="Rol"><option value="staff">Personal</option><option value="admin">Administrador</option></select></div>
+                <div class="col-12"><button class="btn btn-sm btn-marca">Agregar / reenviar link</button> <span class="small" id="perMsg"></span></div>
+              </form>
+            </div></div>
+          </div>
           <div class="col-lg-6">
             <div class="card mb-3"><div class="card-body">
               <h2 class="h5">Área / rubro</h2>
@@ -802,6 +815,7 @@
 <script src="/admin-profesionales.js"></script>
 <script src="/admin-semana.js"></script>
 <script src="/admin-calendario.js"></script>
+<script src="/admin-personal.js"></script>
 <script src="/admin-boot.js"></script>
 </body>
 </html>

@@ -876,6 +876,26 @@ function calificarExamen(ev, ex){
   });
   return {obtenido, total, pendientes, det, pct: total?obtenido/total:null};
 }
+/* Botón de la celda de nota: subir el archivo, ver el archivo subido o ver el examen de selección múltiple */
+function botonExamen(i,x,e){
+  const multiple=!!x.examen?.preguntas?.length, ex=i.examenes?.[x.id], archivos=(ex?.archivos||[]).length, respondido=Object.keys(ex?.resp||{}).length>0;
+  const [ic,tit,cls,acc] = multiple ? ['bi-eye', respondido?'Ver respuestas del examen':'Ver examen (selección múltiple)', respondido?'text-marca':'text-secondary','ver']
+    : archivos ? ['bi-file-earmark-check-fill','Ver archivo subido','text-marca','ver'] : ['bi-upload','Subir archivo','text-secondary','subir'];
+  return `<button type="button" class="btn btn-link p-0 ${cls}" data-examen="${x.id}" data-acc="${acc}" title="${tit}" aria-label="${tit} de ${esc(e.nombre)}"><i class="bi ${ic}"></i></button>`;
+}
+/* Sube la foto o el PDF del examen sin abrir ninguna ventana */
+function subirExamenDirecto(inscId,evId){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf'; inp.multiple=true;
+  inp.onchange=async()=>{
+    const i=insc(inscId), ex=examenDe(i,evId); let n=0;
+    for(const f of inp.files){
+      if(!/^image\/|^application\/pdf$/.test(f.type)){ toast(`«${f.name}» no es una foto ni un PDF`); continue; }
+      try{ ex.archivos.push(await subirArchivo(f)); n++; } catch(x){ toast(x.message); }
+    }
+    if(n){ guardar(); pintarCurso(); toast(n===1?'Archivo subido':`${n} archivos subidos`); }
+  };
+  inp.click();
+}
 const tieneExamen = (i,x) => { const e=i.examenes?.[x.id]; return !!e && ((e.archivos||[]).length>0 || Object.keys(e.resp||{}).length>0); };
 function examenDe(i,evId){ i.examenes=i.examenes||{}; const e=i.examenes[evId]=i.examenes[evId]||{}; e.archivos=e.archivos||[]; e.resp=e.resp||{}; e.manual=e.manual||{}; return e; }
 

@@ -740,9 +740,17 @@ $('#formCuotas').addEventListener('submit',ev=>{
 });
 
 /* ===== estudiantes ===== */
-function llenarCursos(sel){ sel.innerHTML='<option value="">— Ninguno por ahora —</option>'+DB.cursos.map(c=>`<option value="${c.id}">${esc(c.nombre)} (${money(c.precio)})</option>`).join(''); }
+function llenarCursos(sel,excluir=new Set()){ sel.innerHTML='<option value="">— Ninguno por ahora —</option>'+DB.cursos.filter(c=>!excluir.has(c.id)).map(c=>`<option value="${c.id}">${esc(c.nombre)} (${money(c.precio)})</option>`).join(''); }
 function abrirEstudiante(id){
-  $('#formEst').reset(); llenarCursos($('#estCurso'));
+  $('#formEst').reset();
+  // cursos que la persona ya tiene (no se repiten en la lista) y botón para agregar uno nuevo
+  const tiene=id?DB.inscripciones.filter(i=>i.estId===id):[];
+  llenarCursos($('#estCurso'),new Set(tiene.map(i=>i.cursoId)));
+  $('#estCursosActuales').hidden=!tiene.length;
+  $('#estCursosActuales').innerHTML=tiene.map(i=>{ const cu=curso(i.cursoId), [cls,txt]=cu?estadoAcad(i,cu):['pendiente','']; return `<div class="d-flex align-items-center gap-2 border rounded p-2 mb-1 bg-white">
+      <i class="bi bi-journal-bookmark text-marca fs-5"></i><div class="flex-grow-1" style="min-width:0"><div class="fw-semibold text-truncate">${esc(cu?.nombre||'Curso')}</div>
+        <small class="text-muted">Inscrito ${fechaLarga(i.fecha)}${cu?.grupo?.docente?' · '+esc(cu.grupo.docente):''}</small></div><span class="pill pill-${cls}">${txt}</span></div>`; }).join('');
+  $('#estBtnNuevo').hidden=!tiene.length; $('#estNuevoCurso').hidden=tiene.length>0;
   contCuotasEst().innerHTML=''; $('#bloqueCuotasEst').hidden=true; codigoAplicado=null; $('#estCodigoMsg').textContent=''; $('#estCuponesLista').innerHTML='';
   const e=id?est(id):{}; $('#estId').value=id||'';
   $('#tEst').textContent=(id?'Editar ':'Nuevo ')+DB.config.termS;
@@ -750,6 +758,10 @@ function abrirEstudiante(id){
   $('#estOrigen').innerHTML=opcionesOrigen(); $('#estOrigen').value=e.origen||'';
   modal('mEst').show();
 }
+$('#estBtnNuevo').addEventListener('click',()=>{
+  if(![...$('#estCurso').options].some(o=>o.value)){ toast('Ya está inscrito en todos los cursos'); return; }
+  $('#estNuevoCurso').hidden=false; $('#estBtnNuevo').hidden=true; $('#estCurso').focus();
+});
 const contCuotasEst = () => document.querySelector('[data-cuotas="est"]');
 function refrescarCuotasEst(){
   const activo=!!$('#estCurso').value; $('#bloqueCuotasEst').hidden=!activo;

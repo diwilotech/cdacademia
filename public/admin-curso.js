@@ -156,7 +156,7 @@ function tabNotas(c,inf,ins){
         <th class="resumen">Promedio</th><th>Asist.</th><th>Estado</th></tr></thead>
       <tbody>${ins.map(i=>{const e=est(i.estId);
         return `<tr data-insc="${i.id}"><td class="nom" title="${esc(e.nombre)}">${esc(e.nombre)}</td>
-          ${ev.map(x=>{const v=i.notas?.[x.id], tiene=tieneExamen(i,x); return `<td><div class="d-flex align-items-center justify-content-center gap-1"><input class="nota ${v!==undefined&&v<cf.notaMin?'baja':''}" type="number" inputmode="decimal" step="0.1" min="0" max="${cf.escala}" data-ev="${x.id}" value="${v!==undefined?(+v).toFixed(1):''}" aria-label="${esc(x.nombre)} de ${esc(e.nombre)}"><button type="button" class="btn btn-link p-0 ${tiene?'text-marca':'text-secondary'}" data-examen="${x.id}" title="${tiene?'Ver examen':'Cargar examen'}" aria-label="Examen de ${esc(e.nombre)}"><i class="bi ${tiene?'bi-file-earmark-check-fill':'bi-file-earmark-plus'}"></i></button></div></td>`}).join('')}
+          ${ev.map(x=>{const v=i.notas?.[x.id]; return `<td><div class="d-flex align-items-center justify-content-center gap-1"><input class="nota ${v!==undefined&&v<cf.notaMin?'baja':''}" type="number" inputmode="decimal" step="0.1" min="0" max="${cf.escala}" data-ev="${x.id}" value="${v!==undefined?(+v).toFixed(1):''}" aria-label="${esc(x.nombre)} de ${esc(e.nombre)}">${botonExamen(i,x,e)}</div></td>`}).join('')}
           ${celdasResumen(i,c)}</tr>`}).join('')}</tbody>
     </table></div>
     <div class="small text-muted mt-2">El promedio se calcula solo con las evaluaciones que ya tienen nota; debajo se ve qué parte del curso va evaluada.</div>` : sinAlumnas();
@@ -172,7 +172,8 @@ function tabNotas(c,inf,ins){
     tr.insertAdjacentHTML('beforeend',celdasResumen(i,c));
     guardar();
   });
-  tabla.addEventListener('click',e=>{ const b=e.target.closest('[data-examen]'); if(b) abrirExamen(b.closest('tr').dataset.insc,b.dataset.examen); });
+  tabla.addEventListener('click',e=>{ const b=e.target.closest('[data-examen]'); if(!b) return; const inscId=b.closest('tr').dataset.insc;
+    if(b.dataset.acc==='subir') subirExamenDirecto(inscId,b.dataset.examen); else abrirExamen(inscId,b.dataset.examen); });
   // Enter baja a la siguiente fila, como en una hoja de cálculo
   tabla.addEventListener('keydown',e=>{
     if(e.key!=='Enter') return; const inp=e.target.closest('input.nota'); if(!inp) return; e.preventDefault();

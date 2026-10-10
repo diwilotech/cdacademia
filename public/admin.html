@@ -364,19 +364,6 @@
               </form>
             </div></div>
           </div>
-          <div class="col-lg-6" id="cardPersonal" hidden>
-            <div class="card mb-3"><div class="card-body">
-              <h2 class="h5">Personal con acceso</h2>
-              <p class="small text-muted">Quién puede entrar al panel. También aparece en Diwilo. Se les da un link para crear su contraseña.</p>
-              <div id="listaPersonal" class="mb-3"></div>
-              <form id="formPersonal" class="row g-2">
-                <div class="col-sm-5"><input class="form-control form-control-sm" id="perMail" type="email" placeholder="Correo" required aria-label="Correo"></div>
-                <div class="col-sm-4"><input class="form-control form-control-sm" id="perNombre" placeholder="Nombre" aria-label="Nombre"></div>
-                <div class="col-sm-3"><select class="form-select form-select-sm" id="perRol" aria-label="Rol"><option value="staff">Personal</option><option value="admin">Administrador</option></select></div>
-                <div class="col-12"><button class="btn btn-sm btn-marca">Agregar / reenviar link</button> <span class="small" id="perMsg"></span></div>
-              </form>
-            </div></div>
-          </div>
           <div class="col-lg-6">
             <div class="card mb-3"><div class="card-body">
               <h2 class="h5">Área / rubro</h2>
@@ -791,6 +778,22 @@
     <div class="col-md-5"><label class="form-label small" for="profNombre">Nombre</label><input class="form-control" id="profNombre" required maxlength="80"></div>
     <div class="col-md-4"><label class="form-label small" for="profTel">WhatsApp</label><input class="form-control" id="profTel"></div>
     <div class="col-md-3 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="profActivo" checked><label class="form-check-label small" for="profActivo">Activo</label></div></div>
+    <div class="col-12 mt-2" id="profAcceso" hidden>
+      <div class="border rounded p-2">
+        <h3 class="h6 mb-1"><i class="bi bi-key"></i> Acceso al panel</h3>
+        <p class="small text-muted mb-2">Un profesional solo entra al panel si le das acceso aquí. También aparecerá en Diwilo.</p>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5"><label class="form-label small" for="profEmail">Correo</label><input type="email" class="form-control form-control-sm" id="profEmail" maxlength="120" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label small" for="profRol">Condición</label>
+            <select class="form-select form-select-sm" id="profRol"><option value="">Sin acceso</option><option value="staff">Personal</option><option value="admin">Administrador</option></select></div>
+          <div class="col-md-3"><span class="badge" id="profAccEstado"></span></div>
+          <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="profLink"><i class="bi bi-link-45deg"></i> <span id="profLinkTxt">Link de registro</span></button>
+            <span class="small text-muted" id="profAccMsg"></span></div>
+          <div class="col-12" id="profLinkBox" hidden><input class="form-control form-control-sm" id="profLinkVal" readonly aria-label="Link"><small class="text-muted">Envíaselo a la persona: abre el link y crea su contraseña. Copiado al portapapeles.</small></div>
+        </div>
+      </div>
+    </div>
     <div class="col-12 mt-3 d-flex justify-content-between align-items-center"><h3 class="h6 mb-0">Áreas que dicta</h3>
       <button type="button" class="btn btn-sm btn-outline-secondary" id="profAddArea"><i class="bi bi-plus-lg"></i> Agregar área</button></div>
     <div class="col-12"><div id="profAreas" class="d-flex flex-column gap-2"></div>

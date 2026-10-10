@@ -83,6 +83,7 @@ function abrirProf(id){
   profAreasTemp=structuredClone(p?.areas||[]); profHorarioTemp=structuredClone(p?.horario||[]);
   if(!p && !profAreasTemp.length && DB.areas.length) profAreasTemp.push({areaId:DB.areas[0].id,niveles:['Básico'],reponer:false});
   $('#profEliminar').hidden=!p;
+  if(typeof cargarAcceso==='function') cargarAcceso(p);
   pintarProfAreas(); pintarProfHorario(); modal('mProf').show();
 }
 function pintarProfAreas(){
@@ -117,12 +118,13 @@ $('#formProf').addEventListener('submit',e=>{
   if(new Set(profAreasTemp.map(a=>a.areaId)).size!==profAreasTemp.length){ toast('Una misma área está repetida'); return; }
   if(profAreasTemp.some(a=>!(a.niveles||[]).length)){ toast('Marca al menos un nivel en cada área'); return; }
   const id=$('#profId').value||'pr'+uid();
-  const datos={id,nombre:$('#profNombre').value.trim(),tel:$('#profTel').value.trim(),activo:$('#profActivo').checked,areas:profAreasTemp,horario:profHorarioTemp};
+  const datos={id,nombre:$('#profNombre').value.trim(),tel:$('#profTel').value.trim(),email:($('#profEmail')?.value||'').trim().toLowerCase(),activo:$('#profActivo').checked,areas:profAreasTemp,horario:profHorarioTemp};
   const i=DB.profesionales.findIndex(p=>p.id===id); i>=0?DB.profesionales[i]={...DB.profesionales[i],...datos}:DB.profesionales.push(datos);
   // el nombre se copia a los cursos y espacios donde ya está asignado
   DB.cursos.forEach(c=>{ if(c.grupo?.profesionalId===id) c.grupo.docente=datos.nombre; });
   (DB.espacios||[]).forEach(x=>{ if(x.profesionalId===id) x.docente=datos.nombre; });
   guardar(); modal('mProf').hide(); render(); toast('Profesional guardado');
+  if(typeof sincronizarAcceso==='function') sincronizarAcceso(datos);
 });
 function eliminarProf(b){
   if(!b.dataset.ok){ b.dataset.ok=1; b.innerHTML='¿Eliminar? Toca otra vez'; setTimeout(()=>{ delete b.dataset.ok; b.innerHTML='<i class="bi bi-trash"></i> Eliminar'; },4000); return; }

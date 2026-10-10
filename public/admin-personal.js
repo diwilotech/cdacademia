@@ -1,50 +1,57 @@
-// Personal con acceso: usuarios del negocio (tabla users, la misma que ve Diwilo). Solo dueño/administrador.
-const ROL_TXT = { owner: 'Dueño', admin: 'Administrador', staff: 'Personal' };
-const ESTADO_TXT = { active: ['Activo', 'success'], invited: ['Invitado', 'warning'], inactive: ['Inactivo', 'secondary'] };
+// Acceso al panel de un profesional. El personal solo se crea desde Profesionales; vive en la tabla `users`
+// (la misma que ve Diwilo) y se enlaza con el profesional por el correo. Solo dueño/administrador.
+const ACC_ESTADO = { active: ['Con contraseña', 'success'], invited: ['Link enviado', 'warning'], inactive: ['Desactivado', 'secondary'], none: ['Sin acceso', 'light text-muted border'], owner: ['Dueño (se gestiona en Diwilo)', 'info'] };
+let accUsuarios = [], accYo = '';
+const puedeGestionar = () => ['owner', 'admin'].includes(window.__BOOT__?.rol);
 async function personalApi(met, url, body) {
   const r = await fetch(url, { method: met, headers: { 'content-type': 'application/json', 'x-requested-with': 'cda' }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || 'No se pudo completar');
   return d;
 }
-async function cargarPersonal() {
-  const card = document.getElementById('cardPersonal'); if (!card) return;
-  if (!['owner', 'admin'].includes(window.__BOOT__?.rol)) return;
-  card.hidden = false;
-  const box = document.getElementById('listaPersonal');
-  try {
-    const { users, yo } = await personalApi('GET', '/staff/team');
-    box.innerHTML = users.map((u) => {
-      const [t, c] = ESTADO_TXT[u.status] || ESTADO_TXT.inactive, fijo = u.role === 'owner' || u.id === yo;
-      return `<div class="d-flex align-items-center gap-2 py-1 border-bottom small">
-        <div class="flex-grow-1 text-truncate"><strong>${esc(u.name)}</strong><br><span class="text-muted">${esc(u.email)}</span></div>
-        <span class="badge text-bg-${c}">${t}</span>
-        ${fijo ? `<span class="text-muted">${ROL_TXT[u.role] || u.role}</span>` : `
-        <select class="form-select form-select-sm w-auto" onchange="cambiarPersonal('${u.id}',{role:this.value})" aria-label="Rol"><option value="staff"${u.role === 'staff' ? ' selected' : ''}>Personal</option><option value="admin"${u.role === 'admin' ? ' selected' : ''}>Administrador</option></select>
-        <button class="btn btn-sm btn-outline-secondary" title="${u.status === 'inactive' ? 'Activar' : 'Desactivar'}" onclick="cambiarPersonal('${u.id}',{active:${u.status === 'inactive'}})"><i class="bi bi-${u.status === 'inactive' ? 'toggle-off' : 'toggle-on'}"></i></button>
-        <button class="btn btn-sm btn-outline-danger" title="Quitar" onclick="quitarPersonal('${u.id}')"><i class="bi bi-trash"></i></button>`}
-      </div>`;
-    }).join('');
-  } catch (e) { box.textContent = e.message; }
+const usuarioDe = (mail) => accUsuarios.find((u) => u.email === String(mail || '').trim().toLowerCase());
+function pintarAcceso() {
+  const u = usuarioDe($('#profEmail').value), est = !u ? 'none' : u.role === 'owner' ? 'owner' : u.status;
+  const [t, c] = ACC_ESTADO[est];
+  $('#profAccEstado').className = 'badge text-bg-' + c; $('#profAccEstado').textContent = t;
+  const fijo = u && (u.role === 'owner' || u.id === accYo);
+  $('#profRol').disabled = fijo; $('#profLink').disabled = fijo;
+  if (u && !fijo) $('#profRol').value = u.status === 'inactive' ? '' : u.role;
+  $('#profLinkTxt').textContent = u?.status === 'active' ? 'Restablecer contraseña' : 'Link de registro';
 }
-async function cambiarPersonal(id, cambio) {
-  try { await personalApi('PATCH', '/staff/team/' + id, cambio); } catch (e) { alert(e.message); }
-  cargarPersonal();
+async function cargarAcceso(p) {
+  const box = $('#profAcceso'); if (!box) return;
+  box.hidden = !puedeGestionar(); if (box.hidden) return;
+  $('#profEmail').value = p?.email || ''; $('#profRol').value = ''; $('#profLinkBox').hidden = true; $('#profAccMsg').textContent = '';
+  accUsuarios = []; pintarAcceso();
+  try { const d = await personalApi('GET', '/staff/team'); accUsuarios = d.users; accYo = d.yo; pintarAcceso(); }
+  catch (e) { $('#profAccMsg').textContent = e.message; }
 }
-async function quitarPersonal(id) {
-  if (!confirm('¿Quitar el acceso de esta persona?')) return;
-  try { await personalApi('DELETE', '/staff/team/' + id); } catch (e) { alert(e.message); }
-  cargarPersonal();
+async function generarLink(datos) {
+  const email = ($('#profEmail').value || '').trim().toLowerCase();
+  if (!email) throw new Error('Escribe el correo del profesional.');
+  const rol = $('#profRol').value || 'staff';
+  const d = await personalApi('POST', '/staff/team', { email, name: datos?.nombre || $('#profNombre').value.trim(), role: rol });
+  const link = location.origin + d.invite_path;
+  $('#profLinkVal').value = link; $('#profLinkBox').hidden = false; $('#profRol').value = rol;
+  try { await navigator.clipboard.writeText(link); } catch { $('#profLinkVal').select?.(); }
+  const l = await personalApi('GET', '/staff/team'); accUsuarios = l.users; pintarAcceso();
+  return link;
 }
-document.getElementById('formPersonal')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const msg = document.getElementById('perMsg'); msg.textContent = '';
-  try {
-    const d = await personalApi('POST', '/staff/team', { email: perMail.value, name: perNombre.value, role: perRol.value });
-    const link = location.origin + d.invite_path;
-    try { await navigator.clipboard.writeText(link); msg.textContent = 'Link copiado: envíaselo para que cree su contraseña.'; }
-    catch { prompt('Envía este link para que cree su contraseña:', link); }
-    perMail.value = ''; perNombre.value = '';
-    cargarPersonal();
-  } catch (x) { msg.textContent = x.message; }
+$('#profEmail')?.addEventListener('input', pintarAcceso);
+$('#profLink')?.addEventListener('click', async (e) => {
+  const b = e.currentTarget; b.disabled = true; $('#profAccMsg').textContent = '';
+  try { await generarLink(); $('#profAccMsg').textContent = 'Link generado y copiado.'; }
+  catch (x) { $('#profAccMsg').textContent = x.message; }
+  finally { b.disabled = false; }
 });
+// Al guardar: aplica la condición (rol / desactivar) al usuario enlazado por correo.
+async function sincronizarAcceso(p) {
+  if (!puedeGestionar() || !p.email) return;
+  const u = usuarioDe(p.email); if (!u || u.role === 'owner' || u.id === accYo) return;
+  const rol = $('#profRol').value, quiere = rol && p.activo !== false;
+  try {
+    if (!rol && u.status !== 'inactive') await personalApi('PATCH', '/staff/team/' + u.id, { active: false });
+    else if (rol) await personalApi('PATCH', '/staff/team/' + u.id, { role: rol, active: !!quiere });
+  } catch (x) { toast(x.message); }
+}

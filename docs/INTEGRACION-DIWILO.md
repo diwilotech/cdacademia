@@ -73,6 +73,7 @@ Cada negocio se atiende en su propia dirección, con el `slug` que crea Diwilo (
 
 ## Personal con acceso
 
-Configuración → "Personal con acceso" (solo dueño/administrador) usa `/staff/team` sobre la tabla `users`,
-la misma que lista Diwilo, así que el personal creado en la app aparece en Diwilo y viceversa.
-Roles asignables en la app: `admin`, `staff`. El dueño se gestiona solo desde Diwilo.
+El personal solo se crea desde **Profesionales** → editar profesional → "Acceso al panel" (solo dueño/administrador):
+correo, condición (Sin acceso / Personal / Administrador) y el botón **Link de registro** (o **Restablecer contraseña**
+si ya tiene clave). Usa `/staff/team` sobre la tabla `users`, la misma que lista Diwilo, y se enlaza con el profesional
+por el correo. Desactivar al profesional o poner "Sin acceso" desactiva su usuario. El dueño se gestiona solo desde Diwilo.

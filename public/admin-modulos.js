@@ -1041,18 +1041,102 @@ $('#curModulos').addEventListener('change',e=>{
    PREGUNTAS DESDE UN ARCHIVO JSON
    {"instrucciones": "...", "preguntas": [{"tipo": "unica|multiple|vf|corta|abierta", "enunciado": "...", "puntos": 2, ...}]}
    ========================================================= */
+/* Ejemplo con TODAS las formas posibles. Las claves que empiezan por «_» son notas y se ignoran al importar. */
 const EJEMPLO_EXAMEN_JSON = {
+  _ayuda: {
+    tipos: 'unica = una sola correcta · multiple = varias correctas · vf = verdadero o falso · corta = texto corto con respuestas aceptadas · abierta = la califica el docente',
+    puntos: 'Número (admite decimales). Si no se pone, vale 1.',
+    opciones: 'Lista de textos, o de objetos {"texto": "...", "correcta": true}. Mínimo 2 opciones.',
+    correcta: 'Se marca con "correcta": true en la opción, o con "respuesta" / "respuestas" en la pregunta (el texto de la opción correcta).',
+    vf: '"respuesta": true | false (también se acepta "verdadero" o "falso").',
+    corta: '"respuestas": ["texto aceptado 1", "texto aceptado 2"] (no importan mayúsculas ni tildes) o "respuesta": "texto".'
+  },
   instrucciones: 'Lee con calma y marca la respuesta correcta. Tiempo sugerido: 30 minutos.',
   preguntas: [
-    {tipo:'unica', enunciado:'¿Qué color es complementario del azul?', puntos:2,
+    {tipo:'unica', enunciado:'Única con opciones como objetos: ¿qué color es complementario del azul?', puntos:2,
      opciones:[{texto:'Naranja',correcta:true},{texto:'Verde'},{texto:'Violeta'}]},
-    {tipo:'multiple', enunciado:'Selecciona las herramientas de desinfección:', puntos:3,
+    {tipo:'unica', enunciado:'Única con opciones como texto y la correcta en "respuesta": ¿cuál es la capital de Colombia?', puntos:1,
+     opciones:['Bogotá','Lima','Quito','Caracas'], respuesta:'Bogotá'},
+    {tipo:'multiple', enunciado:'Múltiple con objetos: selecciona las herramientas de desinfección.', puntos:3,
      opciones:[{texto:'Alcohol al 70 %',correcta:true},{texto:'Toalla desechable',correcta:true},{texto:'Esponja usada'}]},
-    {tipo:'vf', enunciado:'Un subtono frío se ve mejor con joyería dorada.', puntos:1, respuesta:false},
-    {tipo:'corta', enunciado:'¿Cómo se llama el círculo que ordena los colores?', puntos:2, respuestas:['círculo cromático','circulo cromatico']},
-    {tipo:'abierta', enunciado:'Describe cómo elegirías la base para una piel mixta.', puntos:2}
+    {tipo:'multiple', enunciado:'Múltiple con texto y "respuestas": ¿cuáles son tipos de rostro?', puntos:2.5,
+     opciones:['Ovalado','Cuadrado','Cuadrante','Corazón'], respuestas:['Ovalado','Cuadrado','Corazón']},
+    {tipo:'vf', enunciado:'Verdadero o falso con booleano: un subtono frío se ve mejor con joyería dorada.', puntos:1, respuesta:false},
+    {tipo:'vf', enunciado:'Verdadero o falso con texto: la bioseguridad se aplica antes de cada servicio.', puntos:1, respuesta:'verdadero'},
+    {tipo:'corta', enunciado:'Corta con varias respuestas aceptadas: ¿cómo se llama el círculo que ordena los colores?', puntos:2, respuestas:['círculo cromático','circulo cromatico']},
+    {tipo:'corta', enunciado:'Corta con una sola respuesta: ¿cómo se llama la técnica de iluminar el centro del rostro?', puntos:1, respuesta:'iluminador'},
+    {tipo:'abierta', enunciado:'Abierta (la califica el docente): describe cómo elegirías la base para una piel mixta.', puntos:4},
+    {tipo:'abierta', enunciado:'Abierta sin puntos indicados (vale 1): explica por qué se desinfectan las brochas.'}
   ]
 };
+/* Esquema JSON del formato: sirve para pedir «salida estructurada» a una IA desde el servidor y para validar su respuesta */
+const ESQUEMA_PREGUNTAS = {
+  type:'object', required:['preguntas'], additionalProperties:true,
+  properties:{
+    instrucciones:{type:'string'},
+    preguntas:{type:'array', minItems:1, items:{
+      type:'object', required:['tipo','enunciado'],
+      properties:{
+        tipo:{enum:['unica','multiple','vf','corta','abierta']},
+        enunciado:{type:'string'},
+        puntos:{type:'number', minimum:0},
+        opciones:{type:'array', minItems:2, items:{oneOf:[{type:'string'},{type:'object', required:['texto'], properties:{texto:{type:'string'}, correcta:{type:'boolean'}}}]}},
+        respuesta:{description:'unica/multiple: texto de la opción correcta · vf: true|false · corta: texto aceptado'},
+        respuestas:{type:'array', items:{type:'string'}, description:'multiple: textos de las correctas · corta: textos aceptados'}
+      }}}
+  }
+};
+const TIPOS_IA = {unica:'selección única (una sola correcta)', multiple:'selección múltiple (varias correctas)', vf:'verdadero o falso', corta:'respuesta corta', abierta:'respuesta abierta'};
+/* Prompt listo para pegar en cualquier IA. Es el mismo que usará la IA de la plataforma, con el contexto del curso. */
+function construirPromptIA({tema='', cantidad=10, tipos=['unica','multiple','vf']}={}){
+  const c=curso(cursoActual), ev=evalsTemp[pregIdx]||{}, ar=area(c?.areaId);
+  const temasCurso=[...new Set(modulosDeCurso(c||{}).flatMap(x=>[x.m.titulo,...(x.m.temas||[])]))].slice(0,40);
+  const contexto=[c?`Curso: ${c.nombre}`:'', ar?`Área: ${ar.nombre}`:'', c?.nivel?`Nivel: ${c.nivel}`:'', ev.nombre?`Evaluación: ${ev.nombre}`:'',
+    temasCurso.length?`Módulos y temas del curso: ${temasCurso.join('; ')}`:''].filter(Boolean).join('\n');
+  return `Eres un docente experto${ar?` en ${ar.nombre}`:''} y vas a redactar las preguntas de un examen para estudiantes de una academia.
+
+TAREA
+Crea ${cantidad} preguntas${tema.trim()?` sobre lo siguiente:\n---\n${tema.trim()}\n---`:' de los temas del curso'}.
+Tipos que debes usar: ${tipos.map(t=>`"${t}" (${TIPOS_IA[t]})`).join(', ')}. Reparte las preguntas entre esos tipos.
+Dificultad acorde al nivel del curso. Redacta en español claro, sin ambigüedades, con una sola respuesta correcta defendible en las de selección única.
+${contexto?`\nCONTEXTO\n${contexto}\n`:''}
+FORMATO DE SALIDA (obligatorio)
+Responde ÚNICAMENTE con un JSON válido: sin texto antes ni después, sin comentarios y sin bloques de código (\`\`\`).
+Estructura: {"instrucciones": "texto breve", "preguntas": [ ... ]}
+Cada pregunta tiene:
+- "tipo": "unica" | "multiple" | "vf" | "corta" | "abierta"
+- "enunciado": texto de la pregunta
+- "puntos": número (por defecto 1; usa más puntos en las más difíciles)
+- unica y multiple: "opciones": lista de 3 a 5 objetos {"texto": "...", "correcta": true|false}. En "unica" exactamente una correcta; en "multiple" dos o más.
+- vf: "respuesta": true o false
+- corta: "respuestas": lista de textos aceptados (en minúscula, incluye variantes sin tildes)
+- abierta: solo "tipo", "enunciado" y "puntos" (no lleva respuesta; la califica el docente)
+
+EJEMPLO DEL FORMATO
+${JSON.stringify({instrucciones:EJEMPLO_EXAMEN_JSON.instrucciones,preguntas:[
+  {tipo:'unica',enunciado:'¿Qué color es complementario del azul?',puntos:2,opciones:[{texto:'Naranja',correcta:true},{texto:'Verde',correcta:false},{texto:'Violeta',correcta:false}]},
+  {tipo:'multiple',enunciado:'Selecciona las herramientas de desinfección.',puntos:3,opciones:[{texto:'Alcohol al 70 %',correcta:true},{texto:'Toalla desechable',correcta:true},{texto:'Esponja usada',correcta:false}]},
+  {tipo:'vf',enunciado:'Un subtono frío se ve mejor con joyería dorada.',puntos:1,respuesta:false},
+  {tipo:'corta',enunciado:'¿Cómo se llama el círculo que ordena los colores?',puntos:2,respuestas:['círculo cromático','circulo cromatico']},
+  {tipo:'abierta',enunciado:'Describe cómo elegirías la base para una piel mixta.',puntos:4}]},null,2)}`;
+}
+const tiposIaMarcados = () => [...document.querySelectorAll('#exIaCaja input[type=checkbox]:checked')].map(i=>i.value);
+function datosIa(){ return {tema:$('#exIaTema').value, cantidad:Math.max(1,Math.min(50,+$('#exIaCant').value||10)), tipos:tiposIaMarcados().length?tiposIaMarcados():['unica']}; }
+$('#exIaCopiar').addEventListener('click',()=>copiar(construirPromptIA(datosIa()),'Prompt copiado: pégalo en tu IA y luego trae aquí el JSON que te devuelva'));
+/* IA de la plataforma: el Worker (POST /staff/ia/preguntas) recibirá el mismo prompt y devolverá {preguntas}.
+   Mientras no esté conectada responde 501 y aquí solo se avisa. */
+async function generarPreguntasConIA(){
+  const msg=$('#exIaMsg'), btn=$('#exIaGenerar'); btn.disabled=true; msg.className='text-muted'; msg.textContent='Generando…';
+  try{
+    const r=await fetch('/staff/ia/preguntas',{method:'POST',headers:{'content-type':'application/json','x-requested-with':'cda'},
+      body:JSON.stringify({prompt:construirPromptIA(datosIa()),...datosIa(),cursoId:cursoActual})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ msg.className='text-warning'; msg.textContent=d.error||'No se pudo generar.'; return; }
+    $('#exJsonTexto').value=JSON.stringify(d); importarPreguntasJSON(); msg.textContent='';
+  }catch(e){ msg.className='text-danger'; msg.textContent='Sin conexión.'; }
+  finally{ btn.disabled=false; }
+}
+$('#exIaGenerar').addEventListener('click',generarPreguntasConIA);
 function descargarEjemploExamen(){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(EJEMPLO_EXAMEN_JSON,null,2)],{type:'application/json'}));

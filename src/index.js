@@ -7,12 +7,14 @@ import { registerPlatform } from "./routes/platform.js";
 import { registerAuth } from "./routes/auth.js";
 import { registerState } from "./routes/state.js";
 import { registerFiles } from "./routes/files.js";
+import { registerIA } from "./routes/ia.js";
 
 const router = new Router();
 registerPlatform(router); // primero: /api/platform/* no debe caer en otras rutas
 registerAuth(router);
 registerState(router);
 registerFiles(router);
+registerIA(router);
 
 // JSON seguro para incrustar dentro de <script>
 const inline = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");

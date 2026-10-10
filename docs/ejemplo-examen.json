@@ -1,9 +1,17 @@
 {
+  "_ayuda": {
+    "tipos": "unica = una sola correcta · multiple = varias correctas · vf = verdadero o falso · corta = texto corto con respuestas aceptadas · abierta = la califica el docente",
+    "puntos": "Número (admite decimales). Si no se pone, vale 1.",
+    "opciones": "Lista de textos, o de objetos {\"texto\": \"...\", \"correcta\": true}. Mínimo 2 opciones.",
+    "correcta": "Se marca con \"correcta\": true en la opción, o con \"respuesta\" / \"respuestas\" en la pregunta (el texto de la opción correcta).",
+    "vf": "\"respuesta\": true | false (también se acepta \"verdadero\" o \"falso\").",
+    "corta": "\"respuestas\": [\"texto aceptado 1\", \"texto aceptado 2\"] (no importan mayúsculas ni tildes) o \"respuesta\": \"texto\"."
+  },
   "instrucciones": "Lee con calma y marca la respuesta correcta. Tiempo sugerido: 30 minutos.",
   "preguntas": [
     {
       "tipo": "unica",
-      "enunciado": "¿Qué color es complementario del azul?",
+      "enunciado": "Única con opciones como objetos: ¿qué color es complementario del azul?",
       "puntos": 2,
       "opciones": [
         {
@@ -19,8 +27,20 @@
       ]
     },
     {
+      "tipo": "unica",
+      "enunciado": "Única con opciones como texto y la correcta en \"respuesta\": ¿cuál es la capital de Colombia?",
+      "puntos": 1,
+      "opciones": [
+        "Bogotá",
+        "Lima",
+        "Quito",
+        "Caracas"
+      ],
+      "respuesta": "Bogotá"
+    },
+    {
       "tipo": "multiple",
-      "enunciado": "Selecciona las herramientas de desinfección:",
+      "enunciado": "Múltiple con objetos: selecciona las herramientas de desinfección.",
       "puntos": 3,
       "opciones": [
         {
@@ -37,14 +57,36 @@
       ]
     },
     {
+      "tipo": "multiple",
+      "enunciado": "Múltiple con texto y \"respuestas\": ¿cuáles son tipos de rostro?",
+      "puntos": 2.5,
+      "opciones": [
+        "Ovalado",
+        "Cuadrado",
+        "Cuadrante",
+        "Corazón"
+      ],
+      "respuestas": [
+        "Ovalado",
+        "Cuadrado",
+        "Corazón"
+      ]
+    },
+    {
       "tipo": "vf",
-      "enunciado": "Un subtono frío se ve mejor con joyería dorada.",
+      "enunciado": "Verdadero o falso con booleano: un subtono frío se ve mejor con joyería dorada.",
       "puntos": 1,
       "respuesta": false
     },
     {
+      "tipo": "vf",
+      "enunciado": "Verdadero o falso con texto: la bioseguridad se aplica antes de cada servicio.",
+      "puntos": 1,
+      "respuesta": "verdadero"
+    },
+    {
       "tipo": "corta",
-      "enunciado": "¿Cómo se llama el círculo que ordena los colores?",
+      "enunciado": "Corta con varias respuestas aceptadas: ¿cómo se llama el círculo que ordena los colores?",
       "puntos": 2,
       "respuestas": [
         "círculo cromático",
@@ -52,9 +94,19 @@
       ]
     },
     {
+      "tipo": "corta",
+      "enunciado": "Corta con una sola respuesta: ¿cómo se llama la técnica de iluminar el centro del rostro?",
+      "puntos": 1,
+      "respuesta": "iluminador"
+    },
+    {
       "tipo": "abierta",
-      "enunciado": "Describe cómo elegirías la base para una piel mixta.",
-      "puntos": 2
+      "enunciado": "Abierta (la califica el docente): describe cómo elegirías la base para una piel mixta.",
+      "puntos": 4
+    },
+    {
+      "tipo": "abierta",
+      "enunciado": "Abierta sin puntos indicados (vale 1): explica por qué se desinfectan las brochas."
     }
   ]
 }

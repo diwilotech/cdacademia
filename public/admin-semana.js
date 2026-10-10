@@ -26,10 +26,27 @@ function ordenarFranjas(){
 /* ¿Dos clases del mismo día se pisan? */
 const hayCruce = () => franjasTemp.some((x,i)=>franjasTemp.some((y,j)=>j>i && x.dia===y.dia && aMin(x.ini)<aMin(y.fin) && aMin(y.ini)<aMin(x.fin)));
 
-/* Clases que resultan del formulario tal como está */
-function sesionesActuales(){
-  const prev=curso($('#curId').value);
-  return sesionesGrupo({slots:franjasTemp,inicio:$('#curInicio').value,numClases:+$('#curNumClases').value||0,festivos:$('#curFestivos').checked},prev?.clases||[]);
+/* Clases que resultan del formulario: el patrón semanal + lo que se cambió a mano en una clase (ajustesTemp[n] = {fecha, ini, fin}) */
+let ajustesTemp = {};
+const gHorario = () => ({slots:franjasTemp,inicio:$('#curInicio').value,numClases:+$('#curNumClases').value||0,festivos:$('#curFestivos').checked});
+const sesionesBase = () => sesionesGrupo(gHorario(),[]);
+const sesionesActuales = () => sesionesGrupo(gHorario(),Object.entries(ajustesTemp).map(([n,o])=>({n:+n,...o})));
+function cargarAjustes(c){
+  ajustesTemp={};
+  (c?.clases||[]).forEach(cl=>{ if(cl.fecha||cl.ini||cl.fin) ajustesTemp[cl.n]={...(cl.fecha&&{fecha:cl.fecha}),...(cl.ini&&{ini:cl.ini}),...(cl.fin&&{fin:cl.fin})}; });
+  calculado=Object.keys(ajustesTemp).length>0; $('#curCalculo').hidden=!calculado;
+}
+/* Guarda en cada clase solo lo que cambió respecto al patrón semanal */
+function clasesConAjustes(prevClases,grupo){
+  const clases=structuredClone(prevClases||[]), base=sesionesGrupo(grupo,[]);
+  for(let n=1;n<=grupo.numClases;n++){
+    const o=ajustesTemp[n]||{}, b=base[n-1]||{}; let cl=clases.find(x=>x.n===n);
+    ['fecha','ini','fin'].forEach(f=>{
+      if(o[f] && o[f]!==b[f]){ if(!cl){ cl={n,tema:'',detalle:'',metodos:[],materiales:'',obs:''}; clases.push(cl); } cl[f]=o[f]; }
+      else if(cl) delete cl[f];
+    });
+  }
+  return clases;
 }
 
 /* ---------- lista de clases por semana ---------- */
@@ -74,7 +91,7 @@ $('#curInicio').addEventListener('change',()=>{ ordenarFranjas(); refrescarHorar
 function ajustarNumClases(){ pintarFranjas(); resumenFechasForm(); }
 function refrescarHorario(){ pintarFranjas(); resumenFechasForm(); }
 
-/* ---------- calcular clases y revisar choques ---------- */
+/* ---------- calcular clases (lista completa editable) y revisar choques ---------- */
 /* Choques de las clases (de hoy en adelante) con las de otros cursos del mismo área o del mismo profesor,
    y con espacios de reposición del área o del profesor */
 function chocesCurso(ses){
@@ -105,23 +122,65 @@ function chocesCurso(ses){
 }
 function pintarCalculo(){
   const caja=$('#curCalculo'); caja.hidden=!calculado; if(!calculado) return;
-  const ses=sesionesActuales(), f=ses.filter(x=>x.fecha);
-  if(!f.length){ caja.innerHTML='<div class="alert alert-warning small mb-0">Elige la fecha de la primera clase y el horario para calcular.</div>'; return; }
-  const {choques,revisados}=chocesCurso(ses), conChoque=new Set(choques.map(c=>c.n));
-  const horas=f.reduce((a,x)=>a+horasSesion(x),0);
+  const ses=sesionesActuales();
+  if(!ses.some(x=>x.fecha)){ caja.innerHTML='<div class="alert alert-warning small mb-0">Elige la fecha de la primera clase y el horario para calcular.</div>'; return; }
   caja.innerHTML=`<div class="border rounded p-3 bg-white">
-    <div class="fw-semibold mb-2"><i class="bi bi-calculator text-marca"></i> ${f.length} clases calculadas · ${fechaLarga(f[0].fecha)} → ${fechaLarga(f.at(-1).fecha)} · ${horas} h</div>
-    <div class="d-flex flex-wrap gap-1 mb-3" style="max-height:170px;overflow:auto">${ses.map((x,k)=>x.fecha
-      ? `<span class="tag tabular ${conChoque.has(k+1)?'border-danger text-danger':''}">${conChoque.has(k+1)?'<i class="bi bi-exclamation-triangle-fill text-danger"></i> ':''}<b>${k+1}</b> · ${DIAS[diaDeFecha(x.fecha)]} ${fechaMini(x.fecha)} · ${rangoHoras(x.ini,x.fin)}</span>`
-      : `<span class="tag tabular text-muted"><b>${k+1}</b> · sin fecha</span>`).join('')}</div>
-    ${!$('#curArea').value && !$('#curProf').value
-      ? '<div class="text-warning small"><i class="bi bi-info-circle"></i> Elige el área (o el docente) del curso para revisar si chocan con otras clases.</div>'
-      : choques.length
-        ? `<div class="text-danger fw-semibold small mb-1"><i class="bi bi-exclamation-triangle"></i> ${choques.length} ${choques.length===1?'choque':'choques'} con otras clases</div>
-           ${choques.slice(0,12).map(c=>`<div class="small">Clase ${c.n} (${DIAS[diaDeFecha(c.x.fecha)]} ${fechaMini(c.x.fecha)}, ${rangoHoras(c.x.ini,c.x.fin)}) choca con <b>${esc(c.otro)}</b> · ${esc(c.tipo)} <span class="text-muted">— ${c.why}</span></div>`).join('')}
-           ${choques.length>12?`<div class="small text-muted">…y ${choques.length-12} más</div>`:''}`
-        : `<div class="text-success small"><i class="bi bi-check-circle"></i> No choca con ninguna clase futura (revisé ${revisados} ${revisados===1?'curso':'cursos'} de la misma área o profesor y los espacios de reposición).</div>`}
-  </div>`;
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><div class="fw-semibold" data-cab></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-reset-todas hidden><i class="bi bi-arrow-counterclockwise"></i> Quitar los cambios a mano</button></div>
+    <div class="small text-muted mb-2">Puedes cambiar la fecha o la hora de cualquier clase; lo que cambies se guarda solo para esa clase. Las que chocan con otras salen en rojo.</div>
+    <div class="table-responsive" style="max-height:380px"><table class="table table-sm align-middle mb-2">
+      <thead><tr><th>Clase</th><th>Fecha</th><th>Día</th><th>Inicio</th><th>Fin</th><th>Revisión</th></tr></thead>
+      <tbody>${ses.map((x,k)=>`<tr data-n="${k+1}"><td><span class="badge bg-marca-suave text-marca">${k+1}</span></td>
+        <td><input type="date" class="form-control form-control-sm" style="width:150px" data-f="fecha" value="${x.fecha||''}" aria-label="Fecha de la clase ${k+1}"></td>
+        <td class="small text-muted" data-dia></td>
+        <td><input type="time" class="form-control form-control-sm" style="width:112px" data-f="ini" value="${x.ini||''}" aria-label="Inicio de la clase ${k+1}"></td>
+        <td><input type="time" class="form-control form-control-sm" style="width:112px" data-f="fin" value="${x.fin||''}" aria-label="Fin de la clase ${k+1}"></td>
+        <td class="small" data-estado></td></tr>`).join('')}</tbody></table></div>
+    <div data-resumen-choques></div></div>`;
+  actualizarEstadoFilas();
+}
+/* Actualiza la revisión de cada fila sin volver a dibujar los campos (así no se pierde el cursor al escribir) */
+function actualizarEstadoFilas(){
+  const caja=$('#curCalculo'); if(caja.hidden) return;
+  const ses=sesionesActuales(), base=sesionesBase(), {choques,revisados}=chocesCurso(ses), sinFiltro=!$('#curArea').value && !$('#curProf').value;
+  const porClase={}; choques.forEach(c=>(porClase[c.n]=porClase[c.n]||[]).push(c));
+  let editadas=0;
+  ses.forEach((x,k)=>{
+    const n=k+1, tr=caja.querySelector(`tr[data-n="${n}"]`); if(!tr) return;
+    const o=ajustesTemp[n]||{}, editada=['fecha','ini','fin'].some(f=>o[f] && o[f]!==base[k][f]); if(editada) editadas++;
+    const ch=porClase[n]||[];
+    tr.classList.toggle('table-danger',ch.length>0);
+    tr.querySelector('[data-dia]').textContent = x.fecha ? DIAS_L[diaDeFecha(x.fecha)] : '';
+    tr.querySelector('[data-estado]').innerHTML =
+      (ch.length ? `<span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Choca con <b>${esc(ch[0].otro)}</b> · ${esc(ch[0].tipo)} <span class="text-muted">(${ch[0].why})</span>${ch.length>1?` <span class="text-muted">+${ch.length-1} más</span>`:''}</span>`
+        : sinFiltro ? '<span class="text-muted">—</span>' : '<span class="text-success"><i class="bi bi-check-circle"></i> Libre</span>')
+      + (editada ? ` <span class="badge text-bg-light border">editada</span> <button type="button" class="btn btn-sm btn-link p-0" data-reset="${n}" title="Volver al horario semanal"><i class="bi bi-arrow-counterclockwise"></i></button>` : '');
+  });
+  const f=ses.filter(x=>x.fecha), horas=f.reduce((a,x)=>a+(x.ini&&x.fin?horasSesion(x):0),0), fechas=f.map(x=>x.fecha).sort();
+  caja.querySelector('[data-cab]').innerHTML=`<i class="bi bi-calculator text-marca"></i> ${f.length} clases · ${fechas.length?`${fechaLarga(fechas[0])} → ${fechaLarga(fechas.at(-1))}`:''} · ${horas} h`;
+  caja.querySelector('[data-reset-todas]').hidden=!editadas;
+  caja.querySelector('[data-resumen-choques]').innerHTML = sinFiltro
+    ? '<div class="text-warning small"><i class="bi bi-info-circle"></i> Elige el área (o el docente) del curso para revisar si chocan con otras clases.</div>'
+    : choques.length ? `<div class="text-danger fw-semibold small"><i class="bi bi-exclamation-triangle"></i> ${new Set(choques.map(c=>c.n)).size} ${new Set(choques.map(c=>c.n)).size===1?'clase choca':'clases chocan'} con otras (${choques.length} ${choques.length===1?'choque':'choques'})</div>`
+      : `<div class="text-success small"><i class="bi bi-check-circle"></i> Ninguna choca con clases futuras (revisé ${revisados} ${revisados===1?'curso':'cursos'} de la misma área o profesor y los espacios de reposición).</div>`;
+}
+$('#curCalculo').addEventListener('input',e=>{
+  const tr=e.target.closest('tr[data-n]'), f=e.target.dataset.f; if(!tr||!f) return;
+  const n=+tr.dataset.n, o=ajustesTemp[n]=ajustesTemp[n]||{};
+  if(e.target.value) o[f]=e.target.value; else delete o[f];
+  avisoChoques=false; actualizarEstadoFilas(); resumenFechasForm(true); pintarFranjasFechas();
+});
+$('#curCalculo').addEventListener('click',e=>{
+  const r=e.target.closest('[data-reset]'), t=e.target.closest('[data-reset-todas]');
+  if(r){ delete ajustesTemp[+r.dataset.reset]; }
+  else if(t){ ajustesTemp={}; }
+  else return;
+  pintarCalculo(); resumenFechasForm(true); pintarFranjasFechas();
+});
+/* Las fechas que se muestran a la derecha de la lista semanal siguen a los cambios */
+function pintarFranjasFechas(){
+  const ses=sesionesActuales();
+  document.querySelectorAll('#curFranjas .fecha-clase').forEach((el,k)=>{ el.textContent = ses[k]?.fecha ? `${DIAS[diaDeFecha(ses[k].fecha)]} ${fechaMini(ses[k].fecha)}` : ''; });
 }
 $('#curCalcular').addEventListener('click',()=>{ calculado=true; pintarCalculo(); resumenFechasForm(); });
 /* Al guardar con choques, avisa una vez; si vuelve a guardar sin cambiar nada, se guarda igual */
@@ -141,6 +200,7 @@ function validarHorario(){
   if(!franjasTemp.length) return 'Agrega al menos una clase en la semana';
   if(franjasTemp.some(x=>!x.ini||!x.fin||x.fin<=x.ini)) return 'En cada clase, la hora final debe ser después de la inicial';
   if(hayCruce()) return 'Dos clases del mismo día se cruzan en el horario';
+  if(sesionesActuales().some(x=>x.fecha && x.ini && x.fin && aMin(x.fin)<=aMin(x.ini))) return 'Revisa las horas de las clases que cambiaste: la final debe ser después de la inicial';
   return null;
 }
 function construirGrupo(pro){
@@ -149,10 +209,10 @@ function construirGrupo(pro){
 }
 
 /* Resumen de fechas en vivo dentro del formulario */
-function resumenFechasForm(){
+function resumenFechasForm(sinPanel){
   avisoChoques=false;                                     // cualquier cambio vuelve a pedir la revisión al guardar
   const caja=$('#curResumenFechas'), N=+$('#curNumClases').value||0, ses=sesionesActuales(), f=ses.map(x=>x.fecha).filter(Boolean);
-  pintarCalculo();
+  if(!sinPanel) pintarCalculo();
   const inicio=$('#curInicio').value;
   if(!inicio || !franjasTemp.length || !f.length){ caja.innerHTML='<i class="bi bi-info-circle"></i> Elige la fecha de la primera clase para calcular cuándo termina.'; return; }
   const diasConClase=new Set(franjasTemp.map(x=>x.dia)), dia0=diaDeFecha(inicio), h=ses.reduce((a,x)=>a+(x.fecha?horasSesion(x):0),0);

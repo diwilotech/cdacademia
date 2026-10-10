@@ -875,7 +875,7 @@ function abrirCurso(id){
   franjasTemp=slotsDe(g).map(x=>({...x})); if(!franjasTemp.length && g.modo!=='variable') franjasTemp=[{dia:6,ini:'08:00',fin:'10:00'}];
   descTemp=structuredClone(c.descuentos||[]); modsTemp=structuredClone(c.modulos||[]);
   modAreaTodas=false; modBuscar='';
-  calculado=false; $('#curCalculo').hidden=true;
+  cargarAjustes(c);
   refrescarHorario(); pintarDescCurso(); pintarModsCurso();
   modal('mCurso').show();
 }
@@ -926,13 +926,13 @@ $('#formCurso').addEventListener('submit',ev=>{
   const inicial=Math.max(0,+$('#curInicial').value||0);
   if(inicial>(+$('#curPrecio').value||0)){ toast('La cuota inicial no puede ser mayor que el precio del curso'); return; }
   const data={...prev,id,nombre:$('#curNombre').value.trim(),precio:+$('#curPrecio').value,inicial,nivel:$('#curNivel').value,areaId:$('#curArea').value,
-              desc:$('#curDesc').value,grupo,clases:prev.clases||[],modulos:mods,descuentos:dc,
+              desc:$('#curDesc').value,grupo,clases:clasesConAjustes(prev.clases,grupo),modulos:mods,descuentos:dc,
               evaluaciones:prev.evaluaciones||[{id:'ev1',nombre:'Prácticas',peso:40,clase:null},{id:'ev2',nombre:'Evaluación final',peso:60,clase:grupo.numClases}]};
   const idx=DB.cursos.findIndex(c=>c.id===id); idx>=0?DB.cursos[idx]=data:DB.cursos.push(data);
   guardar(); modal('mCurso').hide(); render(); if(cursoActual===id) pintarCurso(); toast('Curso guardado');
 });
 
-['#curInicio','#curFestivos'].forEach(q=>$(q).addEventListener('input',resumenFechasForm));
+['#curInicio','#curFestivos'].forEach(q=>$(q).addEventListener('input',()=>resumenFechasForm()));
 $('#curNumClases').addEventListener('input',()=>{ ajustarNumClases(); pintarModsCurso(); });
 
 function duplicarCurso(id){

@@ -50,6 +50,9 @@ const worker = {
     if (path === "/" || path === "/login") return paginaLogin();
     if (partes.length === 1 && slugValido(partes[0])) {
       const negocio = await env.DB.prepare(`SELECT slug FROM businesses WHERE slug = ? AND archived_at IS NULL`).bind(partes[0]).first();
+      // Dirección anterior (se cambió desde Diwilo): redirige a la actual.
+      const alias = !negocio && await env.DB.prepare(`SELECT b.slug FROM business_slug_aliases a JOIN businesses b ON b.id = a.business_id AND b.archived_at IS NULL WHERE a.slug = ?`).bind(partes[0]).first();
+      if (alias) return Response.redirect(new URL(`/${alias.slug}${url.search}`, url), 301);
       if (!negocio) return new Response("No encontramos este negocio.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
       const s = await currentSession(request, env);
       return s && s.slug === partes[0] ? ir(`/${s.slug}/admin`) : paginaLogin();

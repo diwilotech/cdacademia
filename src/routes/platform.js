@@ -3,7 +3,7 @@ import { first, all, uid } from "../lib/db.js";
 import { sha256Hex, randomToken } from "../lib/password.js";
 import { requirePlatform, isExpired, createSession, sessionCookie } from "../lib/auth.js";
 import { purgeArchived, purgeDate, issueSsoTicket, takeSsoTicket } from "../lib/platform-tools.js";
-import { RESERVADOS } from "../lib/slug.js";
+import { RESERVADOS, slugValido } from "../lib/slug.js";
 
 // API de plataforma para Diwilo Web: solo por RPC (ver lib/platform-rpc.js). Sin cookies ni CSRF.
 const ROLES = ["owner", "admin", "staff"];
@@ -18,7 +18,7 @@ async function uniqueSlug(env, name) {
   const base = slugify(name);
   for (let i = 0; i < 6; i++) {
     const slug = i === 0 ? base : `${base}-${randomToken().slice(0, 4)}`;
-    if (!RESERVADOS.has(slug) && !(await first(env, `SELECT 1 FROM businesses WHERE slug = ?`, slug))) return slug;
+    if (!RESERVADOS.has(slug) && !(await first(env, `SELECT 1 FROM businesses WHERE slug = ?`, slug)) && !(await first(env, `SELECT 1 FROM business_slug_aliases WHERE slug = ?`, slug))) return slug;
   }
   return `${base}-${randomToken().slice(0, 8)}`;
 }
@@ -74,8 +74,21 @@ export function registerPlatform(router) {
   }));
 
   router.patch("/api/platform/businesses/:id", guard(async (request, env, ctx) => {
-    if (!(await first(env, `SELECT 1 FROM businesses WHERE id = ?`, ctx.params.id))) return error("Negocio no encontrado", 404);
-    const body = await readJson(request), sets = [], vals = [];
+    const actual = await first(env, `SELECT slug FROM businesses WHERE id = ?`, ctx.params.id);
+    if (!actual) return error("Negocio no encontrado", 404);
+    const body = await readJson(request), sets = [], vals = [], extra = [];
+    // Dirección /<slug>: la anterior queda como alias y redirige a la nueva.
+    if (body.slug !== undefined) {
+      const slug = String(body.slug || "").trim().toLowerCase();
+      if (!slugValido(slug)) return error("La dirección debe tener 3-40 caracteres: minúsculas, números o guiones (y no ser una palabra reservada)");
+      if (slug !== actual.slug) {
+        if (await first(env, `SELECT 1 FROM businesses WHERE slug = ? AND id <> ?`, slug, ctx.params.id)) return error("Esa dirección ya la usa otro negocio", 409);
+        if (await first(env, `SELECT 1 FROM business_slug_aliases WHERE slug = ? AND business_id <> ?`, slug, ctx.params.id)) return error("Esa dirección la usó antes otro negocio", 409);
+        sets.push("slug = ?"); vals.push(slug);
+        extra.push(env.DB.prepare(`INSERT OR REPLACE INTO business_slug_aliases (slug, business_id) VALUES (?, ?)`).bind(actual.slug, ctx.params.id),
+          env.DB.prepare(`DELETE FROM business_slug_aliases WHERE slug = ?`).bind(slug));
+      }
+    }
     if (body.name !== undefined) {
       const n = String(body.name).trim().slice(0, 120);
       if (!n) return error("El nombre no puede estar vacío");
@@ -85,7 +98,7 @@ export function registerPlatform(router) {
       if (body.paid_until != null && !DATE.test(body.paid_until)) return error("La fecha debe ser AAAA-MM-DD");
       sets.push("paid_until = ?"); vals.push(body.paid_until || null);
     }
-    if (sets.length) await env.DB.prepare(`UPDATE businesses SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, ctx.params.id).run();
+    if (sets.length) await env.DB.batch([env.DB.prepare(`UPDATE businesses SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, ctx.params.id), ...extra]);
     return json({ ok: true });
   }));
 

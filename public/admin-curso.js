@@ -191,24 +191,40 @@ function celdasResumen(i,c){
 /* Editor de evaluaciones */
 let evalsTemp=[];
 function abrirEvals(){ evalsTemp=structuredClone(curso(cursoActual).evaluaciones||[]); pintarEvals(); modal('mEvals').show(); }
+/* Tipo de evaluación: «examen» (foto o PDF de cada estudiante) o «selección múltiple» (preguntas en la plataforma) */
+const tipoEval = e => e.tipo || (e.examen?.preguntas?.length ? 'multiple' : 'examen');
+const textoSuma = () => { const s=evalsTemp.reduce((a,x)=>a+ +x.peso,0); return s===100 ? `<span class="text-success"><i class="bi bi-check-circle"></i> Suman 100%</span>` : `<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Suman ${s}%; deben sumar 100%</span>`; };
 function pintarEvals(){
   const N=+curso(cursoActual).grupo.numClases||0;
-  $('#listaEvals').innerHTML=evalsTemp.map((e,k)=>`<div class="d-flex gap-2 align-items-center">
-    <input class="form-control form-control-sm" value="${esc(e.nombre)}" data-k="${k}" data-f="nombre" placeholder="Nombre" aria-label="Nombre">
-    <div class="input-group input-group-sm" style="width:100px"><input type="number" min="0" max="100" class="form-control" value="${e.peso}" data-k="${k}" data-f="peso" aria-label="Porcentaje"><span class="input-group-text">%</span></div>
-    <select class="form-select form-select-sm" style="width:110px" data-k="${k}" data-f="clase" aria-label="Clase"><option value="">Sin clase</option>
-      ${Array.from({length:N},(_,j)=>`<option value="${j+1}" ${e.clase==j+1?'selected':''}>Clase ${j+1}</option>`).join('')}</select>
-    <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" data-preg="${k}" title="Preguntas del examen"><i class="bi bi-card-checklist"></i> Examen${e.examen?.preguntas?.length?` (${e.examen.preguntas.length})`:''}</button>
-    <button type="button" class="btn btn-sm btn-outline-danger" data-del="${k}" title="Quitar"><i class="bi bi-trash"></i></button></div>`).join('');
-  const s=evalsTemp.reduce((a,e)=>a+ +e.peso,0);
-  $('#sumaPesos').innerHTML = s===100 ? `<span class="text-success"><i class="bi bi-check-circle"></i> Suman 100%</span>` : `<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Suman ${s}%; deben sumar 100%</span>`;
+  $('#listaEvals').innerHTML=evalsTemp.map((e,k)=>{
+    const tipo=tipoEval(e), np=e.examen?.preguntas?.length||0;
+    return `<div class="border rounded p-3 bg-white" data-k="${k}">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-6"><label class="form-label small mb-1">Nombre de la evaluación</label><input class="form-control" value="${esc(e.nombre)}" data-f="nombre" placeholder="Ej: Examen final" aria-label="Nombre"></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-1">Porcentaje</label>
+          <div class="input-group"><input type="number" min="0" max="100" step="1" class="form-control fw-semibold" value="${e.peso}" data-f="peso" aria-label="Porcentaje de la nota final"><span class="input-group-text">%</span></div></div>
+        <div class="col-6 col-md-3"><label class="form-label small mb-1">Se hace en la clase</label>
+          <select class="form-select" data-f="clase" aria-label="Clase"><option value="">Sin clase</option>${Array.from({length:N},(_,j)=>`<option value="${j+1}" ${e.clase==j+1?'selected':''}>Clase ${j+1}</option>`).join('')}</select></div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+        <select class="form-select form-select-sm w-auto" data-f="tipo" aria-label="Tipo de evaluación">
+          <option value="examen" ${tipo==='examen'?'selected':''}>Examen (foto o PDF)</option><option value="multiple" ${tipo==='multiple'?'selected':''}>Selección múltiple (preguntas)</option></select>
+        ${tipo==='multiple'
+          ? `${np?`<span class="pill pill-pagada"><i class="bi bi-check2"></i> Creado · ${np} ${np===1?'pregunta':'preguntas'}</span>`:'<span class="pill pill-hoy"><i class="bi bi-exclamation-circle"></i> Por crear</span>'}
+             <button type="button" class="btn btn-sm ${np?'btn-outline-secondary':'btn-marca'}" data-preg="${k}"><i class="bi bi-card-checklist"></i> ${np?'Editar preguntas':'Crear preguntas'}</button>`
+          : '<span class="pill pill-gratis"><i class="bi bi-file-earmark-arrow-up"></i> Se sube el examen de cada estudiante en Notas</span>'}
+        <button type="button" class="btn btn-sm btn-outline-danger ms-auto" data-del="${k}" title="Quitar esta evaluación"><i class="bi bi-trash"></i></button></div></div>`; }).join('');
+  $('#sumaPesos').innerHTML = textoSuma();
 }
-$('#listaEvals').addEventListener('input',e=>{ const t=e.target; if(t.dataset.k===undefined) return;
-  const ev=evalsTemp[+t.dataset.k]; ev[t.dataset.f]= t.dataset.f==='nombre'?t.value : t.value===''?null:+t.value;
-  if(t.dataset.f==='peso'){ const s=evalsTemp.reduce((a,x)=>a+ +x.peso,0); $('#sumaPesos').innerHTML = s===100?`<span class="text-success"><i class="bi bi-check-circle"></i> Suman 100%</span>`:`<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Suman ${s}%; deben sumar 100%</span>`; } });
+$('#listaEvals').addEventListener('input',e=>{
+  const row=e.target.closest('[data-k]'), f=e.target.dataset.f; if(!row||!f||f==='tipo') return;
+  const ev=evalsTemp[+row.dataset.k]; ev[f]= f==='nombre' ? e.target.value : e.target.value==='' ? null : +e.target.value;
+  if(f==='peso') $('#sumaPesos').innerHTML=textoSuma();
+});
+$('#listaEvals').addEventListener('change',e=>{ const row=e.target.closest('[data-k]'); if(!row || e.target.dataset.f!=='tipo') return; evalsTemp[+row.dataset.k].tipo=e.target.value; pintarEvals(); });
 $('#listaEvals').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(b){ evalsTemp.splice(+b.dataset.del,1); pintarEvals(); return; }
   const p=e.target.closest('[data-preg]'); if(p) abrirPreguntas(+p.dataset.preg); });
-$('#addEval').addEventListener('click',()=>{ evalsTemp.push({id:'ev'+uid(),nombre:'',peso:0,clase:null}); pintarEvals(); [...document.querySelectorAll('#listaEvals input[data-f="nombre"]')].at(-1)?.focus(); });
+$('#addEval').addEventListener('click',()=>{ evalsTemp.push({id:'ev'+uid(),nombre:'',peso:0,clase:null,tipo:'examen'}); pintarEvals(); [...document.querySelectorAll('#listaEvals input[data-f="nombre"]')].at(-1)?.focus(); });
 $('#formEvals').addEventListener('submit',e=>{ e.preventDefault();
   curso(cursoActual).evaluaciones=evalsTemp.filter(x=>x.nombre.trim()).map(x=>({...x,peso:+x.peso||0}));
   guardar(); modal('mEvals').hide(); pintarCurso(); toast('Evaluaciones guardadas'); });

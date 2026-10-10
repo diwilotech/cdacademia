@@ -878,8 +878,8 @@ function calificarExamen(ev, ex){
 }
 /* Botón de la celda de nota: subir el archivo, ver el archivo subido o ver el examen de selección múltiple */
 function botonExamen(i,x,e){
-  const multiple=!!x.examen?.preguntas?.length, ex=i.examenes?.[x.id], archivos=(ex?.archivos||[]).length, respondido=Object.keys(ex?.resp||{}).length>0;
-  const [ic,tit,cls,acc] = multiple ? ['bi-eye', respondido?'Ver respuestas del examen':'Ver examen (selección múltiple)', respondido?'text-marca':'text-secondary','ver']
+  const multiple=tipoEval(x)==='multiple', ex=i.examenes?.[x.id], archivos=(ex?.archivos||[]).length, respondido=Object.keys(ex?.resp||{}).length>0;
+  const [ic,tit,cls,acc] = multiple ? ['bi-eye', respondido?'Ver respuestas del examen':(x.examen?.preguntas?.length?'Ver examen (selección múltiple)':'Selección múltiple: aún no tiene preguntas'), respondido?'text-marca':'text-secondary','ver']
     : archivos ? ['bi-file-earmark-check-fill','Ver archivo subido','text-marca','ver'] : ['bi-upload','Subir archivo','text-secondary','subir'];
   return `<button type="button" class="btn btn-link p-0 ${cls}" data-examen="${x.id}" data-acc="${acc}" title="${tit}" aria-label="${tit} de ${esc(e.nombre)}"><i class="bi ${ic}"></i></button>`;
 }
@@ -1036,3 +1036,72 @@ $('#curModulos').addEventListener('change',e=>{
   r[sel.dataset.r]=+sel.value; if(r.hasta<r.desde){ if(sel.dataset.r==='desde') r.hasta=r.desde; else r.desde=r.hasta; }
   pintarModsCurso();
 });
+
+/* =========================================================
+   PREGUNTAS DESDE UN ARCHIVO JSON
+   {"instrucciones": "...", "preguntas": [{"tipo": "unica|multiple|vf|corta|abierta", "enunciado": "...", "puntos": 2, ...}]}
+   ========================================================= */
+const EJEMPLO_EXAMEN_JSON = {
+  instrucciones: 'Lee con calma y marca la respuesta correcta. Tiempo sugerido: 30 minutos.',
+  preguntas: [
+    {tipo:'unica', enunciado:'¿Qué color es complementario del azul?', puntos:2,
+     opciones:[{texto:'Naranja',correcta:true},{texto:'Verde'},{texto:'Violeta'}]},
+    {tipo:'multiple', enunciado:'Selecciona las herramientas de desinfección:', puntos:3,
+     opciones:[{texto:'Alcohol al 70 %',correcta:true},{texto:'Toalla desechable',correcta:true},{texto:'Esponja usada'}]},
+    {tipo:'vf', enunciado:'Un subtono frío se ve mejor con joyería dorada.', puntos:1, respuesta:false},
+    {tipo:'corta', enunciado:'¿Cómo se llama el círculo que ordena los colores?', puntos:2, respuestas:['círculo cromático','circulo cromatico']},
+    {tipo:'abierta', enunciado:'Describe cómo elegirías la base para una piel mixta.', puntos:2}
+  ]
+};
+function descargarEjemploExamen(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(EJEMPLO_EXAMEN_JSON,null,2)],{type:'application/json'}));
+  a.download='ejemplo-examen.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+const TIPO_ALIAS = {unica:'unica',única:'unica',seleccion_unica:'unica',single:'unica',multiple:'multiple',múltiple:'multiple',seleccion_multiple:'multiple',
+  vf:'vf',verdadero_falso:'vf',boolean:'vf',corta:'corta',texto:'corta',abierta:'abierta',ensayo:'abierta'};
+/* Convierte una pregunta del JSON al formato interno; devuelve {q} o {error} */
+function preguntaDesdeJSON(src,i){
+  const tipo=TIPO_ALIAS[norm(src.tipo).replace(/\s+/g,'_')] , nombre=`Pregunta ${i+1}`;
+  if(!tipo) return {error:`${nombre}: el tipo «${src.tipo??''}» no existe (usa unica, multiple, vf, corta o abierta)`};
+  const enunciado=String(src.enunciado??src.pregunta??'').trim();
+  if(!enunciado) return {error:`${nombre}: falta el enunciado`};
+  const q={id:'q'+uid(),tipo,enunciado,puntos:Math.max(0,+(src.puntos??1))||0};
+  if(tipo==='unica'||tipo==='multiple'){
+    const crudas=Array.isArray(src.opciones)?src.opciones:[];
+    const marcadas=[].concat(src.respuestas??src.respuesta??[]).map(norm);
+    q.opciones=crudas.map(o=>{ const texto=String(typeof o==='string'?o:(o.texto??o.opcion??'')).trim();
+      return {id:'o'+uid(),texto,ok: typeof o==='object' ? !!(o.correcta??o.ok??o.correct) || marcadas.includes(norm(texto)) : marcadas.includes(norm(texto))}; }).filter(o=>o.texto);
+    if(q.opciones.length<2) return {error:`${nombre}: necesita al menos 2 opciones`};
+    const ok=q.opciones.filter(o=>o.ok).length;
+    if(!ok) return {error:`${nombre}: marca la respuesta correcta (correcta: true)`};
+    if(tipo==='unica' && ok>1) return {error:`${nombre}: es de selección única pero tiene ${ok} respuestas correctas`};
+  } else if(tipo==='vf'){
+    const r=src.respuesta??src.correcta; const v=typeof r==='boolean'?r:/^(v|verdadero|true|si|sí)$/i.test(String(r??'').trim()) ? true : /^(f|falso|false|no)$/i.test(String(r??'').trim()) ? false : null;
+    if(v===null) return {error:`${nombre}: falta la respuesta (true o false)`};
+    q.vf=v;
+  } else if(tipo==='corta'){
+    const r=[].concat(src.respuestas??src.respuesta??[]).map(x=>String(x).trim()).filter(Boolean);
+    if(!r.length) return {error:`${nombre}: falta la respuesta aceptada (respuestas: ["..."])`};
+    q.respuesta=r.join(', ');
+  }
+  return {q};
+}
+function importarPreguntasJSON(){
+  const msg=$('#exJsonMsg'), txt=$('#exJsonTexto').value.trim();
+  const mal=t=>{ msg.className='small text-danger'; msg.innerHTML=t; };
+  if(!txt){ mal('Pega el JSON o sube el archivo.'); return; }
+  let datos; try{ datos=JSON.parse(txt); }catch(e){ mal(`El JSON no es válido: ${esc(e.message)}`); return; }
+  const lista=Array.isArray(datos)?datos:datos.preguntas;
+  if(!Array.isArray(lista)||!lista.length){ mal('No encontré la lista «preguntas». Descarga el ejemplo para ver el formato.'); return; }
+  const nuevas=[], errores=[];
+  lista.forEach((s,i)=>{ const r=preguntaDesdeJSON(s||{},i); if(r.error) errores.push(r.error); else nuevas.push(r.q); });
+  if(errores.length){ mal(`No se importó nada. Corrige:<ul class="mb-0">${errores.slice(0,8).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>${errores.length>8?`…y ${errores.length-8} más`:''}`); return; }
+  pregTemp = $('#exJsonReemplaza').checked ? nuevas : [...pregTemp,...nuevas];
+  if(!Array.isArray(datos) && datos.instrucciones && !$('#exInstr').value.trim()) $('#exInstr').value=String(datos.instrucciones).slice(0,300);
+  pintarPreguntas(); $('#exJsonTexto').value='';
+  msg.className='small text-success'; msg.textContent=`${nuevas.length} ${nuevas.length===1?'pregunta importada':'preguntas importadas'}. Revísalas y pulsa «Guardar preguntas».`;
+}
+$('#exEjemplo').addEventListener('click',descargarEjemploExamen);
+$('#exJsonImportar').addEventListener('click',importarPreguntasJSON);
+$('#exJsonArchivo').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; const r=new FileReader(); r.onload=()=>{ $('#exJsonTexto').value=r.result; importarPreguntasJSON(); }; r.readAsText(f); });

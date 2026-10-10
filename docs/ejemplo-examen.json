@@ -1,0 +1,60 @@
+{
+  "instrucciones": "Lee con calma y marca la respuesta correcta. Tiempo sugerido: 30 minutos.",
+  "preguntas": [
+    {
+      "tipo": "unica",
+      "enunciado": "¿Qué color es complementario del azul?",
+      "puntos": 2,
+      "opciones": [
+        {
+          "texto": "Naranja",
+          "correcta": true
+        },
+        {
+          "texto": "Verde"
+        },
+        {
+          "texto": "Violeta"
+        }
+      ]
+    },
+    {
+      "tipo": "multiple",
+      "enunciado": "Selecciona las herramientas de desinfección:",
+      "puntos": 3,
+      "opciones": [
+        {
+          "texto": "Alcohol al 70 %",
+          "correcta": true
+        },
+        {
+          "texto": "Toalla desechable",
+          "correcta": true
+        },
+        {
+          "texto": "Esponja usada"
+        }
+      ]
+    },
+    {
+      "tipo": "vf",
+      "enunciado": "Un subtono frío se ve mejor con joyería dorada.",
+      "puntos": 1,
+      "respuesta": false
+    },
+    {
+      "tipo": "corta",
+      "enunciado": "¿Cómo se llama el círculo que ordena los colores?",
+      "puntos": 2,
+      "respuestas": [
+        "círculo cromático",
+        "circulo cromatico"
+      ]
+    },
+    {
+      "tipo": "abierta",
+      "enunciado": "Describe cómo elegirías la base para una piel mixta.",
+      "puntos": 2
+    }
+  ]
+}

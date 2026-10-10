@@ -18,7 +18,7 @@ export function registerAuth(router) {
     if (intento?.locked_until && intento.locked_until > nowIso()) return error("Demasiados intentos. Prueba en unos minutos.", 429);
 
     const users = await all(env,
-      `SELECT u.*, b.name AS business_name, b.slug AS business_slug FROM users u JOIN businesses b ON b.id = u.business_id
+      `SELECT u.*, b.name AS business_name, b.slug AS business_slug FROM users u JOIN businesses b ON b.id = u.business_id AND b.archived_at IS NULL
        WHERE u.email = ? AND u.active = 1 ${business_id ? "AND u.business_id = ?" : slug ? "AND b.slug = ?" : ""}`,
       ...(business_id ? [mail, business_id] : slug ? [mail, String(slug)] : [mail]));
     const matches = [];

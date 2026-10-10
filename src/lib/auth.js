@@ -37,7 +37,7 @@ export async function currentSession(request, env) {
     `SELECT s.id, s.business_id, u.id AS user_id, u.email, u.name, u.role, b.name AS business_name, b.slug, b.paid_until
      FROM sessions s
      JOIN users u ON u.id = s.user_id AND u.active = 1
-     JOIN businesses b ON b.id = s.business_id
+     JOIN businesses b ON b.id = s.business_id AND b.archived_at IS NULL
      WHERE s.id = ? AND s.expires_at > ?`, await sha256Hex(token), nowIso());
   if (s) s.read_only = isExpired(s.paid_until);
   return s;

@@ -49,7 +49,7 @@ const worker = {
     // Login general (sin negocio en la URL) y login de un negocio: /<slug>
     if (path === "/" || path === "/login") return paginaLogin();
     if (partes.length === 1 && slugValido(partes[0])) {
-      const negocio = await env.DB.prepare(`SELECT slug FROM businesses WHERE slug = ?`).bind(partes[0]).first();
+      const negocio = await env.DB.prepare(`SELECT slug FROM businesses WHERE slug = ? AND archived_at IS NULL`).bind(partes[0]).first();
       if (!negocio) return new Response("No encontramos este negocio.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
       const s = await currentSession(request, env);
       return s && s.slug === partes[0] ? ir(`/${s.slug}/admin`) : paginaLogin();

@@ -746,12 +746,24 @@
 <!-- ===== Modal examen de un estudiante ===== -->
 <div class="modal fade" id="mExamen" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
   <div class="modal-header"><h2 class="modal-title h5" id="tExamen">Examen</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body"><div class="row g-3">
-    <div class="col-lg-5"><div class="d-flex justify-content-between align-items-center mb-2"><h3 class="h6 mb-0">Examen escaneado o fotografiado</h3>
-      <label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-camera"></i> Subir foto o PDF<input type="file" id="exArchivos" multiple hidden accept="image/*,application/pdf"></label></div>
-      <div id="exLista" class="d-flex flex-column gap-2"></div></div>
-    <div class="col-lg-7"><h3 class="h6">Respuestas</h3><div id="exRespuestas" class="examen-prot"></div></div>
-  </div></div>
+  <div class="modal-body" style="background:#f6f2f4">
+    <div class="d-flex flex-column gap-3" id="exCuerpo">
+      <section class="border rounded p-3 bg-white" id="exSecArchivos">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <h3 class="h6 mb-0"><i class="bi bi-file-earmark-image text-marca"></i> Examen escaneado o fotografiado</h3>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="btn-group btn-group-sm" role="group" id="exPos" aria-label="Dónde mostrar los archivos">
+              <button type="button" class="btn btn-outline-secondary" data-pos="arriba" title="Archivos arriba de las respuestas"><i class="bi bi-arrow-bar-up"></i> Arriba</button>
+              <button type="button" class="btn btn-outline-secondary" data-pos="abajo" title="Archivos debajo de las respuestas"><i class="bi bi-arrow-bar-down"></i> Abajo</button></div>
+            <label class="btn btn-sm btn-marca mb-0"><i class="bi bi-camera"></i> Subir foto o PDF<input type="file" id="exArchivos" multiple hidden accept="image/*,application/pdf"></label></div></div>
+        <div id="exLista" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-2"></div>
+      </section>
+      <section class="border rounded p-3 bg-white" id="exSecRespuestas">
+        <h3 class="h6 mb-3"><i class="bi bi-ui-checks text-marca"></i> Respuestas</h3>
+        <div id="exRespuestas" class="examen-prot"></div>
+      </section>
+    </div>
+  </div>
   <div class="modal-footer"><div class="me-auto small tabular" id="exResumen"></div>
     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
     <button type="button" class="btn btn-outline-secondary" id="exAplicar"><i class="bi bi-check2-circle"></i> Poner esta nota</button>

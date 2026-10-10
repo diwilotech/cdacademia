@@ -194,7 +194,9 @@ section[data-vista].activa{display:block}
 .hoja .firmas span{border-top:1px solid #000;padding-top:3px;width:200px;text-align:center}
 
 /* Aviso invisible dentro de las preguntas de examen (lo lee quien copie el texto de la página) */
-.ai-nota{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+/* Invisible en pantalla (y para lectores de pantalla), pero forma parte del texto si alguien selecciona y copia */
+.ai-nota{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap}
+#exCuerpo.archivos-abajo #exSecArchivos{order:2}
 
 /* ---------- Documento del módulo (estilo editor de documentos) ---------- */
 .doc-fondo{background:#ece7ea;padding:1.25rem .75rem}

@@ -1,95 +1,122 @@
-import { WorkerEntrypoint } from "cloudflare:workers";
-import { platformCall } from "./lib/platform-rpc.js";
-import { Router } from "./lib/router.js";
-import { notFound, unauthorized, error } from "./lib/http.js";
-import { requireStaff, currentSession } from "./lib/auth.js";
-import { registerPlatform } from "./routes/platform.js";
-import { registerAuth } from "./routes/auth.js";
-import { registerState } from "./routes/state.js";
-import { registerFiles } from "./routes/files.js";
-import { registerIA } from "./routes/ia.js";
-import { registerTeam } from "./routes/team.js";
-import { slugValido } from "./lib/slug.js";
+// App de Diwilo — Worker único: API + archivos de public/.
+//   /            login (o al panel si ya hay sesión)
+//   /staff/*     páginas del negocio (una por módulo; exigen sesión con negocio). /app redirige aquí.
+//   /api/*       API (src/api/*.js); /api/platform/* solo para Diwilo Web por RPC
+//   /mcp         MCP del negocio (token de Configuración → IA → Conexiones)
+//   /privacidad, /dmca, /manifest.json, /sw.js   públicos
+import { WorkerEntrypoint } from 'cloudflare:workers';
+import { Router } from './router.js';
+import { HttpError, errorResponse } from './lib/http.js';
+import { authenticate, loadSession } from './lib/auth.js';
+import { platformCall } from './lib/platform-rpc.js';
+import * as authApi from './api/auth.js';
+import * as platformApi from './api/platform.js';
+import * as platformModulesApi from './api/platform-modules.js';
+import * as meApi from './api/me.js';
+import * as settingsApi from './api/settings.js';
+import * as mcpApi from './api/mcp.js';
+import * as teamApi from './api/team.js';
+import * as academiaApi from './api/academia.js';
+import * as estudiantesApi from './api/estudiantes.js';
+import * as profesionalesApi from './api/profesionales.js';
+import * as materialApi from './api/material.js';
+import * as cursosApi from './api/cursos.js';
+import * as matriculasApi from './api/matriculas.js';
+import * as cuotasApi from './api/cuotas.js';
+import * as reposicionesApi from './api/reposiciones.js';
+import { isCentralApi, centralModuleOf, centralApi, centralPage, centralAsset, centralPublic } from './lib/central.js';
+import { CENTRALES } from './lib/modules.js';
 
 const router = new Router();
-registerPlatform(router); // primero: /api/platform/* no debe caer en otras rutas
-registerAuth(router);
-registerState(router);
-registerFiles(router);
-registerIA(router);
-registerTeam(router);
+// platform va primero. Agrega aquí cada módulo nuevo de src/api/ (y su entrada en modulos.app.json).
+// Los horizontales (Finanzas, Marketing…) no van aquí: se piden en modulos.app.json → "centrales" y viven en Diwilo Modulos.
+const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi];
+for (const mod of [platformApi, platformModulesApi, authApi, meApi, settingsApi, mcpApi, teamApi, ...MODULE_APIS]) if (typeof mod.routes === 'function') mod.routes(router);
 
-// JSON seguro para incrustar dentro de <script>
-const inline = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+const SECURITY_HEADERS = {
+  'x-frame-options': 'DENY',
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'same-origin',
+};
 
-// Sirve admin.html con el estado del negocio ya incrustado: el panel arranca sin esperar una petición.
-async function servirAdmin(request, env, session) {
-  const url = new URL(request.url); url.pathname = "/admin"; // los assets resuelven /admin -> admin.html (pedir .html redirige)
-  const res = await env.ASSETS.fetch(new Request(url, request));
-  const row = await env.DB.prepare(`SELECT data, version FROM app_state WHERE business_id = ?`).bind(session.business_id).first();
-  const boot = { estado: row ? JSON.parse(row.data) : null, version: row?.version || 0, negocio: session.business_name, usuario: session.name, rol: session.role, slug: session.slug, readOnly: session.read_only, paidUntil: session.paid_until };
-  return new HTMLRewriter()
-    .on("head", { element(el) { el.append(`<script>window.__BOOT__=${inline(boot)};</script>`, { html: true }); } })
-    .transform(new Response(res.body, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }));
+function withHeaders(res, headers) {
+  const out = new Response(res.body, res);
+  for (const [k, v] of Object.entries(headers)) out.headers.set(k, v);
+  return out;
 }
 
+async function handleApi(req, env, ctx, url) {
+  const { route, params } = router.match(req.method, url.pathname);
+  // CSRF: toda escritura del navegador trae este encabezado (fuerza preflight entre orígenes).
+  // Diwilo Web (nivel 'platform') llega por RPC y no usa cookies.
+  if (req.method !== 'GET' && route.auth !== 'platform' && req.headers.get('x-app') !== '1') {
+    throw new HttpError(403, 'Solicitud no permitida');
+  }
+  const c = { req, env, ctx, url, params };
+  await authenticate(c, route.auth);
+  return route.handler(c);
+}
+
+// Módulos centrales: la app verifica sesión, negocio, rol, módulo activo y CSRF; Diwilo Modulos hace el resto.
+async function handleCentral(req, env, ctx, url) {
+  if (req.method !== 'GET' && req.headers.get('x-app') !== '1') throw new HttpError(403, 'Solicitud no permitida');
+  const c = { req, env, ctx, url, params: {} };
+  await authenticate(c, `tenant:${centralModuleOf(url.pathname)}`);
+  return centralApi(c);
+}
+
+const asset = (env, req, path) => {
+  const u = new URL(req.url);
+  u.pathname = path;
+  return env.ASSETS.fetch(new Request(u, req));
+};
+
 const worker = {
-  async fetch(request, env) {
-    const url = new URL(request.url), path = url.pathname;
-
-    const partes = path.split("/").filter(Boolean);
-    const ir = (a) => Response.redirect(new URL(a, url), 302);
-    const paginaLogin = () => { const u = new URL(request.url); u.pathname = "/"; return env.ASSETS.fetch(new Request(u, request)); };   // index.html sin volver a pasar por el Worker
-
-    // Compatibilidad: /admin y /admin.html llevan al panel del negocio de la sesión
-    if (path === "/admin" || path === "/admin.html") {
-      const s = await currentSession(request, env);
-      return ir(s ? `/${s.slug}/admin` : "/");
-    }
-    // Login general (sin negocio en la URL) y login de un negocio: /<slug>
-    if (path === "/" || path === "/login") return paginaLogin();
-    if (partes.length === 1 && slugValido(partes[0])) {
-      const negocio = await env.DB.prepare(`SELECT slug FROM businesses WHERE slug = ? AND archived_at IS NULL`).bind(partes[0]).first();
-      // Dirección anterior (se cambió desde Diwilo): redirige a la actual.
-      const alias = !negocio && await env.DB.prepare(`SELECT b.slug FROM business_slug_aliases a JOIN businesses b ON b.id = a.business_id AND b.archived_at IS NULL WHERE a.slug = ?`).bind(partes[0]).first();
-      if (alias) return Response.redirect(new URL(`/${alias.slug}${url.search}`, url), 301);
-      if (!negocio) return new Response("No encontramos este negocio.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
-      const s = await currentSession(request, env);
-      return s && s.slug === partes[0] ? ir(`/${s.slug}/admin`) : paginaLogin();
-    }
-    // Panel de un negocio: /<slug>/admin (solo con sesión de ese negocio)
-    if (partes.length === 2 && partes[1] === "admin" && slugValido(partes[0])) {
-      const s = await currentSession(request, env);
-      if (!s) return ir(`/${partes[0]}`);
-      return s.slug === partes[0] ? servirAdmin(request, env, s) : ir(`/${s.slug}/admin`);
-    }
-
-    if (!path.startsWith("/api/") && !path.startsWith("/staff/")) return env.ASSETS.fetch(request);
-
-    const match = router.match(request.method, path);
-    if (!match) return notFound();
-    const ctx = { params: match.params };
-
-    // Todo /staff/* exige sesión (verificada contra D1 en cada request)
-    if (path.startsWith("/staff/")) {
-      const denied = await requireStaff(request, env, ctx);
-      if (denied) return denied;
-      // Defensa CSRF: las escrituras solo se aceptan con la cabecera propia del front
-      if (request.method !== "GET" && request.headers.get("x-requested-with") !== "cda") return unauthorized();
-      // Suscripción vencida: solo lectura
-      if (request.method !== "GET" && ctx.user.read_only) return error("La suscripción del negocio está vencida: solo lectura.", 402);
-    }
+  async fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    const isApi = url.pathname.startsWith('/api/');
     try {
-      return await match.handler(request, env, ctx);
-    } catch (e) {
-      console.error(e);
-      return new Response(JSON.stringify({ error: "Error interno" }), { status: 500, headers: { "content-type": "application/json" } });
+      if (isApi && isCentralApi(url.pathname)) return withHeaders(await handleCentral(req, env, ctx, url), SECURITY_HEADERS);
+      if (isApi) return withHeaders(await handleApi(req, env, ctx, url), SECURITY_HEADERS);
+      if (url.pathname === '/mcp') return withHeaders(await mcpApi.mcpFetch(req, env, ctx), SECURITY_HEADERS);
+      // Rutas públicas que declaran los módulos: links de rastreo (/l/…) y validación de documentos (/validar/…)
+      if (url.pathname.startsWith('/l/') || url.pathname.startsWith('/validar/')) return withHeaders(await centralPublic(env, url), SECURITY_HEADERS);
+      // Código de las páginas de los módulos centrales
+      if (url.pathname.startsWith('/m/')) return withHeaders(await centralAsset(env, url.pathname), SECURITY_HEADERS);
+      if (url.pathname === '/') {
+        const s = await loadSession(req, env);
+        if (s?.business_id && s.role) return Response.redirect(`${url.origin}/staff/`, 302);
+        return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
+      }
+      // Enlaces viejos y el pase de Diwilo (/api/sso) llegan a /app: el panel ahora vive en /staff/.
+      if (url.pathname === '/app' || url.pathname === '/app.html') return Response.redirect(`${url.origin}/staff/`, 302);
+      if (url.pathname === '/staff' || url.pathname.startsWith('/staff/')) {
+        const s = await loadSession(req, env);
+        if (!s?.business_id || !s.role) return Response.redirect(`${url.origin}/`, 302);
+        const central = CENTRALES.find((id) => url.pathname === `/staff/${id}.html` || url.pathname === `/staff/${id}`);
+        if (central) return withHeaders(await centralPage(env, req, central), SECURITY_HEADERS);
+        const res = withHeaders(await env.ASSETS.fetch(req), { ...SECURITY_HEADERS, 'cache-control': 'no-store' });
+        return res;
+      }
+      return env.ASSETS.fetch(req);
+    } catch (err) {
+      return errorResponse(err);
     }
   },
 };
+
+// Tareas diarias de los módulos propios (cron de wrangler.jsonc, 3:00 a. m. Colombia): cada módulo puede exportar daily(env).
+// Las de los módulos centrales corren una sola vez en Diwilo Modulos.
+worker.scheduled = async (event, env, ctx) => {
+  for (const mod of MODULE_APIS) {
+    if (typeof mod.daily !== 'function') continue;
+    ctx.waitUntil(mod.daily(env).catch((e) => console.error('tarea diaria', e.message)));
+  }
+};
+
 export default worker;
 
-// Diwilo Web administra esta app por RPC (service binding con entrypoint "Platform"), sin clave compartida.
+// Diwilo Web administra esta app por RPC (service binding con "entrypoint": "Platform"), sin clave compartida.
 export class Platform extends WorkerEntrypoint {
   call(method, path, body, origin) {
     return platformCall(worker, this.env, this.ctx, method, path, body, origin);

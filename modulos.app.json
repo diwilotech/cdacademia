@@ -1,0 +1,197 @@
+{
+  "app": "cdacademia",
+  "nombre": "CD Academia",
+  "tema": "rosa",
+  "centrales": [
+    "finanzas",
+    "marketing"
+  ],
+  "modulos": [
+    {
+      "id": "cursos",
+      "nombre": "Cursos",
+      "icono": "bi-mortarboard",
+      "menu": {
+        "ruta": "/staff/cursos.html",
+        "orden": 10
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [
+        {
+          "id": "hoy",
+          "api": "/api/cursos/resumen"
+        }
+      ],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_cursos",
+        "ac_clases",
+        "ac_evaluaciones",
+        "ac_cupones",
+        "ac_asistencia",
+        "ac_notas"
+      ]
+    },
+    {
+      "id": "estudiantes",
+      "nombre": "Estudiantes",
+      "icono": "bi-people",
+      "menu": {
+        "ruta": "/staff/estudiantes.html",
+        "orden": 20
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [
+        {
+          "id": "total",
+          "api": "/api/estudiantes/resumen"
+        }
+      ],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_estudiantes"
+      ]
+    },
+    {
+      "id": "matriculas",
+      "nombre": "Matrículas",
+      "icono": "bi-person-plus",
+      "menu": {
+        "ruta": "/staff/matriculas.html",
+        "orden": 30
+      },
+      "permisos": {
+        "ver": "admin",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [
+        "cursos",
+        "estudiantes"
+      ],
+      "tipo": "propio",
+      "tablas": [
+        "ac_inscripciones"
+      ]
+    },
+    {
+      "id": "cuotas",
+      "nombre": "Cuotas",
+      "icono": "bi-calendar-check",
+      "menu": {
+        "ruta": "/staff/cuotas.html",
+        "orden": 40
+      },
+      "permisos": {
+        "ver": "admin",
+        "configurar": "admin"
+      },
+      "widgets": [
+        {
+          "id": "vencidas",
+          "api": "/api/cuotas/resumen"
+        }
+      ],
+      "depende_de": [
+        "matriculas"
+      ],
+      "tipo": "propio",
+      "tablas": [
+        "ac_cuotas",
+        "ac_pagos"
+      ]
+    },
+    {
+      "id": "reposiciones",
+      "nombre": "Reposiciones",
+      "icono": "bi-arrow-repeat",
+      "menu": {
+        "ruta": "/staff/reposiciones.html",
+        "orden": 50
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [
+        {
+          "id": "pendientes",
+          "api": "/api/reposiciones/resumen"
+        }
+      ],
+      "depende_de": [
+        "cursos"
+      ],
+      "tipo": "propio",
+      "tablas": [
+        "ac_reposiciones",
+        "ac_espacios"
+      ]
+    },
+    {
+      "id": "material",
+      "nombre": "Material",
+      "icono": "bi-journal-richtext",
+      "menu": {
+        "ruta": "/staff/material.html",
+        "orden": 60
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_material"
+      ]
+    },
+    {
+      "id": "profesionales",
+      "nombre": "Profesionales",
+      "icono": "bi-person-badge",
+      "menu": {
+        "ruta": "/staff/profesionales.html",
+        "orden": 65
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_profesionales"
+      ]
+    },
+    {
+      "id": "academia",
+      "nombre": "Academia",
+      "icono": "bi-building",
+      "menu": {
+        "ruta": "/staff/academia.html",
+        "orden": 90
+      },
+      "permisos": {
+        "ver": "admin",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_areas"
+      ]
+    }
+  ]
+}

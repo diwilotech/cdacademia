@@ -1,13 +1,15 @@
 {
   "name": "cdacademia",
   "private": true,
-  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate:local": "wrangler d1 migrations apply control-de-academia-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply control-de-academia-db --remote"
+    "db:migrate:local": "wrangler d1 migrations apply control-de-academia-db --local --persist-to .wrangler/state",
+    "db:migrate:remote": "wrangler d1 migrations apply control-de-academia-db --remote",
+    "test": "node scripts/test-local.mjs"
   },
-  "devDependencies": { "wrangler": "^4.131.2" }
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
 }

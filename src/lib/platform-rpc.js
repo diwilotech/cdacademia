@@ -8,16 +8,16 @@ const trusted = new WeakSet();
 export const isPlatformCall = (request) => trusted.has(request);
 
 export async function platformCall(worker, env, ctx, method, path, body, origin) {
-  if (typeof path !== "string" || !path.startsWith("/")) return { status: 400, data: { error: "ruta inválida" } };
-  const base = /^https:\/\/[a-z0-9.-]+$/i.test(origin || "") ? origin : "https://platform.internal";
+  if (typeof path !== 'string' || !path.startsWith('/')) return { status: 400, data: { error: 'ruta inválida' } };
+  const base = /^https:\/\/[a-z0-9.-]+$/i.test(origin || '') ? origin : 'https://platform.internal';
   const request = new Request(`${base}/api/platform${path}`, {
     method,
-    headers: { "content-type": "application/json" },
-    body: body === undefined || method === "GET" ? undefined : JSON.stringify(body),
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined || method === 'GET' ? undefined : JSON.stringify(body),
   });
   trusted.add(request);
   const res = await worker.fetch(request, env, ctx);
-  const text = res.status === 204 ? "" : await res.text();
+  const text = res.status === 204 ? '' : await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text.slice(0, 300) }; }
   return { status: res.status, data };

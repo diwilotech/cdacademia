@@ -1,0 +1,29 @@
+// Lo que necesita el shell común (public/js/shell.js) para pintar la app: usuario, negocio, rol,
+// módulos visibles (activos + permitidos para el rol), tema y estado de la suscripción.
+import { json } from '../lib/http.js';
+import { db } from '../lib/db.js';
+import { userBusinesses, isExpired } from '../lib/auth.js';
+import { APP, visibleModules } from '../lib/modules.js';
+
+export const TEMAS = ['azul', 'indigo', 'violeta', 'rosa', 'rojo', 'naranja', 'verde', 'turquesa', 'grafito'];
+
+export async function businessSettings(env, businessId) {
+  const s = await db(env).first('SELECT tema, modo, logo_key, updated_at FROM business_settings WHERE business_id = ?', businessId);
+  return { tema: TEMAS.includes(s?.tema) ? s.tema : APP.tema, modo: s?.modo === 'dark' ? 'dark' : 'light', logo: s?.logo_key ? `/api/settings/logo?v=${encodeURIComponent(s.updated_at)}` : null };
+}
+
+export function routes(r) {
+  r.get('/api/me', 'tenant', async (c) => {
+    const s = c.session;
+    const mods = await visibleModules(c.env, c.businessId, c.role);
+    return json({
+      app: APP,
+      user: { id: s.user_id, email: s.email, name: s.name },
+      business: { id: c.businessId, name: s.business_name, slug: s.business_slug, paidUntil: s.paid_until, readOnly: isExpired(s.paid_until) },
+      role: c.role,
+      settings: await businessSettings(c.env, c.businessId),
+      modules: mods.map((m) => ({ id: m.id, nombre: m.nombre, icono: m.icono, ruta: m.menu?.ruta, orden: m.menu?.orden ?? 99, widgets: m.widgets || [], configurar: m.permisos?.configurar || 'admin' })),
+      businesses: (await userBusinesses(c.env, s.user_id)).map((b) => ({ id: b.id, name: b.name })),
+    });
+  });
+}

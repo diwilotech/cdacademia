@@ -1,40 +1,59 @@
-# Control de Academia
+# CD Academia
 
-Gestión de academias (estudiantes, cursos, cuotas, asistencia, notas, reposiciones y marketing).
-Un solo Cloudflare Worker (API + frontend), D1 multi-tenant (`business_id`), R2 para archivos.
+App de Diwilo para academias (maquillaje, barbería, uñas, idiomas, música, cocina…): cursos con clases y calendario,
+estudiantes, matrículas con plan de cuotas, cartera y pagos con recibo, asistencia y notas, reposiciones de clases,
+material de estudio y profesionales. Dominio `cdacademia.diwilo.com`, Worker `cdacademia`.
 
-## Estructura
-- `src/index.js` – entrada del Worker: protege `/admin` y `/staff/*`, sirve el login en `/`.
-- `src/lib/router.js` – router propio sin dependencias. `auth.js`, `password.js` (PBKDF2 + salt), `db.js`, `http.js`.
-- `src/routes/` – `auth.js` (login, logout, invitaciones), `platform.js` (API para Diwilo), `state.js` (estado del negocio), `files.js` (R2).
-- `public/index.html` – login (correo + PIN). `public/admin.html` – panel SPA con pestañas (JS en `admin-*.js`).
-- `migrations/` – esquema D1.
+> **Reglas:** Fábrica de Apps Diwilo, skill `diwilo-nueva-app` versión **2026-10-14** · **Estado:** Revisión · Reconstruida sobre la plantilla el 2026-10-14
 
-## Accesos (se gestionan desde Diwilo Web)
-No hay registro público ni super admin propio. En `diwilo.com/admin → Negocios` se crea el negocio y el dueño;
-Diwilo devuelve un link `https://cdacademia.diwilo.com/#invite=…` para crear la contraseña (mín. 8).
-Mismo link = restablecer contraseña. Contrato en `Diwilo Web Admin/PROMPT-INTEGRACION-APPS.md`.
-- `/api/platform/*`: negocios, usuarios, roles y `paid_until`. Solo por RPC desde Diwilo (`export class Platform`, sin clave).
-- Suscripción vencida (`paid_until` < hoy en Colombia): solo lectura; escrituras `402`.
+La base común (login con Turnstile, shell con temas, módulos por negocio, bitácora, MCP, PWA, legal, contrato con Diwilo)
+es la de la **Plantilla App Diwilo**; las reglas que no se cambian están en su README.
 
-## Puesta en marcha
-```bash
-npm install
-npx wrangler d1 create control-de-academia-db     # copia el database_id en wrangler.toml
-npx wrangler r2 bucket create cdacademia-files
-npm run db:migrate:remote
+## Módulos
+
+| Módulo | Ver | Qué hace |
+|---|---|---|
+| Cursos (`cursos`) | todo el equipo | Cursos con horario semanal; las clases se fechan solas saltando los festivos de Colombia. Inscritos con avance, asistencia (presente, tarde, excusa, ausente), notas por evaluación con pesos, clases (tema, contenido, métodos, material; mover fecha solo admin), evaluaciones y cupones. Calendario de la semana. |
+| Estudiantes (`estudiantes`) | todo el equipo | Lista y ficha: cursos, asistencia, promedio, estado académico y (solo admin) pagos y saldo. El nombre («alumnas», «aprendices»…) sale del rubro. |
+| Matrículas (`matriculas`) | admin | Inscribir con cupón o descuento y plan de cuotas (inicial, número, frecuencia, primera fecha) con vista previa. Cambiar plan (rehace las cuotas y respeta lo pagado), terminada / retirada. No se borra si tiene pagos. |
+| Cuotas (`cuotas`) | admin | Cartera (vencidas, hoy, del mes) con recordatorio por WhatsApp; pagos que se reparten solos entre las cuotas, consecutivo de recibos, recibo imprimible (tirilla o carta), anular. |
+| Reposiciones (`reposiciones`) | todo el equipo | Fallas por reponer, espacios con cupos, agendar (o virtual), hecha, cobrar (queda como pago con recibo) y exonerar (solo admin). |
+| Material (`material`) | todo el equipo | Biblioteca por área y nivel con texto, enlaces, videos de YouTube y archivos en R2 (20 MB). |
+| Profesionales (`profesionales`) | todo el equipo | Áreas con niveles y si reponen, disponibilidad semanal. |
+| Mi academia (`academia`) | admin | Rubro y términos, escala y mínimos, valor de reposición, datos del recibo y consecutivo; áreas. |
+| Marketing y Finanzas | centrales | Del Worker central **Diwilo Modulos** (`modulos.app.json` → `centrales`): Marketing Hub y Finance Hub de Diwilo, versión 1.1.0, con informes del analista y las herramientas de IA de IA Diwilo. La app pone las pantallas y los llama por RPC. |
+
+**IA (MCP):** `estudiantes_buscar`, `estudiantes_ficha`, `estudiantes_crear`, `cuotas_cartera`, `cuotas_registrar_pago`,
+`cursos_clases_de_hoy`, `reposiciones_pendientes`, más las de Finanzas y Marketing.
+
+## Estructura propia
+
 ```
-Local: `npm run db:migrate:local && npm run dev`. Para crear negocios en local, levanta Diwilo Web junto con esta app (desde la carpeta de Diwilo: `npx wrangler dev -c wrangler.jsonc -c "../Control de Academia/wrangler.toml" --var ACCESS_AUD: --var DEV_ADMIN_EMAIL:tu@correo.com`) y usa Negocios en http://localhost:8787/admin. `/api/platform/*` solo responde por RPC.
+migrations/0005_reconstruccion_base.sql  borra las tablas de la versión anterior (solo había datos de prueba) y crea la base
+migrations/0006_shell_modulos_ia.sql     apariencia, módulos, bitácora, bloqueo por IP, consentimiento, tokens MCP
+migrations/0007_academia.sql             tablas ac_* de los módulos propios
+migrations/0008_modulos_sync.sql         huella de sincronización de módulos con Diwilo
+src/lib/academia.js                      festivos, sesiones, cuotas, asistencia, notas y estado académico
+src/api/{academia,cursos,estudiantes,matriculas,cuotas,reposiciones,material,profesionales}.js
+src/ia/academia.js                       herramientas de IA de los módulos propios
+public/staff/*.html + public/js/pages/   una página por módulo; academia-comun.js tiene las piezas compartidas
+tests/app/academia.test.mjs              pruebas de los módulos propios y de la conexión con Diwilo Modulos
+```
 
-## Despliegue
-GitHub + Workers Builds: push a `main` despliega solo (conectar el repo en el panel de Cloudflare).
+## Probar
 
-## Seguridad
-Sesión por cookie `HttpOnly; Secure; SameSite=Lax` (30 días) verificada contra D1 en cada request a `/staff/*`;
-escrituras exigen la cabecera `x-requested-with: cda`; bloqueo de 15 min tras 5 contraseñas fallidas; tokens de sesión e invitación guardados solo como SHA-256.
+`npm install && npm run db:migrate:local && npm run test` → «Todo bien». Necesita la carpeta hermana `Diwilo Modulos` (la levanta sola).
 
-## Estado actual / pendiente
-- Etapa 1: el estado completo del negocio se guarda como JSON en `app_state` (control de versión optimista, límite ~2 MB).
-  Etapa 2: pasar a tablas normalizadas (estudiantes, cursos, inscripciones, pagos…) con `business_id`.
-- Las fotos de marketing siguen en IndexedDB del navegador; `PUT/GET /staff/files/:name` (R2) ya existe para migrarlas.
-- Reposición virtual (Cloudflare Stream) y "Organizar con IA" son stubs documentados en el código.
+## Cumplimiento legal
+
+Igual que la plantilla: política Ley 1581 y casillas de autorización y mayoría de edad al aceptar la invitación,
+`/dmca`, sin analítica. Los datos de los estudiantes los registra la academia (responsable del tratamiento); Diwilo es encargado.
+
+## Pendientes
+
+- Al desplegar: Diwilo → Módulos → Academia → «Sincronizar» (crea el plan «Completo» y deja cada negocio gestionado).
+- Publicar **Diwilo Modulos antes** que Academia (su service binding `MODULOS` debe existir).
+- **Despliegue (con confirmación):** migración remota de D1 (borra los datos de prueba de la versión anterior), bucket R2
+  `cdacademia-files`, widget y secret de Turnstile, push del repo y comprobar en `diwilo.com/admin`.
+- Editor del plan de estudios (temario por módulos) y de exámenes en línea: las columnas existen, falta la pantalla.
+- Dirección postal de Diwilo para `/dmca` y los correos de Marketing.

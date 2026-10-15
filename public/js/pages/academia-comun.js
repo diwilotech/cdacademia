@@ -1,0 +1,105 @@
+// Piezas comunes de las pantallas de CD Academia: datos de la academia y listas para selectores, vistas con pestañas,
+// editor de horario semanal, ventana de pago (con recibo) y ficha del estudiante. Se carga antes de la página.
+window.AC = (function () {
+  const { api, esc, toast, modal } = window.App;
+  const C = window.App.Crud;
+  const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const NIVELES = ['Básico', 'Intermedio', 'Avanzado', 'Profesional'];
+  const METODOS_PAGO = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Bre-B', 'Otro'];
+  const CUOTA = { pagada: ['ok', 'Pagada'], vencida: ['bad', 'Vencida'], hoy: ['soon', 'Vence hoy'], parcial: ['soon', 'Abonada'], pendiente: ['free', 'Pendiente'] };
+  const $ = (s, el = document) => el.querySelector(s);
+
+  let cfgP;
+  const cfg = (force) => (cfgP && !force ? cfgP : (cfgP = api('/api/academia/config')));
+  const cap = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+  const listas = {
+    cursos: () => api('/api/cursos/lista').then((d) => d.cursos).catch(() => []),
+    estudiantes: () => api('/api/estudiantes/lista').then((d) => d.estudiantes).catch(() => []),
+    areas: () => api('/api/academia/areas-lista').then((d) => d.areas).catch(() => []),
+    profesionales: () => api('/api/profesionales/lista').then((d) => d.profesionales).catch(() => []),
+  };
+  const opts = (rows, empty = '—', label = 'nombre') => [['', empty], ...rows.map((r) => [r.id, r[label]])];
+  const horario = (h) => (h || []).map((x) => `${DIAS[x.dia]} ${x.ini}–${x.fin}`).join(' · ') || '—';
+
+  // Vistas de una página con pestañas (y #vista en la dirección para volver a la misma).
+  function vistas(items, render) {
+    const seg = $('[data-seg]'), view = $('[data-view]');
+    const ok = items.map((x) => x[0]);
+    let cur = ok.includes(location.hash.slice(1)) ? location.hash.slice(1) : ok[0];
+    const go = (k) => { cur = k; history.replaceState(null, '', `#${k}`); // cada vista recibe un contenedor nuevo (sin eventos de la vista anterior)
+      const host = document.createElement('div'); host.innerHTML = '<div class="dw-card text-body-secondary">Cargando…</div>'; view.replaceChildren(host);
+      Promise.resolve(render(k, host)).catch((x) => { host.innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; }); };
+    if (items.length > 1) { seg.hidden = false; C.seg(seg, items, go, cur); }
+    go(cur);
+    return { reload: () => go(cur) };
+  }
+
+  // Editor de franjas semanales [{ dia, ini, fin }] dentro de un formulario.
+  function horarioEditor(el, inicial = []) {
+    let rows = inicial.map((x) => ({ ...x }));
+    const draw = () => {
+      el.innerHTML = `${rows.map((r, i) => `<div class="d-flex gap-2 mb-2 align-items-center" data-i="${i}">
+          <select class="form-select form-select-sm" data-k="dia" aria-label="Día">${DIAS.map((d, j) => `<option value="${j}" ${+r.dia === j ? 'selected' : ''}>${d}</option>`).join('')}</select>
+          <input type="time" class="form-control form-control-sm" data-k="ini" value="${esc(r.ini)}" aria-label="Desde">
+          <input type="time" class="form-control form-control-sm" data-k="fin" value="${esc(r.fin)}" aria-label="Hasta">
+          <button type="button" class="btn btn-sm btn-light" data-quitar aria-label="Quitar franja"><i class="bi bi-x-lg"></i></button></div>`).join('')}
+        <button type="button" class="btn btn-sm btn-outline-primary" data-mas><i class="bi bi-plus-lg me-1"></i>Agregar franja</button>`;
+    };
+    el.addEventListener('input', (e) => { const row = e.target.closest('[data-i]'); if (row && e.target.dataset.k) rows[row.dataset.i][e.target.dataset.k] = e.target.value; });
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-mas]')) { const last = rows[rows.length - 1]; rows.push({ dia: last ? (+last.dia + 2) % 7 : 1, ini: last?.ini || '08:00', fin: last?.fin || '10:00' }); draw(); }
+      const q = e.target.closest('[data-quitar]'); if (q) { rows.splice(+q.closest('[data-i]').dataset.i, 1); draw(); }
+    });
+    draw();
+    return () => rows.filter((r) => r.ini && r.fin).map((r) => ({ dia: +r.dia, ini: r.ini, fin: r.fin }));
+  }
+
+  // Ventana para registrar un pago de cuotas; al guardar ofrece el recibo.
+  function pagar(m, onDone) {
+    const { el, m: mm } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Registrar pago</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body"><p class="small text-body-secondary mb-2">${esc(m.estudiante)} · ${esc(m.curso)}${m.saldo != null ? ` · saldo <b>${C.money(m.saldo)}</b>` : ''}</p>
+        <div class="row g-2"><div class="col-sm-6"><label class="form-label small mb-1" for="pv">Valor</label><input class="form-control" id="pv" name="valor" type="number" min="1" step="1" inputmode="numeric" value="${m.sugerido || ''}" required></div>
+        <div class="col-sm-6"><label class="form-label small mb-1" for="pm">Medio de pago</label><select class="form-select" id="pm" name="metodo">${METODOS_PAGO.map((x) => `<option>${x}</option>`).join('')}</select></div>
+        <div class="col-sm-6"><label class="form-label small mb-1" for="pf">Fecha</label><input class="form-control" id="pf" name="fecha" type="date" value="${C.todayCo()}" required></div>
+        <div class="col-sm-6"><label class="form-label small mb-1" for="pc">Concepto</label><input class="form-control" id="pc" name="concepto" placeholder="Abono a cuotas"></div></div>
+        <div class="small text-danger mt-2" data-err></div></div>
+      <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary"><i class="bi bi-cash-coin me-1"></i>Registrar</button></div></form>`);
+    const f = $('form', el);
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        const p = await api('/api/cuotas/pagos', { method: 'POST', body: { inscripcion_id: m.inscripcion_id, valor: f.valor.value, metodo: f.metodo.value, fecha: f.fecha.value, concepto: f.concepto.value } });
+        mm.hide(); onDone?.();
+        reciboListo(p);
+      } catch (x) { $('[data-err]', el).textContent = x.message; }
+    };
+  }
+  function reciboListo(p) {
+    const { el, m } = modal(`<div class="modal-body text-center p-4"><i class="bi bi-check-circle text-success" style="font-size:2.4rem"></i><h2 class="h5 mt-2">Pago registrado</h2><p class="text-body-secondary">Recibo N.º ${esc(p.num)}</p>
+      <div class="d-flex gap-2 justify-content-center"><button class="btn btn-light" data-bs-dismiss="modal">Cerrar</button><a class="btn btn-primary" href="/api/cuotas/pagos/${esc(p.id)}/recibo?imprimir=1" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ver recibo</a></div></div>`);
+    $('a', el).addEventListener('click', () => m.hide());
+  }
+
+  // Ficha del estudiante: matrículas con avance, saldo y pagos.
+  async function ficha(id, me) {
+    const [f, c] = await Promise.all([api(`/api/estudiantes/${id}/ficha`), cfg()]);
+    const e = f.estudiante, dinero = me.canManage;
+    const ac = (a) => C.chip(a[0], a[1]);
+    modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(e.nombre)}</h2><div class="small text-body-secondary">${[e.documento && `Doc. ${esc(e.documento)}`, e.telefono && `<a href="https://wa.me/57${esc(String(e.telefono).replace(/\D/g, '').slice(-10))}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(e.telefono)}</a>`, e.email && esc(e.email)].filter(Boolean).join(' · ')}</div></div>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body">
+        <h3 class="h6">Cursos</h3>
+        ${f.matriculas.length ? f.matriculas.map((m) => `<div class="dw-card mb-2"><div class="d-flex flex-wrap gap-2 align-items-center"><b class="flex-grow-1">${esc(m.curso)}</b>${ac(m.academico)}${m.estado !== 'activa' ? C.chip('free', cap(m.estado)) : ''}</div>
+          <div class="row small mt-2 g-2"><div class="col-6 col-md-3">Asistencia<br><b>${m.asistencia.pct == null ? '—' : m.asistencia.pct + '%'}</b>${m.asistencia.por_reponer ? ` · ${m.asistencia.por_reponer} por reponer` : ''}</div>
+          <div class="col-6 col-md-3">Promedio<br><b>${m.notas.prom ?? '—'}</b> / ${c.escala} · ${m.notas.evaluado}% evaluado</div>
+          ${dinero ? `<div class="col-6 col-md-3">Pagado<br><b>${C.money(m.pagado)}</b> de ${C.money(m.total)}</div><div class="col-6 col-md-3">Saldo<br><b class="${m.vencido ? 'text-danger' : ''}">${C.money(m.saldo)}</b>${m.vencido ? ` · vencido ${C.money(m.vencido)}` : ''}</div>` : ''}</div></div>`).join('')
+        : '<p class="text-body-secondary small">Aún no está matriculado en ningún curso.</p>'}
+        ${dinero && f.pagos?.length ? `<h3 class="h6 mt-3">Pagos</h3>${window.App.table([
+          { label: 'Recibo', main: true, html: (p) => `N.º ${esc(p.num)}${p.anulado ? ' ' + C.chip('bad', 'Anulado') : ''}` }, { label: 'Fecha', html: (p) => C.day(p.fecha) },
+          { label: 'Curso', html: (p) => esc(p.curso) }, { label: 'Valor', cls: 'text-end', html: (p) => C.money(p.valor) }], f.pagos)}` : ''}
+        ${e.notas ? `<h3 class="h6 mt-3">Notas</h3><p class="small mb-0" style="white-space:pre-wrap">${esc(e.notas)}</p>` : ''}
+      </div>`, { size: 'modal-lg' });
+  }
+
+  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha };
+})();

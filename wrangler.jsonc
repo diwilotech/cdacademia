@@ -1,0 +1,56 @@
+// CD Academia (cdacademia.diwilo.com). Reconstruida sobre la Plantilla App Diwilo.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cdacademia",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Solo se publica en su dominio. Diwilo Web la administra por service binding (RPC), sin pasar por internet.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "cdacademia.diwilo.com", "custom_domain": true }],
+
+  // Conserva las variables cargadas en el dashboard en cada deploy.
+  "keep_vars": true,
+
+  // En Workers Builds (WORKERS_CI=1) aplica las migraciones de D1 pendientes antes de desplegar.
+  "build": {
+    "command": "sh -c 'if [ -n \"$WORKERS_CI\" ]; then npx wrangler d1 migrations apply control-de-academia-db --remote; fi'"
+  },
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    // Pasan por el Worker: login, páginas del negocio (exigen sesión), API y MCP. Lo demás es archivo estático.
+    "run_worker_first": ["/", "/app", "/app.html", "/staff", "/staff/*", "/api/*", "/mcp", "/l/*", "/validar/*", "/m/*"]
+  },
+
+  // Tareas diarias de los módulos (gastos recurrentes, automatizaciones…): 3:00 a. m. en Colombia.
+  "triggers": { "crons": ["0 8 * * *"] },
+
+  // Llave pública de Cloudflare Turnstile (el secret va aparte: npx wrangler secret put TURNSTILE_SECRET_KEY).
+  // Esta es la de PRUEBA de Cloudflare (siempre pasa): cámbiala por la del widget de cdacademia.diwilo.com.
+  "vars": { "TURNSTILE_SITE_KEY": "1x00000000000000000000AA" },
+
+  // Archivos del negocio (logo y documentos), siempre con el prefijo <business_id>/.
+  // Bucket existente de CD Academia.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "cdacademia-files" }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // Base existente de CD Academia.
+      "database_name": "control-de-academia-db",
+      "database_id": "3cad86e3-cbc8-4e0c-b69b-8367c63f4b65",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Sin secretos para Diwilo: la administración llega por RPC (export class Platform en src/index.js).
+
+  // Módulos horizontales (Finanzas, Marketing): Worker central «Diwilo Modulos» por RPC (modulos.app.json → "centrales").
+  "services": [{ "binding": "MODULOS", "service": "diwilo-modulos", "entrypoint": "Modulos" }]
+}

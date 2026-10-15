@@ -1,6 +1,7 @@
 // App de Diwilo — Worker único: API + archivos de public/.
-//   /            login (o al panel si ya hay sesión)
-//   /staff/*     páginas del negocio (una por módulo; exigen sesión con negocio). /app redirige aquí.
+//   /            login (o al panel de su negocio si ya hay sesión)
+//   /<dirección> panel del negocio (ej. /demo): una sola dirección fija; cada módulo se carga dentro (marco) sin cambiar la URL. Sin sesión, el ingreso.
+//   /staff/*     páginas de cada módulo (las carga el panel; exigen sesión con negocio). Abiertas directo llevan al panel.
 //   /api/*       API (src/api/*.js); /api/platform/* solo para Diwilo Web por RPC
 //   /mcp         MCP del negocio (token de Configuración → IA → Conexiones)
 //   /privacidad, /dmca, /manifest.json, /sw.js   públicos
@@ -34,7 +35,7 @@ const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi,
 for (const mod of [platformApi, platformModulesApi, authApi, meApi, settingsApi, mcpApi, teamApi, ...MODULE_APIS]) if (typeof mod.routes === 'function') mod.routes(router);
 
 const SECURITY_HEADERS = {
-  'x-frame-options': 'DENY',
+  'x-frame-options': 'SAMEORIGIN',   // el panel carga las páginas de los módulos en un marco del mismo sitio
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'same-origin',
 };
@@ -65,6 +66,12 @@ async function handleCentral(req, env, ctx, url) {
   return centralApi(c);
 }
 
+
+// Direcciones que no son de un negocio (el resto de una sola parte, como /demo, se busca entre las direcciones de los negocios).
+const RESERVADAS = new Set(['api', 'staff', 'mcp', 'm', 'l', 'c', 'validar', 'app', 'admin', 'login', 'platform', 'css', 'js', 'icons', 'assets', 'privacidad', 'dmca']);
+const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const aPanel = (url, slug, go) => Response.redirect(`${url.origin}/${slug}${go ? `?go=${encodeURIComponent(go)}` : ''}`, 302);
+
 const asset = (env, req, path) => {
   const u = new URL(req.url);
   u.pathname = path;
@@ -85,8 +92,21 @@ const worker = {
       if (url.pathname.startsWith('/m/')) return withHeaders(await centralAsset(env, url.pathname), SECURITY_HEADERS);
       if (url.pathname === '/') {
         const s = await loadSession(req, env);
-        if (s?.business_id && s.role) return Response.redirect(`${url.origin}/staff/`, 302);
+        if (s?.business_id && s.role) return aPanel(url, s.business_slug);
         return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
+      }
+      // /<dirección del negocio>: el panel (con sesión de ese negocio) o el ingreso.
+      const seg = url.pathname.replace(/^\/|\/$/g, '');
+      if (req.method === 'GET' && SLUG.test(seg) && !RESERVADAS.has(seg)) {
+        const b = await env.DB.prepare('SELECT slug FROM businesses WHERE slug = ? AND archived_at IS NULL').bind(seg).first();
+        if (b) {
+          const s = await loadSession(req, env);
+          if (s?.business_id && s.role) {
+            if (s.business_slug !== seg) return aPanel(url, s.business_slug);
+            return withHeaders(await asset(env, req, '/staff/panel'), { ...SECURITY_HEADERS, 'cache-control': 'no-store' });
+          }
+          return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
+        }
       }
       // Enlaces viejos y el pase de Diwilo (/api/sso) llegan a /app: el panel ahora vive en /staff/.
       // También las direcciones de versiones anteriores del panel (/admin, /admin.html).
@@ -94,6 +114,10 @@ const worker = {
       if (url.pathname === '/staff' || url.pathname.startsWith('/staff/')) {
         const s = await loadSession(req, env);
         if (!s?.business_id || !s.role) return Response.redirect(`${url.origin}/`, 302);
+        // Una página de módulo abierta directo (enlace viejo, favorito) lleva al panel del negocio, que la carga dentro y deja la dirección fija.
+        if (req.method === 'GET' && req.headers.get('sec-fetch-dest') === 'document' && (/^\/staff\/?$/.test(url.pathname) || url.pathname.endsWith('.html') || !/\.[a-z0-9]+$/i.test(url.pathname)) && !url.pathname.startsWith('/staff/panel')) {
+          return aPanel(url, s.business_slug, url.pathname + url.search);
+        }
         const central = CENTRALES.find((id) => url.pathname === `/staff/${id}.html` || url.pathname === `/staff/${id}`);
         if (central) return withHeaders(await centralPage(env, req, central), SECURITY_HEADERS);
         const res = withHeaders(await env.ASSETS.fetch(req), { ...SECURITY_HEADERS, 'cache-control': 'no-store' });

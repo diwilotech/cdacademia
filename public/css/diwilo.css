@@ -204,3 +204,16 @@ a.dw-kpi:hover .dw-kpi__v { color: var(--bs-link-color); }
   .dw-grid--kpi .dw-kpi__icon { display: none; }
   .dw-grid--kpi .dw-kpi__v { font-size: 1.1rem; }
 }
+
+/* ---------- Panel de un negocio (/<dirección>): el contenido de cada módulo va en un marco y la dirección no cambia ---------- */
+body[data-panel] .dw-main { padding: var(--dw-top-h) 0 0; max-width: none; margin: 0; }
+.dw-frame { display: block; width: 100%; border: 0; background: transparent; height: calc(100vh - var(--dw-top-h) - var(--dw-bottom-h) - env(safe-area-inset-bottom, 0px)); height: calc(100dvh - var(--dw-top-h) - var(--dw-bottom-h) - env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 992px) {
+  body[data-panel] .dw-main { margin-left: var(--dw-side-w); padding: var(--dw-top-h) 0 0; }
+  .dw-frame { height: calc(100vh - var(--dw-top-h)); height: calc(100dvh - var(--dw-top-h)); }
+}
+/* Página de un módulo dentro del marco: sin barras (las pone el panel), solo el contenido */
+body.dw-embed #dw-shell { display: none; }
+body.dw-embed .dw-main { margin: 0 !important; padding: 20px 16px 28px; max-width: 1200px; }
+@media (min-width: 992px) { body.dw-embed .dw-main { padding: 28px 32px 40px; max-width: none; } }
+body.dw-embed .dw-readonly { top: 0; }

@@ -15,7 +15,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && data.code === 'NO_SESSION' && location.pathname.startsWith('/staff')) location.replace('/');
+    if (res.status === 401 && data.code === 'NO_SESSION' && location.pathname.startsWith('/staff')) (window.top || window).location.replace('/');
     if (!res.ok) {
       const err = new Error(data.error || `Error ${res.status}`);
       err.status = res.status;

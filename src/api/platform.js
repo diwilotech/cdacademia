@@ -26,7 +26,7 @@ import { createInvite, invitePath, isExpired, createSession, sessionCookie } fro
 import { purgeArchived, purgeDate, issueSsoTicket, takeSsoTicket } from '../lib/platform-tools.js';
 
 const ROLES = ['owner', 'admin', 'staff'];
-const RESERVED = new Set(['api', 'app', 'admin', 'login', 'assets', 'platform']);
+const RESERVED = new Set(['api', 'app', 'admin', 'login', 'assets', 'platform', 'staff', 'mcp', 'm', 'l', 'c', 'validar', 'css', 'js', 'icons', 'privacidad', 'dmca']);
 
 const slugify = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'negocio';

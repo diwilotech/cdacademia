@@ -1,3 +1,5 @@
+// Si el ingreso se abre dentro del marco del panel (sesión vencida), sale al nivel de arriba.
+if (window.top !== window.self) window.top.location.replace('/');
 // Login en la raíz: correo + contraseña, link de invitación (#invite=<token>) y elección de negocio.
 // Cloudflare Turnstile protege el ingreso y la invitación: el token se verifica en el Worker (Siteverify).
 (function () {
@@ -34,7 +36,7 @@
   const tsReset = (formId) => { if (widgets[formId] !== undefined) window.turnstile.reset(widgets[formId]); };
 
   function afterLogin(data) {
-    if (data.businesses.length === 1) return location.replace('/staff/');
+    if (data.businesses.length === 1) return location.replace('/');
     if (!data.businesses.length) {
       show('login');
       $('login').querySelector('[data-err]').textContent = 'Tu cuenta no tiene ningún negocio activo.';
@@ -49,7 +51,7 @@
     const b = e.target.closest('[data-id]');
     if (!b) return;
     await api('/api/auth/business', { method: 'POST', body: { businessId: b.dataset.id } });
-    location.replace('/staff/');
+    location.replace('/');
   });
 
   $('login').addEventListener('submit', async (e) => {

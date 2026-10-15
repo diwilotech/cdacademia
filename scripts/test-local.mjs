@@ -33,6 +33,20 @@ try {
   check('/api/me trae rol, tema y módulos', me.data.role === 'owner' && me.data.settings?.tema && me.data.modules?.some((m) => m.id === 'estudiantes'), JSON.stringify(me.data).slice(0, 300));
   check('/staff/ sin sesión redirige al ingreso', (await client()('/staff/')).status === 302);
   check('/staff/ con sesión responde', (await app('/staff/')).status === 200);
+  // --- Dirección fija por negocio: /<dirección> es el ingreso y el panel; los módulos se cargan dentro ---
+  const slug = A.created.data.slug;
+  check('/ con sesión lleva al panel del negocio (/<dirección>)', (await app('/')).headers.get('location')?.endsWith(`/${slug}`));
+  const panel = await app(`/${slug}`);
+  check('/<dirección> con sesión sirve el panel con el marco de contenido', panel.status === 200 && panel.data.text?.includes('id="dw-frame"'), String(panel.status));
+  const ingreso = await client()(`/${slug}`);
+  check('/<dirección> sin sesión muestra el ingreso (no el panel)', ingreso.status === 200 && !ingreso.data.text?.includes('id="dw-frame"'));
+  check('Una dirección que no es de ningún negocio da 404', (await app('/no-existe-xyz')).status === 404);
+  check('Una dirección parecida pero inexistente da 404', (await app(`/${slug}-otro`)).status === 404);
+  check('El panel se puede cargar en un marco del mismo sitio (SAMEORIGIN)', panel.headers.get('x-frame-options') === 'SAMEORIGIN');
+  const doc = await app('/staff/estudiantes.html', { headers: { 'sec-fetch-dest': 'document' } });
+  check('Una página de módulo abierta directo lleva al panel con ?go=', doc.status === 302 && doc.headers.get('location')?.includes(`/${slug}?go=`) && decodeURIComponent(doc.headers.get('location')).includes('/staff/estudiantes.html'), String(doc.headers.get('location')));
+  const enMarco = await app('/staff/estudiantes.html', { headers: { 'sec-fetch-dest': 'iframe' } });
+  check('La misma página pedida desde el marco no redirige al panel', !(enMarco.headers.get('location') || '').includes('?go='), String(enMarco.status));
   check('/app (enlace viejo) redirige a /staff/', (await app('/app')).headers.get('location')?.endsWith('/staff/'));
   check('/admin.html (versión anterior) redirige a /staff/', (await app('/admin.html')).headers.get('location')?.endsWith('/staff/'));
   check('Una dirección que no existe muestra la página 404', (await client()('/no-existe')).status === 404);

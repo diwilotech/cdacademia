@@ -7,6 +7,7 @@ App `cdacademia` (cdacademia.diwilo.com). Cloudflare Workers + D1 `control-de-ac
 Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Repo diwilotech/cdacademia.
 
 ## Mapa
+- Dirección fija por negocio: `/<slug>` (ej. `/demo`) es el ingreso y, con sesión, el panel (`public/staff/panel.html`): menú + un marco (`#dw-frame`) donde se carga cada módulo (`/staff/<modulo>.html`) sin cambiar la URL. Las páginas incrustadas las detecta `shell.js` (`window.top !== window.self`) y no pintan menú. Abrir `/staff/*` directo redirige a `/<slug>?go=…`. `wrangler.jsonc` → `run_worker_first` manda todo al Worker salvo css/js/íconos.
 - `src/index.js` rutas; `src/api/platform.js` + `src/lib/platform-rpc.js` = contrato con Diwilo (NO tocar).
 - `src/lib/central.js` = puente a Diwilo Modulos (binding `MODULOS`): `/api/finanzas|marketing/*`, `/staff/<modulo>.html`, `/m/*`, `/l/*`, `/validar/*`, `/c/*` (tarjetas), herramientas IA.
 - `modulos.app.json` (`"centrales": ["finanzas","marketing"]`). Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.

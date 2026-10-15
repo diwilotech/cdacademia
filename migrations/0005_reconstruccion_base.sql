@@ -1,13 +1,16 @@
--- Reconstrucción de CD Academia sobre la Plantilla App Diwilo (2026-10-14).
--- La versión anterior guardaba todo en un JSON por negocio (app_state) y solo tenía datos de prueba: se borra todo
--- y se crea la base común de las apps de Diwilo. Los módulos de la academia van en las migraciones siguientes.
+-- Reconstrucción de CD Academia sobre la Plantilla App Diwilo (2026-10-15).
+-- Se CONSERVAN los negocios (con su id, dirección, suscripción y archivo), sus usuarios y sus roles: pasan al modelo
+-- de la plantilla (un correo = una cuenta, membresías por negocio). Lo demás de la versión anterior (app_state, un JSON
+-- por negocio con datos de prueba, sesiones, intentos, pases) se borra. Las contraseñas de antes usaban otro formato:
+-- cada persona crea una nueva con su link (Diwilo → Negocios → Link de registro). Los módulos van en las migraciones siguientes.
+PRAGMA defer_foreign_keys = true;
 DROP TABLE IF EXISTS app_state;
-DROP TABLE IF EXISTS business_slug_aliases;
-DROP TABLE IF EXISTS sso_tickets;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS login_attempts;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS businesses;
+DROP TABLE IF EXISTS sso_tickets;
+DROP TABLE IF EXISTS business_slug_aliases;
+ALTER TABLE users RENAME TO old_users;
+ALTER TABLE businesses RENAME TO old_businesses;
 
 -- Base común de las apps de Diwilo: negocios (tenants), usuarios, membresías y sesiones.
 -- Un correo es una sola cuenta y puede pertenecer a varios negocios (memberships).
@@ -67,3 +70,20 @@ CREATE TABLE sso_tickets (
   user_id      TEXT NOT NULL,
   expires_at   TEXT NOT NULL
 );
+
+-- ---- Datos que se conservan ----
+INSERT INTO businesses (id, slug, name, status, paid_until, archived_at, created_at, updated_at)
+  SELECT id, slug, name, 'active', paid_until, archived_at,
+         COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', created_at), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    FROM old_businesses;
+-- Un correo = una cuenta (si estaba en varios negocios, queda una sola con todas sus membresías)
+INSERT INTO users (id, email, name, created_at)
+  SELECT MIN(id), lower(trim(email)), MAX(name), COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', MIN(created_at)), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    FROM old_users GROUP BY lower(trim(email));
+INSERT OR IGNORE INTO memberships (user_id, business_id, role, created_at)
+  SELECT u.id, o.business_id, CASE WHEN o.role IN ('owner', 'admin', 'staff') THEN o.role ELSE 'staff' END,
+         COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', o.created_at), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    FROM old_users o JOIN users u ON u.email = lower(trim(o.email))
+   WHERE o.active = 1 AND o.business_id IN (SELECT id FROM businesses);
+DROP TABLE old_users;
+DROP TABLE old_businesses;

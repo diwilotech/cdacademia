@@ -3,7 +3,14 @@
 (function () {
   const { api, esc } = window.App;
   const $ = (id) => document.getElementById(id);
-  const show = (id) => ['login', 'invite', 'choose'].forEach((x) => ($(x).hidden = x !== id));
+  // Muestra un paso y ajusta el título del recuadro (diseño común de ingreso de las apps de Diwilo).
+  const TEXT = { login: ['Ingresa', 'Con tu correo y contraseña'], invite: ['Crea tu contraseña', ''], choose: ['¿A qué negocio entras?', ''] };
+  const show = (id) => {
+    ['login', 'invite', 'choose'].forEach((x) => ($(x).hidden = x !== id));
+    $('help').hidden = id !== 'login';
+    $('title').textContent = TEXT[id][0];
+    if (id !== 'invite') $('sub').textContent = TEXT[id][1];
+  };
   let cfg = { turnstileSiteKey: null };
   const widgets = {};
 
@@ -21,7 +28,7 @@
   async function mountTurnstile(formId) {
     if (!cfg.turnstileSiteKey || widgets[formId] !== undefined) return;
     await loadTurnstile();
-    widgets[formId] = window.turnstile.render($(formId).querySelector('[data-turnstile]'), { sitekey: cfg.turnstileSiteKey, language: 'es', theme: 'auto', size: 'flexible' });
+    widgets[formId] = window.turnstile.render($(formId).querySelector('[data-turnstile]'), { sitekey: cfg.turnstileSiteKey, language: 'es', theme: 'light' });
   }
   const tsToken = (formId) => (widgets[formId] !== undefined ? window.turnstile.getResponse(widgets[formId]) : '');
   const tsReset = (formId) => { if (widgets[formId] !== undefined) window.turnstile.reset(widgets[formId]); };
@@ -34,7 +41,7 @@
       return;
     }
     $('choose').querySelector('[data-list]').innerHTML = data.businesses.map((b) =>
-      `<button type="button" class="btn btn-outline-secondary btn-lg text-start" data-id="${esc(b.id)}"><i class="bi bi-shop me-2"></i>${esc(b.name)}</button>`).join('');
+      `<button type="button" data-id="${esc(b.id)}"><i class="bi bi-shop"></i>${esc(b.name)}</button>`).join('');
     show('choose');
   }
 
@@ -74,8 +81,8 @@
       history.replaceState(null, '', '/');
       return;
     }
-    f.querySelector('[data-title]').textContent = info.reset ? 'Crea una contraseña nueva' : 'Crea tu contraseña';
-    f.querySelector('[data-email]').textContent = info.email;
+    $('title').textContent = info.reset ? 'Crea una contraseña nueva' : 'Crea tu contraseña';
+    $('sub').textContent = info.email;
     f.name.value = info.name && info.name !== info.email.split('@')[0] ? info.name : '';
     f.querySelector('[data-consent]').hidden = !info.needsConsent;
     mountTurnstile('invite');
@@ -107,6 +114,5 @@
     cfg = c;
     document.querySelector('[data-app]').textContent = c.app;
     document.title = `Ingresar · ${c.app}`;
-    if (!localStorage.getItem('dw_tema')) document.documentElement.setAttribute('data-dw-tema', c.tema);
   }).catch(() => {}).finally(route);
 })();

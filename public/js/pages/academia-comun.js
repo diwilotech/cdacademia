@@ -101,5 +101,38 @@ window.AC = (function () {
       </div>`, { size: 'modal-lg' });
   }
 
-  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha };
+  // Calendario de la semana (lunes a domingo) por momentos del día: Mañana, Tarde y Noche. Muestra las clases de los cursos activos y los
+  // espacios de reposición; cada clase abre su curso. Lo usan Inicio y la pestaña Calendario de Cursos.
+  function semana(host) {
+    const lunes = (iso) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+    const mas = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+    const MOM = [['Mañana', 'bi-sunrise', (h) => h < '12:00'], ['Tarde', 'bi-sun', (h) => h >= '12:00' && h < '18:00'], ['Noche', 'bi-moon-stars', (h) => h >= '18:00']];
+    const h12 = (h) => { if (!h) return ''; const [a, b] = h.split(':').map(Number); return `${a % 12 || 12}:${String(b).padStart(2, '0')} ${a < 12 ? 'a. m.' : 'p. m.'}`; };
+    let desde = lunes(C.todayCo());
+    host.innerHTML = `<div class="d-flex align-items-center gap-2 mb-3"><button class="btn btn-light" data-prev aria-label="Semana anterior"><i class="bi bi-chevron-left"></i></button>
+      <b class="flex-grow-1 text-center" data-rango></b><button class="btn btn-light" data-hoy>Hoy</button><button class="btn btn-light" data-next aria-label="Semana siguiente"><i class="bi bi-chevron-right"></i></button></div><div data-tabla></div>`;
+    const evClase = (x) => `<a class="dw-ev" ${/^#[0-9a-f]{3,8}$/i.test(x.color || '') ? `style="--ev:${esc(x.color)}"` : ''} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)}">
+        <b>${esc(h12(x.ini))}${x.fin ? ` – ${esc(h12(x.fin))}` : ''}</b><span class="d-block text-truncate">${esc(x.curso)}</span>
+        <span class="text-body-secondary">Clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.virtual ? ' · virtual' : ''}</span></a>`;
+    const evRepo = (x) => `<a class="dw-ev dw-ev--repo" href="/staff/cursos.html#reposiciones" title="Espacio de reposición"><b>${esc(h12(x.ini))} – ${esc(h12(x.fin))}</b>
+        <span class="d-block"><i class="bi bi-arrow-repeat me-1"></i>Reposición</span><span class="text-body-secondary">${x.ocupados} de ${x.cupos} cupos${x.profesional ? ` · ${esc(x.profesional)}` : ''}</span></a>`;
+    const load = async () => {
+      const hasta = mas(desde, 6), hoy = C.todayCo();
+      $('[data-rango]', host).textContent = `${C.day(desde)} – ${C.day(hasta)}`;
+      let d; try { d = await api(`/api/cursos/calendario?desde=${desde}&hasta=${hasta}`); } catch (x) { $('[data-tabla]', host).innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
+      const dias = Array.from({ length: 7 }, (_, i) => mas(desde, i));
+      const ev = (f, m) => [...d.clases.filter((x) => x.fecha === f && m[2](x.ini || '00:00')).map((x) => ({ h: x.ini || '', html: evClase(x) })),
+        ...d.espacios.filter((x) => x.fecha === f && m[2](x.ini)).map((x) => ({ h: x.ini, html: evRepo(x) }))].sort((p, q) => p.h.localeCompare(q.h)).map((x) => x.html).join('');
+      const vacia = !d.clases.length && !d.espacios.length;
+      $('[data-tabla]', host).innerHTML = `<table class="dw-semana"><thead><tr><th class="mom"></th>${dias.map((f) => `<th class="${f === hoy ? 'hoy' : ''}">${DIAS[new Date(`${f}T12:00:00Z`).getUTCDay()]} ${+f.slice(8)}</th>`).join('')}</tr></thead>
+        <tbody>${MOM.map((m) => `<tr><th class="mom"><i class="bi ${m[1]} me-1"></i>${m[0]}</th>${dias.map((f) => `<td class="${f === hoy ? 'hoy' : ''}" data-dia="${DIAS[new Date(`${f}T12:00:00Z`).getUTCDay()]} ${+f.slice(8)}">${ev(f, m)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+        ${vacia ? '<div class="small text-body-secondary mt-2">No hay clases ni reposiciones esta semana.</div>' : ''}`;
+    };
+    $('[data-prev]', host).onclick = () => { desde = mas(desde, -7); load(); };
+    $('[data-next]', host).onclick = () => { desde = mas(desde, 7); load(); };
+    $('[data-hoy]', host).onclick = () => { desde = lunes(C.todayCo()); load(); };
+    return load();
+  }
+
+  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana };
 })();

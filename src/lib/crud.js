@@ -8,7 +8,8 @@
 //   PATCH  <base>/<entidad>/:id                       editar (solo los campos que llegan)
 //   DELETE <base>/<entidad>/:id                       borrar (por defecto solo propietario/administrador)
 //
-// Tipos de campo: text | long | email | url | date | month | money | int | num | usd | bool | json | ['opción', …]
+// Tipos de campo: text | long | doc | email | url | date | month | money | int | num | usd | bool | json | ['opción', …]
+//   doc = documento JSON largo (hasta ~200 KB) guardado como texto; el módulo lo valida en beforeCreate/beforeUpdate.
 //   «!» = obligatorio (text!) · «+» en bool = sí por defecto (bool+)
 // Entidad: { table, label, title (campo que la nombra), search: [...], order, fields, readOnly?, prepareBody(body)?,
 //            refs: { campo: 'tabla' } (el id referido debe ser del mismo negocio),
@@ -47,6 +48,7 @@ export function cast(key, type, v) {
   switch (t) {
     case 'text': return String(v).trim().slice(0, 300);
     case 'long': return String(v).trim().slice(0, 5000);
+    case 'doc': { const x = typeof v === 'object' ? JSON.stringify(v) : String(v).trim(); if (x.length > 200000) throw new HttpError(400, `${key} es demasiado grande`); return x; }
     case 'email': { const s = String(v).trim().toLowerCase().slice(0, 254); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) throw new HttpError(400, `Correo no válido en ${key}`); return s; }
     case 'url': { const s = String(v).trim().slice(0, 500); if (!/^https?:\/\//i.test(s)) throw new HttpError(400, `La dirección de ${key} debe empezar por https://`); return s; }
     case 'date': { const s = String(v).slice(0, 10); if (!DATE.test(s) || Number.isNaN(Date.parse(s))) throw new HttpError(400, `Fecha no válida en ${key}`); return s; }

@@ -246,36 +246,15 @@ DW.ready.then(async (me) => {
     return;
   }
 
-  async function calendario(view) {
-    let desde = C.todayCo();
-    const lunes = (iso) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
-    const mas = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
-    desde = lunes(desde);
-    view.innerHTML = `<div class="d-flex align-items-center gap-2 mb-3"><button class="btn btn-light" data-prev aria-label="Semana anterior"><i class="bi bi-chevron-left"></i></button>
-      <b class="flex-grow-1 text-center" data-rango></b><button class="btn btn-light" data-hoy>Hoy</button><button class="btn btn-light" data-next aria-label="Semana siguiente"><i class="bi bi-chevron-right"></i></button></div><div class="dw-grid" data-dias></div>`;
-    const load = async () => {
-      const hasta = mas(desde, 6), d = await api(`/api/cursos/calendario?desde=${desde}&hasta=${hasta}`), hoy = C.todayCo();
-      $('[data-rango]', view).textContent = `${C.day(desde)} – ${C.day(hasta)}`;
-      $('[data-dias]', view).innerHTML = Array.from({ length: 7 }, (_, i) => mas(desde, i)).map((f) => {
-        const cl = d.clases.filter((x) => x.fecha === f), es = d.espacios.filter((x) => x.fecha === f);
-        return `<div class="dw-card ${f === hoy ? 'border-primary border-2' : ''}"><div class="fw-semibold mb-2">${AC.DIAS[new Date(f + 'T12:00:00Z').getUTCDay()]} ${+f.slice(8)}</div>
-          ${cl.map((x) => `<a class="d-block text-reset text-decoration-none border-start border-3 border-${esc(x.color || 'primary')} ps-2 mb-2" href="/staff/cursos.html?id=${x.curso_id}#asistencia"><div class="small fw-semibold">${esc(x.ini || '')} ${esc(x.curso)}</div>
-            <div class="small text-body-secondary">Clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.virtual ? ' · virtual' : ''}</div></a>`).join('')}
-          ${es.map((x) => `<a class="d-block text-reset text-decoration-none border-start border-3 border-secondary ps-2 mb-2" href="/staff/reposiciones.html#espacios"><div class="small fw-semibold">${esc(x.ini)} Reposiciones</div><div class="small text-body-secondary">${x.ocupados}/${x.cupos} cupos${x.profesional ? ` · ${esc(x.profesional)}` : ''}</div></a>`).join('')}
-          ${cl.length || es.length ? '' : '<div class="small text-body-secondary">Sin clases</div>'}</div>`;
-      }).join('');
-    };
-    $('[data-prev]', view).onclick = () => { desde = mas(desde, -7); load(); };
-    $('[data-next]', view).onclick = () => { desde = mas(desde, 7); load(); };
-    $('[data-hoy]', view).onclick = () => { desde = lunes(C.todayCo()); load(); };
-    await load();
-  }
+  const calendario = (view) => AC.semana(view);
 
   /* ---------- detalle del curso ---------- */
   let D;
   const cargar = async () => { D = await api(`/api/cursos/${id}/detalle`); return D; };
   try { await cargar(); } catch (x) { $('[data-view]').innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
   const k = D.curso;
+  const parseEx = (x) => { if (!x) return null; if (typeof x === 'object') return x; try { return JSON.parse(x); } catch { return null; } };
+  const preguntasDe = (ev) => parseEx(ev.examen)?.preguntas || [];
   $('[data-h1]').innerHTML = `${esc(k.nombre)} ${C.chip(ESTADO[k.estado] || 'free', k.estado)}`;
   $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-primary" data-editar><i class="bi bi-pencil me-1"></i>Editar</button><button class="btn btn-outline-secondary" data-duplicar><i class="bi bi-copy me-1"></i>Duplicar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
   $('[data-editar]')?.addEventListener('click', () => editarCurso({ ...k }, () => location.reload()));
@@ -326,14 +305,28 @@ DW.ready.then(async (me) => {
       if (!D.evaluaciones.length) { view.innerHTML = empty('bi-star', me.canManage ? 'Crea las evaluaciones del curso en la pestaña «Evaluaciones y cupones».' : 'El curso aún no tiene evaluaciones.'); return; }
       view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-3"><select class="form-select w-auto" data-ev aria-label="Evaluación">${D.evaluaciones.map((e) => `<option value="${e.id}">${esc(e.nombre)} · ${e.peso}%</option>`).join('')}</select>
         <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}</span></div><div class="dw-card" data-lista></div>`;
+      const exStat = new Map(((await api(`/api/cursos/${id}/examenes`).catch(() => ({ rows: [] }))).rows).map((x) => [`${x.inscripcion_id}-${x.evaluacion_id}`, x]));
+      const botonEx = (i, e) => {
+        const x = exStat.get(`${i.id}-${e.id}`), n = e.examen?.preguntas?.length || 0;
+        if (e.tipo === 'multiple') {
+          if (!n) return `<span class="text-body-secondary small" title="Primero crea las preguntas en «Evaluaciones y cupones»"><i class="bi bi-card-checklist"></i></span>`;
+          return `<button type="button" class="btn btn-sm ${x?.respondidas ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen title="${x?.respondidas ? 'Ver o corregir las respuestas del examen' : 'Responder el examen de selección múltiple'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi bi-eye"></i></button>`;
+        }
+        return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
+      };
       const draw = () => {
-        const ev = +$('[data-ev]', view).value, act = D.inscritos.filter((i) => i.estado === 'activa');
+        const ev = +$('[data-ev]', view).value, act = D.inscritos.filter((i) => i.estado === 'activa'), evObj = D.evaluaciones.find((e) => e.id === ev);
         $('[data-lista]', view).innerHTML = act.length ? `${act.map((i) => `<div class="d-flex align-items-center gap-2 py-2 border-bottom" data-ins="${i.id}"><label class="flex-grow-1 fw-semibold" for="n${i.id}">${esc(i.nombre)}</label>
-          <input class="form-control" style="width:96px" id="n${i.id}" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" value="${i.notas[ev] ?? ''}" ${RO ? 'disabled' : ''}></div>`).join('')}
+          ${botonEx(i, evObj)}<input class="form-control" style="width:96px" id="n${i.id}" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" value="${i.notas[ev] ?? ''}" ${RO ? 'disabled' : ''}></div>`).join('')}
           ${RO ? '' : '<div class="mt-3"><button class="btn btn-primary" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button></div>'}` : empty('bi-people', `No hay ${P} activos en el curso.`);
       };
       draw();
       $('[data-ev]', view).addEventListener('change', draw);
+      view.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-examen]'); if (!b) return;
+        const ev = D.evaluaciones.find((x) => x.id === +$('[data-ev]', view).value), row = b.closest('[data-ins]'), ins = D.inscritos.find((i) => String(i.id) === row.dataset.ins);
+        AC.examen.abrir({ cursoId: id, ev, ins, ro: RO }, async () => { await cargar(); V.reload(); }).catch((x) => toast(x.message, false));
+      });
       view.addEventListener('click', async (e) => {
         if (!e.target.closest('[data-guardar]')) return;
         const notas = [...view.querySelectorAll('[data-ins]')].map((r) => ({ inscripcion_id: +r.dataset.ins, nota: r.querySelector('input').value }));
@@ -356,8 +349,17 @@ DW.ready.then(async (me) => {
     view.innerHTML = '<h2 class="h6">Evaluaciones <span class="small text-body-secondary fw-normal">· los pesos deberían sumar 100%</span></h2><div data-ev class="mb-4"></div><h2 class="h6">Cupones de descuento</h2><div data-cup></div>';
     C.table({ el: $('[data-ev]', view), base: '/api/cursos', entity: 'evaluaciones', title: 'evaluación', newText: 'Nueva evaluación', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ui-checks', empty: 'Sin evaluaciones.',
       fields: [{ k: 'nombre', label: 'Nombre', required: true, placeholder: 'Parcial, práctica final…' }, { k: 'peso', label: 'Peso (%)', type: 'int', required: true },
+        { k: 'tipo', label: 'Tipo', type: 'select', options: [['examen', 'Examen (foto o PDF de cada estudiante)'], ['multiple', 'Selección múltiple (preguntas en la app)']] },
         { k: 'clase_n', label: 'En la clase', type: 'select', options: [['', '—'], ...D.clases.map((c) => [c.n, `Clase ${c.n}${c.fecha ? ` · ${C.day(c.fecha)}` : ''}`])] }],
-      columns: [{ label: 'Evaluación', main: true, html: (r) => esc(r.nombre) }, { label: 'Peso', html: (r) => `${r.peso}%` }, { label: 'Clase', html: (r) => (r.clase_n ? `Clase ${r.clase_n}` : '—') }] }).load();
+      columns: [{ label: 'Evaluación', main: true, html: (r) => esc(r.nombre) }, { label: 'Peso', html: (r) => `${r.peso}%` }, { label: 'Clase', html: (r) => (r.clase_n ? `Clase ${r.clase_n}` : '—') },
+        { label: 'Tipo', html: (r) => { const n = preguntasDe(r).length; return r.tipo === 'multiple' ? `Selección múltiple<div>${n ? C.chip('ok', `Creado · ${n} ${n === 1 ? 'pregunta' : 'preguntas'}`) : C.chip('soon', 'Por crear')}</div>` : 'Examen<div class="small text-body-secondary">se sube en Notas</div>'; } }],
+      rowActions: (r) => (r.tipo === 'multiple' && !RO ? `<button class="btn btn-sm ${preguntasDe(r).length ? 'btn-outline-secondary' : 'btn-primary'}" data-act="preguntas"><i class="bi bi-card-checklist me-1"></i>${preguntasDe(r).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : ''),
+      onAction: async (a, r) => {
+        if (a !== 'preguntas') return;
+        const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
+        const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
+        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen) }, { curso: k.nombre, area: k.area, nivel: k.nivel, temas }, () => V.reload());
+      } }).load();
     C.table({ el: $('[data-cup]', view), base: '/api/cursos', entity: 'cupones', title: 'cupón', newText: 'Nuevo cupón', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ticket-perforated', empty: 'Sin cupones.',
       fields: [{ k: 'codigo', label: 'Código', required: true, placeholder: 'AMIGA10' }, { k: 'tipo', label: 'Tipo', type: 'select', options: [['pct', 'Porcentaje'], ['valor', 'Valor fijo']] },
         { k: 'valor', label: 'Descuento', type: 'money', required: true, hint: '% o pesos' }, { k: 'hasta', label: 'Válido hasta', type: 'date' }, { k: 'max', label: 'Usos máximos', type: 'int', hint: 'vacío = sin límite' }],

@@ -100,7 +100,7 @@ export function routes(r) {
     const ins = await one(c.env, 'SELECT i.id, e.nombre, k.nombre AS curso FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id JOIN ac_cursos k ON k.id = i.curso_id WHERE i.id = ? AND i.business_id = ?', Number(c.params.id), c.businessId);
     if (!ins) throw new HttpError(404, 'Matrícula no encontrada');
     if (await one(c.env, 'SELECT 1 FROM ac_pagos WHERE business_id = ? AND inscripcion_id = ? AND anulado = 0', c.businessId, ins.id)) throw new HttpError(409, 'La matrícula tiene pagos: márcala como retirada en vez de borrarla');
-    await c.env.DB.batch([...['ac_cuotas', 'ac_asistencia', 'ac_notas', 'ac_reposiciones', 'ac_pagos'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND inscripcion_id = ?`).bind(c.businessId, ins.id)),
+    await c.env.DB.batch([...['ac_cuotas', 'ac_asistencia', 'ac_notas', 'ac_reposiciones', 'ac_pagos', 'ac_examenes'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND inscripcion_id = ?`).bind(c.businessId, ins.id)),
       c.env.DB.prepare('DELETE FROM ac_inscripciones WHERE id = ? AND business_id = ?').bind(ins.id, c.businessId)]);
     await audit(c, `Borró la matrícula de ${ins.nombre} en «${ins.curso}»`, { modulo: MOD });
     return json({ ok: true });

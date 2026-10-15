@@ -114,6 +114,50 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Cursos: las tarjetas filtran por estado', (await A.app('/api/cursos/tarjetas?activo=0')).data.rows.length === 0);
   check('Cursos: el personal no calcula horarios (403)', (await S.app('/api/cursos/calcular', { method: 'POST', body: { horario: [] } })).status === 403);
 
+  // Exámenes: preguntas, respuestas calificadas por el servidor y nota sugerida
+  const examen = { instrucciones: 'Marca la correcta', preguntas: [
+    { id: 'q1', tipo: 'unica', enunciado: 'Complementario del azul', puntos: 2, opciones: [{ id: 'a', texto: 'Naranja', ok: true }, { id: 'b', texto: 'Verde', ok: false }] },
+    { id: 'q2', tipo: 'multiple', enunciado: 'Desinfección', puntos: 2, opciones: [{ id: 'a', texto: 'Alcohol', ok: true }, { id: 'b', texto: 'Toalla', ok: true }, { id: 'c', texto: 'Esponja usada', ok: false }] },
+    { id: 'q3', tipo: 'vf', enunciado: 'Se desinfecta antes de cada servicio', puntos: 1, vf: true },
+    { id: 'q4', tipo: 'corta', enunciado: 'Círculo de colores', puntos: 1, respuesta: 'círculo cromático, circulo cromatico' },
+    { id: 'q5', tipo: 'abierta', enunciado: 'Describe la base para piel mixta', puntos: 4 }] };
+  const evQ = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k.data.id, nombre: 'Quiz', peso: 0, tipo: 'multiple', examen: JSON.stringify(examen) } });
+  check('Exámenes: crea una evaluación de selección múltiple con preguntas', evQ.status === 201, JSON.stringify(evQ.data));
+  const malo = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k.data.id, nombre: 'Malo', peso: 0, tipo: 'multiple', examen: JSON.stringify({ preguntas: [{ tipo: 'unica', enunciado: 'x', opciones: [{ texto: 'a' }, { texto: 'b' }] }] }) } });
+  check('Exámenes: una pregunta sin respuesta correcta se rechaza', malo.status === 400, JSON.stringify(malo.data));
+  check('Exámenes: un tipo de pregunta desconocido se rechaza', (await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k.data.id, nombre: 'Malo2', peso: 0, examen: JSON.stringify({ preguntas: [{ tipo: 'rara', enunciado: 'x' }] }) } })).status === 400);
+  const exBase = `/api/cursos/${k.data.id}/examenes/${evQ.data.id}/${m1.data.id}`;
+  const exVacio = await A.app(exBase);
+  check('Exámenes: el examen vacío empieza sin puntos', exVacio.status === 200 && exVacio.data.calificacion.obtenido === 0 && exVacio.data.calificacion.total === 10, JSON.stringify(exVacio.data.calificacion));
+  const exResp = await A.app(exBase, { method: 'PUT', body: { resp: { q1: 'a', q2: ['a', 'c'], q3: true, q4: 'Circulo Cromatico', q5: 'Usaría base fluida' }, manual: { q5: 3 } } });
+  check('Exámenes: califica sola (única 2 + múltiple 0.5×2... parcial + vf 1 + corta 1 + abierta 3)', exResp.status === 200 && exResp.data.calificacion.det.q1.pts === 2 && exResp.data.calificacion.det.q2.pts === 0 && exResp.data.calificacion.det.q3.pts === 1 && exResp.data.calificacion.det.q4.pts === 1 && exResp.data.calificacion.det.q5.pts === 3, JSON.stringify(exResp.data.calificacion));
+  check('Exámenes: la nota sugerida sale del porcentaje y la escala', exResp.data.nota === 3.5 && exResp.data.calificacion.obtenido === 7, JSON.stringify([exResp.data.nota, exResp.data.calificacion.obtenido]));
+  const exParcial = await A.app(exBase, { method: 'PUT', body: { resp: { q2: ['a', 'b'] } } });
+  check('Exámenes: una abierta sin calificar queda pendiente y la múltiple completa vale todo', exParcial.data.calificacion.det.q2.estado === 'ok' && exParcial.data.calificacion.det.q2.pts === 2, JSON.stringify(exParcial.data.calificacion.det.q2));
+  const exSucio = await A.app(exBase, { method: 'PUT', body: { resp: { q1: 'zzz', inventada: 'x' } } });
+  check('Exámenes: las respuestas que no corresponden a la pregunta se descartan', exSucio.data.resp.q1 === undefined && exSucio.data.resp.inventada === undefined);
+  await A.app(exBase, { method: 'PUT', body: { resp: { q1: 'a', q3: true, q4: 'circulo cromatico' }, manual: {} } });
+  const aplic = await A.app(`${exBase}/aplicar`, { method: 'POST' });
+  const notaAplicada = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.inscritos.find((i) => i.id === m1.data.id)?.notas?.[evQ.data.id];
+  check('Exámenes: aplica la nota sugerida a Notas', aplic.status === 200 && notaAplicada === aplic.data.nota && aplic.data.nota > 0, JSON.stringify([aplic.data, notaAplicada]));
+  check('Exámenes: el examen de otra matrícula del curso no se mezcla', (await A.app(`/api/cursos/${k.data.id}/examenes/${evQ.data.id}/${m2.data.id}`)).data.calificacion.obtenido === 0);
+  check('Exámenes: lista cuáles tienen respuestas', (await A.app(`/api/cursos/${k.data.id}/examenes`)).data.rows.some((x) => x.inscripcion_id === m1.data.id && x.respondidas >= 1));
+  check('Exámenes: el personal sí puede responder el examen', (await S.app(exBase)).status === 200);
+  check('Exámenes: B no ve el examen de A', (await B.app(exBase)).status === 404);
+  check('Exámenes: una evaluación de otro curso no se abre', (await A.app(`/api/cursos/${kk2.data.id}/examenes/${evQ.data.id}/${m1.data.id}`)).status === 404);
+  const detEv = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.evaluaciones.find((e) => e.id === evQ.data.id);
+  check('Exámenes: el detalle trae el tipo y las preguntas', detEv?.tipo === 'multiple' && detEv.examen?.preguntas?.length === 5);
+
+  // Inicio: indicadores propios de la academia según rol y módulos
+  const metA = (await A.app('/api/academia/metricas')).data, idsA = metA.tiles.map((t) => t.id), tv = (id) => metA.tiles.find((t) => t.id === id);
+  check('Inicio: el propietario ve estudiantes, matrículas, cursos, asistencia y dinero', ['estudiantes', 'matriculas', 'cursos', 'clases_hoy', 'asistencia', 'riesgo', 'notas', 'reposiciones', 'recaudo', 'por_cobrar', 'vencido'].every((x) => idsA.includes(x)), JSON.stringify(idsA));
+  check('Inicio: cuenta los estudiantes y matrículas de verdad', tv('estudiantes').valor === 2 && tv('matriculas').valor === 2, JSON.stringify([tv('estudiantes'), tv('matriculas')]));
+  check('Inicio: trae la serie de los últimos 6 meses', metA.serie.length === 6 && metA.serie.every((x) => 'recaudo' in x && 'matriculas' in x));
+  const metS = (await S.app('/api/academia/metricas')).data.tiles.map((t) => t.id);
+  check('Inicio: el personal no ve matrículas ni dinero pero sí lo académico', metS.includes('cursos') && metS.includes('asistencia') && !['matriculas', 'recaudo', 'por_cobrar', 'vencido'].some((x) => metS.includes(x)), JSON.stringify(metS));
+  check('Inicio: B no ve los datos de A', (await B.app('/api/academia/metricas')).data.tiles.find((t) => t.id === 'estudiantes')?.valor === 0);
+  check('Inicio: /api/me marca los módulos propios y los compartidos', (await A.app('/api/me')).data.modules.find((x) => x.id === 'cursos')?.tipo === 'propio' && (await A.app('/api/me')).data.modules.find((x) => x.id === 'finanzas')?.tipo === 'compartido');
+
   // Aislamiento
   check('Aislamiento: B no ve cursos ni estudiantes de A', (await B.app('/api/cursos/cursos')).data.rows?.length === 0 && (await B.app('/api/estudiantes/estudiantes')).data.rows?.length === 0);
   check('Aislamiento: B no ve el detalle del curso de A', (await B.app(`/api/cursos/${k.data.id}/detalle`)).status === 404);

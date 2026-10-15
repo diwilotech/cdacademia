@@ -8,9 +8,13 @@
 //   POST /api/cursos/:id/notas                    { evaluacion_id, notas: [{ inscripcion_id, nota|null }] }
 //   GET  /api/cursos/calendario?desde=&hasta=     clases y espacios de reposición del rango
 //   GET  /api/cursos/resumen                      widget: clases de hoy
+//   GET|PUT /api/cursos/:id/examenes/:ev/:insc    examen de un estudiante: respuestas, archivos y calificación (PUT guarda y califica)
+//   POST /api/cursos/:id/examenes/:ev/:insc/aplicar  pone la nota sugerida del examen en Notas
+//   POST|DELETE /api/cursos/:id/examenes/:ev/:insc/archivo  foto o PDF del examen (R2)
 import { json, readJson, HttpError } from '../lib/http.js';
 import { crud, all, one, now, today, cast, addDays, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
+import { limpiarExamen, calificar, limpiarRespuestas } from '../lib/examen.js';
 import { sesiones, getConfig, resumenAsis, resumenNotas, estadoAcad, NIVELES, METODOS, parse } from '../lib/academia.js';
 
 const MOD = 'cursos';
@@ -63,10 +67,13 @@ export const ENTITIES = {
     },
     decorate(c, rows) { return rows.map((k) => ({ ...k, horario: parse(k.horario, []), plan: parse(k.plan, []) })); } },
   evaluaciones: { table: 'ac_evaluaciones', label: 'la evaluación', title: 'nombre', search: ['nombre'], order: 'curso_id, COALESCE(clase_n, 999), id', crear: 'manager',
-    fields: { curso_id: 'int!', nombre: 'text!', peso: 'int', clase_n: 'int', examen: 'text' },
+    fields: { curso_id: 'int!', nombre: 'text!', peso: 'int', clase_n: 'int', tipo: ['examen', 'multiple'], examen: 'doc' },
     refs: { curso_id: 'ac_cursos' },
     beforeCreate(c, row) { validarEval(row); }, beforeUpdate(c, row) { validarEval(row); },
-    async afterDelete(c, before) { await c.env.DB.prepare('DELETE FROM ac_notas WHERE business_id = ? AND evaluacion_id = ?').bind(c.businessId, before.id).run(); } },
+    async afterDelete(c, before) {
+      for (const f of await all(c.env, 'SELECT archivos FROM ac_examenes WHERE business_id = ? AND evaluacion_id = ?', c.businessId, before.id)) for (const a of parse(f.archivos, [])) await c.env.FILES?.delete(a.key);
+      await c.env.DB.batch(['ac_notas', 'ac_examenes'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND evaluacion_id = ?`).bind(c.businessId, before.id)));
+    } },
   cupones: { table: 'ac_cupones', label: 'el cupón', title: 'codigo', search: ['codigo'], order: 'curso_id, codigo', crear: 'manager',
     fields: { curso_id: 'int!', codigo: 'text!', tipo: ['valor', 'pct'], valor: 'money', hasta: 'date', max: 'int' },
     refs: { curso_id: 'ac_cursos' },
@@ -76,8 +83,8 @@ function validarEval(row) {
   if ('peso' in row && row.peso != null && (row.peso < 0 || row.peso > 100)) throw new HttpError(400, 'El peso va de 0 a 100');
   if ('examen' in row && row.examen) {
     let ex; try { ex = JSON.parse(row.examen); } catch { throw new HttpError(400, 'El examen no es un JSON válido'); }
-    if (!ex || !Array.isArray(ex.preguntas)) throw new HttpError(400, 'El examen necesita una lista de preguntas');
-    if (row.examen.length > 60000) throw new HttpError(400, 'El examen es demasiado grande');
+    row.examen = JSON.stringify(limpiarExamen(ex));
+    if (row.examen.length > 120000) throw new HttpError(400, 'El examen es demasiado grande');
   }
 }
 function validarCupon(row) {
@@ -166,7 +173,7 @@ export function routes(r) {
     const cfg = await getConfig(c.env, c.businessId);
     const [clases, evs, cupones, inscritos, area, prof] = await Promise.all([
       all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, material_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
-      all(c.env, 'SELECT id, nombre, peso, clase_n, examen FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
+      all(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
       all(c.env, 'SELECT id, codigo, tipo, valor, hasta, max, usos FROM ac_cupones WHERE business_id = ? AND curso_id = ? ORDER BY codigo', c.businessId, k.id),
       inscritosCurso(c, k.id, cfg),
       k.area_id ? one(c.env, 'SELECT nombre, color FROM ac_areas WHERE id = ? AND business_id = ?', k.area_id, c.businessId) : null,
@@ -237,6 +244,84 @@ export function routes(r) {
     for (let i = 0; i < stmts.length; i += 50) await c.env.DB.batch(stmts.slice(i, i + 50));
     await audit(c, `Puso notas de «${ev.nombre}» en «${k.nombre}» (${notas.length})`, { modulo: MOD });
     return json({ ok: true });
+  });
+
+
+  /* ---------- exámenes de cada estudiante ---------- */
+  const MAX_EXAMEN = 20 * 1024 * 1024;
+  async function examenCtx(c) {
+    const k = await cursoDe(c, Number(c.params.id)), evId = Number(c.params.ev), insId = Number(c.params.insc);
+    const ev = await one(c.env, 'SELECT id, nombre, tipo, examen FROM ac_evaluaciones WHERE id = ? AND business_id = ? AND curso_id = ?', evId, c.businessId, k.id);
+    if (!ev) throw new HttpError(404, 'Evaluación no encontrada');
+    await inscripcionesDe(c, k.id, [insId]);
+    const ins = await one(c.env, 'SELECT e.nombre FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id WHERE i.id = ? AND i.business_id = ?', insId, c.businessId);
+    const row = await one(c.env, 'SELECT resp, manual, archivos FROM ac_examenes WHERE business_id = ? AND inscripcion_id = ? AND evaluacion_id = ?', c.businessId, insId, ev.id);
+    return { k, ev: { ...ev, examen: parse(ev.examen, null) }, insId, estudiante: ins?.nombre, ex: { resp: parse(row?.resp, {}), manual: parse(row?.manual, {}), archivos: parse(row?.archivos, []) } };
+  }
+  const guardarExamen = (c, x) => c.env.DB.prepare(`INSERT INTO ac_examenes (business_id, inscripcion_id, evaluacion_id, resp, manual, archivos, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(inscripcion_id, evaluacion_id) DO UPDATE SET resp = excluded.resp, manual = excluded.manual, archivos = excluded.archivos, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+    .bind(c.businessId, x.insId, x.ev.id, JSON.stringify(x.ex.resp), JSON.stringify(x.ex.manual), JSON.stringify(x.ex.archivos), c.session.user_id, now()).run();
+  const vistaExamen = async (c, x) => {
+    const cfg = await getConfig(c.env, c.businessId), cal = calificar(x.ev.examen, x.ex);
+    return { evaluacion: x.ev, estudiante: x.estudiante, ...x.ex, calificacion: cal, escala: cfg.escala, nota: cal.total ? Math.round(cal.pct * cfg.escala * 10) / 10 : null };
+  };
+
+  // Qué exámenes tienen respuestas o archivos (para los iconos de la pestaña Notas).
+  r.get('/api/cursos/:id/examenes', `tenant:${MOD}`, async (c) => {
+    const k = await cursoDe(c, Number(c.params.id));
+    const rows = await all(c.env, `SELECT x.inscripcion_id, x.evaluacion_id, x.resp, x.archivos FROM ac_examenes x JOIN ac_evaluaciones e ON e.id = x.evaluacion_id AND e.business_id = x.business_id WHERE x.business_id = ? AND e.curso_id = ?`, c.businessId, k.id);
+    return json({ rows: rows.map((x) => ({ inscripcion_id: x.inscripcion_id, evaluacion_id: x.evaluacion_id, archivos: parse(x.archivos, []).length, respondidas: Object.keys(parse(x.resp, {})).length })) });
+  });
+  r.get('/api/cursos/:id/examenes/:ev/:insc', `tenant:${MOD}`, async (c) => json(await vistaExamen(c, await examenCtx(c))));
+  r.put('/api/cursos/:id/examenes/:ev/:insc', `tenant:${MOD}`, async (c) => {
+    const x = await examenCtx(c), b = await readJson(c.req);
+    const limpio = limpiarRespuestas(x.ev.examen, b.resp, b.manual);
+    x.ex.resp = limpio.resp; x.ex.manual = limpio.manual;
+    await guardarExamen(c, x);
+    return json(await vistaExamen(c, x));
+  });
+  r.post('/api/cursos/:id/examenes/:ev/:insc/aplicar', `tenant:${MOD}`, async (c) => {
+    const x = await examenCtx(c), v = await vistaExamen(c, x);
+    if (v.nota === null) throw new HttpError(400, 'Este examen no tiene preguntas para calificar');
+    await c.env.DB.prepare(`INSERT INTO ac_notas (business_id, inscripcion_id, evaluacion_id, nota, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(inscripcion_id, evaluacion_id) DO UPDATE SET nota = excluded.nota, updated_by = excluded.updated_by, updated_at = excluded.updated_at`).bind(c.businessId, x.insId, x.ev.id, Math.min(v.escala, v.nota), c.session.user_id, now()).run();
+    await audit(c, `Aplicó la nota ${v.nota} del examen «${x.ev.nombre}» a ${x.estudiante}`, { modulo: MOD });
+    return json({ nota: v.nota });
+  });
+  r.post('/api/cursos/:id/examenes/:ev/:insc/archivo', `tenant:${MOD}`, async (c) => {
+    if (!c.env.FILES) throw new HttpError(501, 'Esta app no tiene almacenamiento de archivos configurado');
+    const x = await examenCtx(c);
+    if (Number(c.req.headers.get('content-length') || 0) > MAX_EXAMEN) throw new HttpError(413, 'El archivo supera los 20 MB');
+    const body = await c.req.arrayBuffer();
+    if (!body.byteLength) throw new HttpError(400, 'El archivo está vacío');
+    if (body.byteLength > MAX_EXAMEN) throw new HttpError(413, 'El archivo supera los 20 MB');
+    const type = (c.req.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!/^(image\/(png|jpe?g|gif|webp)|application\/pdf)$/.test(type)) throw new HttpError(400, 'Solo fotos (JPG, PNG, WEBP) o PDF');
+    const nombre = String(c.url.searchParams.get('nombre') || 'examen').replace(/[^\w.\- ]+/g, '_').slice(0, 100);
+    const key = `${c.businessId}/examen/${crypto.randomUUID()}-${nombre}`;
+    await c.env.FILES.put(key, body, { httpMetadata: { contentType: type } });
+    x.ex.archivos.push({ key, nombre, tipoArchivo: type, size: body.byteLength });
+    if (x.ex.archivos.length > 20) throw new HttpError(400, 'Máximo 20 archivos por examen');
+    await guardarExamen(c, x);
+    await audit(c, `Subió el examen «${x.ev.nombre}» de ${x.estudiante}`, { modulo: MOD });
+    return json({ archivos: x.ex.archivos }, 201);
+  });
+  r.delete('/api/cursos/:id/examenes/:ev/:insc/archivo/:key', `tenant:${MOD}`, async (c) => {
+    const x = await examenCtx(c), key = c.params.key;
+    if (!key.startsWith(`${c.businessId}/examen/`)) throw new HttpError(404, 'No encontrado');
+    if (!x.ex.archivos.some((a) => a.key === key)) throw new HttpError(404, 'Archivo no encontrado');
+    x.ex.archivos = x.ex.archivos.filter((a) => a.key !== key);
+    await guardarExamen(c, x);
+    await c.env.FILES?.delete(key);
+    return json({ archivos: x.ex.archivos });
+  });
+  r.get('/api/cursos/examen-archivo/:key', `tenant:${MOD}`, async (c) => {
+    const key = c.params.key;
+    if (!key.startsWith(`${c.businessId}/examen/`)) throw new HttpError(404, 'No encontrado');
+    const obj = c.env.FILES && await c.env.FILES.get(key);
+    if (!obj) throw new HttpError(404, 'No encontrado');
+    return new Response(obj.body, { headers: { 'content-type': obj.httpMetadata?.contentType || 'application/octet-stream', 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff',
+      'content-disposition': c.url.searchParams.get('dl') === '1' ? `attachment; filename*=UTF-8''${encodeURIComponent(key.split('/').pop().replace(/^[0-9a-f-]{36}-/, ''))}` : 'inline' } });
   });
 
   r.get('/api/cursos/calendario', `tenant:${MOD}`, async (c) => {

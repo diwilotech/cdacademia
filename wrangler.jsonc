@@ -33,7 +33,7 @@
 
   // Llave pública de Cloudflare Turnstile (el secret va aparte: npx wrangler secret put TURNSTILE_SECRET_KEY).
   // Esta es la de PRUEBA de Cloudflare (siempre pasa): cámbiala por la del widget de cdacademia.diwilo.com.
-  "vars": { "TURNSTILE_SITE_KEY": "1x00000000000000000000AA" },
+  "vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAAFXxFD-ScxJkbMkF" },
 
   // Archivos del negocio (logo y documentos), siempre con el prefijo <business_id>/.
   // Bucket existente de CD Academia.

@@ -89,7 +89,8 @@ const worker = {
         return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
       }
       // Enlaces viejos y el pase de Diwilo (/api/sso) llegan a /app: el panel ahora vive en /staff/.
-      if (url.pathname === '/app' || url.pathname === '/app.html') return Response.redirect(`${url.origin}/staff/`, 302);
+      // También las direcciones de versiones anteriores del panel (/admin, /admin.html).
+      if (['/app', '/app.html', '/admin', '/admin.html'].includes(url.pathname)) return Response.redirect(`${url.origin}/staff/`, 302);
       if (url.pathname === '/staff' || url.pathname.startsWith('/staff/')) {
         const s = await loadSession(req, env);
         if (!s?.business_id || !s.role) return Response.redirect(`${url.origin}/`, 302);

@@ -34,6 +34,8 @@ try {
   check('/staff/ sin sesión redirige al ingreso', (await client()('/staff/')).status === 302);
   check('/staff/ con sesión responde', (await app('/staff/')).status === 200);
   check('/app (enlace viejo) redirige a /staff/', (await app('/app')).headers.get('location')?.endsWith('/staff/'));
+  check('/admin.html (versión anterior) redirige a /staff/', (await app('/admin.html')).headers.get('location')?.endsWith('/staff/'));
+  check('Una dirección que no existe muestra la página 404', (await client()('/no-existe')).status === 404);
   check('Escritura sin x-app se rechaza (CSRF)', (await app('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: 'x' }, headers: { 'x-app': '' } })).status === 403);
   const it = await app('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: 'Primera' } });
   check('Crea un estudiante del negocio', it.status === 201);

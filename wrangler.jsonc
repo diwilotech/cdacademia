@@ -23,9 +23,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "not_found_handling": "none",
+    "not_found_handling": "404-page",
     // Pasan por el Worker: login, páginas del negocio (exigen sesión), API y MCP. Lo demás es archivo estático.
-    "run_worker_first": ["/", "/app", "/app.html", "/staff", "/staff/*", "/api/*", "/mcp", "/l/*", "/validar/*", "/m/*"]
+    "run_worker_first": ["/", "/app", "/app.html", "/admin", "/admin.html", "/staff", "/staff/*", "/api/*", "/mcp", "/l/*", "/validar/*", "/m/*"]
   },
 
   // Tareas diarias de los módulos (gastos recurrentes, automatizaciones…): 3:00 a. m. en Colombia.

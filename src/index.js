@@ -80,7 +80,7 @@ const worker = {
       if (isApi) return withHeaders(await handleApi(req, env, ctx, url), SECURITY_HEADERS);
       if (url.pathname === '/mcp') return withHeaders(await mcpApi.mcpFetch(req, env, ctx), SECURITY_HEADERS);
       // Rutas públicas que declaran los módulos: links de rastreo (/l/…) y validación de documentos (/validar/…)
-      if (url.pathname.startsWith('/l/') || url.pathname.startsWith('/validar/')) return withHeaders(await centralPublic(env, url), SECURITY_HEADERS);
+      if (url.pathname.startsWith('/l/') || url.pathname.startsWith('/validar/') || url.pathname.startsWith('/c/')) return withHeaders(await centralPublic(env, url, req), SECURITY_HEADERS);
       // Código de las páginas de los módulos centrales
       if (url.pathname.startsWith('/m/')) return withHeaders(await centralAsset(env, url.pathname), SECURITY_HEADERS);
       if (url.pathname === '/') {

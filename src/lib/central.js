@@ -2,7 +2,7 @@
 // La app verifica sesión, negocio, rol y que el módulo esté activo; el Worker central hace el resto con el contexto
 // que le enviamos. Lo que registre en la bitácora vuelve aquí y se guarda en audit_log del negocio.
 //   /api/<modulo>/…        API del módulo                 /staff/<modulo>.html   página (shell de la app + su <main>)
-//   /m/<modulo>.js         código de la página            /l/:slug · /validar/:código   rutas públicas de los módulos
+//   /m/<modulo>.js         código de la página            /l/:slug · /validar/:código · /c/…   rutas públicas de los módulos
 //   centralTools(c)        herramientas de IA para el MCP de la app
 import { HttpError } from './http.js';
 import { CENTRALES, activeModuleIds, APP } from './modules.js';
@@ -14,10 +14,11 @@ const need = (env) => { if (!env.MODULOS) throw new HttpError(503, 'Falta la con
 
 async function ctxOf(c) {
   const name = c.session?.business_name ?? (await c.env.DB.prepare('SELECT name FROM businesses WHERE id = ?').bind(c.businessId).first())?.name;
-  const logo = (await c.env.DB.prepare('SELECT logo_key, updated_at FROM business_settings WHERE business_id = ?').bind(c.businessId).first())?.logo_key ? '/api/settings/logo' : null;
+  const st = await c.env.DB.prepare('SELECT logo_key, tema FROM business_settings WHERE business_id = ?').bind(c.businessId).first();
+  const logo = st?.logo_key ? '/api/settings/logo' : null, tema = st?.tema || APP.tema;
   const activos = new Set(await activeModuleIds(c.env, c.businessId));
   return {
-    app: APP.id, business: { id: c.businessId, name: name || null, logo }, role: c.role, readOnly: !!c.readOnly,
+    app: APP.id, business: { id: c.businessId, name: name || null, logo, tema }, role: c.role, readOnly: !!c.readOnly,
     user: { id: c.session?.user_id || null, email: c.session?.email || null, name: c.session?.name || null },
     origin: c.url?.origin || null, via: c.origin === 'mcp' ? 'mcp' : 'app', modulos: CENTRALES.filter((id) => activos.has(id)),
   };
@@ -58,7 +59,7 @@ export async function centralAsset(env, path) {
 }
 
 // Rutas públicas: links de rastreo (Marketing) y validación de documentos (Finanzas), en el dominio de la app.
-export async function centralPublic(env, url) {
+export async function centralPublic(env, url, req) {
   const notFound = () => new Response('Este enlace no existe.', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   if (url.pathname.startsWith('/l/')) {
     if (!CENTRALES.includes('marketing')) return notFound();
@@ -69,6 +70,16 @@ export async function centralPublic(env, url) {
     if (!biz || !(await activeModuleIds(env, l.business_id)).includes('marketing')) return notFound();
     await env.MODULOS.click(APP.id, l.id);
     return new Response(null, { status: 302, headers: { location: l.url, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer-when-downgrade' } });
+  }
+  // Tarjetas de presentación (Marketing): /c/<slug>, su foto, íconos, manifest, vCard y service worker
+  if (url.pathname.startsWith('/c/') && CENTRALES.includes('marketing')) {
+    const r = await need(env).tarjeta(APP.id, decodeURIComponent(url.pathname.slice(3)), url.origin, { bot: /bot|crawl|spider|preview/i.test(req?.headers?.get('user-agent') || '') });
+    if (r.business_id) {
+      const biz = await env.DB.prepare("SELECT 1 FROM businesses WHERE id = ? AND status = 'active' AND archived_at IS NULL").bind(r.business_id).first();
+      if (!biz || !(await activeModuleIds(env, r.business_id)).includes('marketing')) return notFound();
+    }
+    const body = r.base64 ? Uint8Array.from(atob(r.body), (ch) => ch.charCodeAt(0)) : r.body;
+    return new Response(r.status === 302 ? null : body, { status: r.status, headers: r.headers });
   }
   if (url.pathname.startsWith('/validar/') && CENTRALES.includes('finanzas')) {
     const r = await need(env).validar(APP.id, decodeURIComponent(url.pathname.slice(9)), url.origin);

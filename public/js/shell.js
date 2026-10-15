@@ -36,7 +36,7 @@
   const link = (m) => `<li class="${inBottom.has(m.id) ? 'dw-in-bottom' : ''}"><a href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}" ${isActive(m) ? 'aria-current="page"' : ''} title="${esc(m.nombre)}"><i class="bi ${esc(m.icono || 'bi-grid')}"></i><span>${esc(m.nombre)}</span></a></li>`;
 
   function render(me) {
-    const mods = [...BASE_START, ...me.modules.slice().sort((a, b) => a.orden - b.orden), ...BASE_END];
+    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto).sort((a, b) => a.orden - b.orden), ...BASE_END];
     const initials = (me.user.name || me.user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const logo = me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : esc(me.business.name.trim()[0] || 'D').toUpperCase();
     const canManage = RANK[me.role] >= RANK.admin;

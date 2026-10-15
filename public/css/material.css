@@ -1,0 +1,67 @@
+/* Documento de Material (editor de una sola superficie como Notas, y vista de lectura). Usa los colores del tema de la app. */
+.doc-fondo, .doc, .ed-atom { --marca: var(--dw-p); --marca-suave: rgba(var(--dw-p-rgb), .1); --borde: var(--dw-borde, rgba(0, 0, 0, .1)); --tinta: var(--bs-body-color); --hoja: var(--bs-body-bg); }
+.doc-fondo { background: var(--bs-secondary-bg); padding: 1.25rem .75rem; }
+.doc-papel { background: var(--hoja); max-width: 820px; margin: 0 auto; padding: 2.2rem 2.6rem 2.6rem; border-radius: .35rem; box-shadow: 0 1px 3px rgba(42, 31, 38, .18), 0 12px 28px -12px rgba(42, 31, 38, .25); min-height: 60vh; }
+@media (max-width: 575px) { .doc-papel { padding: 1.2rem 1rem 1.6rem; } }
+.doc-titulo { display: block; width: 100%; border: 0; outline: 0; font-size: 2rem; line-height: 1.2; color: var(--tinta); padding: 0; margin-bottom: .6rem; background: transparent; }
+.doc-titulo::placeholder { color: var(--bs-secondary-color); opacity: .6; }
+.doc-barra-herr { display: flex; flex-wrap: wrap; gap: .15rem; align-items: center; padding: .3rem .6rem; background: var(--hoja); border-bottom: 1px solid var(--borde); position: sticky; top: 0; z-index: 5; }
+.doc-barra-herr .btn { border: 0; color: var(--bs-secondary-color); padding: .25rem .5rem; }
+.doc-barra-herr .btn:hover, .doc-barra-herr .btn.activo { background: var(--marca-suave); color: var(--marca); }
+.doc-barra-herr .sep { width: 1px; height: 20px; background: var(--borde); margin: 0 .3rem; }
+.bl-ctrl { position: absolute; right: -.2rem; top: -.9rem; display: none; gap: 1px; background: var(--hoja); border: 1px solid var(--borde); border-radius: .4rem; padding: 1px; z-index: 2; box-shadow: 0 2px 8px rgba(42, 31, 38, .12); }
+.bl-ctrl button { border: 0; background: none; padding: .1rem .4rem; color: var(--bs-secondary-color); font-size: .85rem; }
+.bl-ctrl button:hover { color: var(--marca); }
+
+.doc { font-size: .95rem; line-height: 1.65; color: var(--tinta); }
+.doc .doc-h1 { font-size: 1.6rem; line-height: 1.25; margin: 1rem 0 .4rem; }
+.doc .doc-h2 { font-size: 1.1rem; font-weight: 700; line-height: 1.3; margin: .9rem 0 .3rem; }
+.doc p { margin: 0 0 .6rem; }
+.doc ul, .doc ol { margin: 0 0 .7rem; padding-left: 1.4rem; }
+.doc hr { margin: 1rem 0; border-color: var(--borde); opacity: 1; }
+.doc-callout { background: var(--marca-suave); border-left: 3px solid var(--marca); border-radius: .35rem; padding: .55rem .8rem; margin: .6rem 0; }
+.doc-fig { margin: .6rem 0; text-align: center; }
+.doc-fig img { max-width: 100%; max-height: 340px; border-radius: .45rem; cursor: zoom-in; box-shadow: 0 1px 4px rgba(42, 31, 38, .2); }
+.doc-fig video { max-width: 100%; max-height: 440px; border-radius: .45rem; background: #000; }
+.doc-archivo { border: 1px solid var(--borde); border-radius: .55rem; margin: .6rem 0; background: var(--hoja); overflow: hidden; }
+.doc-archivo .doc-barra { display: flex; align-items: center; gap: .5rem; padding: .45rem .7rem; font-size: .85rem; }
+.doc-archivo .doc-barra > i { font-size: 1.3rem; color: var(--marca); }
+.doc-archivo .doc-barra > span { flex: 1; min-width: 0; }
+.doc-embed iframe { display: block; width: 100%; height: 540px; border: 0; border-top: 1px solid var(--borde); }
+.doc-enlace { display: flex; align-items: center; gap: .6rem; border: 1px solid var(--borde); border-radius: .55rem; padding: .55rem .8rem; margin: .6rem 0; text-decoration: none; color: var(--tinta); background: var(--hoja); }
+.doc-enlace:hover { border-color: var(--marca); color: var(--marca); }
+.doc-video { position: relative; aspect-ratio: 16/9; margin: .6rem 0; border-radius: .5rem; overflow: hidden; background: #000; }
+.doc-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Imagen a un lado y texto al otro: la foto no ocupa todo el ancho */
+.doc-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 1.1rem; align-items: center; margin: .7rem 0; }
+.doc-split.der .doc-fig { order: 2; }
+.doc-split .doc-fig { margin: 0; }
+.doc-split .doc-fig img { max-height: 300px; width: auto; max-width: 100%; object-fit: contain; }
+.doc-split-txt .doc-h2 { margin-top: 0; }
+.doc-split-txt p:last-child { margin-bottom: 0; }
+.doc-split.solo { grid-template-columns: minmax(0, 1fr); }
+.doc-split.solo .doc-fig { max-width: 50%; text-align: left; }
+.doc-split.solo.der .doc-fig { margin-left: auto; text-align: right; }
+@media (max-width: 575px) { .doc-split { grid-template-columns: 1fr; } .doc-split.der .doc-fig { order: 0; } .doc-split.solo .doc-fig { max-width: 100%; } }
+
+.doc-pie { min-height: 150px; cursor: text; color: var(--bs-secondary-color); font-size: .8rem; padding-top: .8rem; }
+.doc-pie code { background: var(--bs-tertiary-bg); border-radius: .25rem; padding: 0 .25rem; }
+
+/* Editor de una sola superficie (como Notas) */
+.ed { outline: none; min-height: 46vh; position: relative; cursor: text; }
+.ed[data-vacio="1"]::before { content: "Escribe aquí…"; position: absolute; left: 0; top: 0; color: var(--bs-secondary-color); opacity: .6; pointer-events: none; }
+.ed h2 { font-size: 1.6rem; line-height: 1.25; margin: 1rem 0 .4rem; }
+.ed h3 { font-size: 1.1rem; font-weight: 700; line-height: 1.3; margin: .9rem 0 .3rem; }
+.ed p { margin: 0 0 .6rem; min-height: 1.6em; }
+.ed ul, .ed ol { margin: 0 0 .7rem; padding-left: 1.4rem; }
+.ed blockquote { background: var(--marca-suave); border-left: 3px solid var(--marca); border-radius: .35rem; padding: .55rem .8rem; margin: .6rem 0; }
+.ed hr { margin: 1rem 0; border-color: var(--borde); opacity: 1; }
+.ed-atom { position: relative; margin: .7rem 0; padding: .35rem; border-radius: .55rem; border: 1px solid transparent; cursor: default; }
+.ed-atom:hover, .ed-atom:focus-within { border-color: var(--borde); background: var(--bs-tertiary-bg); }
+.ed-atom > .bl-ctrl { display: none; }
+.ed-atom:hover > .bl-ctrl, .ed-atom:focus-within > .bl-ctrl { display: flex; }
+.ed-atom .doc-fig, .ed-atom .doc-archivo { margin: .3rem 0; }
+.sz-t { font-size: 1.6rem; line-height: 1.25; }
+.sz-h { font-size: 1.1rem; font-weight: 700; line-height: 1.3; }
+.mat-card .badge-area { font-weight: 500; }

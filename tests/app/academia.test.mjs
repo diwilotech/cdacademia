@@ -83,6 +83,23 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Personal: sí edita el tema de una clase', (await S.app(`/api/cursos/${k.data.id}/clases/3`, { method: 'PATCH', body: { tema: 'Piel y preparación' } })).status === 200);
   check('Personal: no exonera reposiciones (403)', (await S.app(`/api/reposiciones/${ag.data.id}`, { method: 'PATCH', body: { exonerada: true } })).status === 403);
 
+  // Material como documento y reposiciones por curso
+  const mat = await A.app('/api/material/material', { method: 'POST', body: { titulo: 'Piel y preparación', area_id: area.data.id, bloques: [
+    { tipo: 'titulo', texto: 'Tipos de piel' }, { tipo: 'texto', texto: 'La **piel** se prepara *antes*.' }, { tipo: 'lista', texto: 'Limpiar\nHidratar' }, { tipo: 'destacado', texto: 'Siempre protector' }, { tipo: 'separador' },
+    { tipo: 'enlace', nombre: 'Video', url: 'https://youtu.be/dQw4w9WgXcQ' }] } });
+  check('Material: guarda un documento con formato', mat.status === 201, JSON.stringify(mat.data));
+  const matLeido = (await A.app('/api/material/material')).data.rows.find((x) => x.id === mat.data.id) || {};
+  check('Material: conserva los tipos de bloque', ['titulo', 'texto', 'lista', 'destacado', 'separador', 'enlace'].every((t, i) => matLeido.bloques?.[i]?.tipo === t), JSON.stringify(matLeido.bloques));
+  check('Material: un enlace sin https se rechaza', (await A.app('/api/material/material', { method: 'POST', body: { titulo: 'X', bloques: [{ tipo: 'enlace', url: 'http://x.com' }] } })).status === 400);
+  check('Material: un archivo de otro negocio se rechaza', (await A.app('/api/material/material', { method: 'POST', body: { titulo: 'X', bloques: [{ tipo: 'archivo', key: 'otro/material/x.png' }] } })).status === 400);
+  await A.app(`/api/cursos/${k.data.id}/clases/2`, { method: 'PATCH', body: { material_id: mat.data.id } });
+  const matLista = (await A.app('/api/material/material')).data.rows.find((x) => x.id === mat.data.id);
+  check('Material: la lista dice en qué cursos se usa', matLista?.cursos?.length === 1 && matLista.cursos[0].id === k.data.id, JSON.stringify(matLista?.cursos));
+  const rpCurso = (await A.app(`/api/reposiciones?estado=todas&curso_id=${k.data.id}`)).data, rpOtro = (await A.app('/api/reposiciones?estado=todas&curso_id=999999')).data;
+  check('Reposiciones: se filtran por curso', rpCurso.rows.length >= 1 && rpCurso.rows.every((x) => x.curso_id === k.data.id) && rpOtro.rows.length === 0, JSON.stringify([rpCurso.rows.length, rpOtro.rows.length]));
+  const meMods = (await A.app('/api/me')).data.modules;
+  check('Menú: Cuotas y Reposiciones siguen como módulos pero ocultos del menú', meMods.find((x) => x.id === 'cuotas')?.oculto === true && meMods.find((x) => x.id === 'reposiciones')?.oculto === true && !meMods.find((x) => x.id === 'cursos')?.oculto);
+
   // Aislamiento
   check('Aislamiento: B no ve cursos ni estudiantes de A', (await B.app('/api/cursos/cursos')).data.rows?.length === 0 && (await B.app('/api/estudiantes/estudiantes')).data.rows?.length === 0);
   check('Aislamiento: B no ve el detalle del curso de A', (await B.app(`/api/cursos/${k.data.id}/detalle`)).status === 404);

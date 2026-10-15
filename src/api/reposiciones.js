@@ -66,7 +66,8 @@ export function routes(r) {
 
   r.get('/api/reposiciones', `tenant:${MOD}`, async (c) => {
     const est = c.url.searchParams.get('estado') || 'pendientes';
-    const rows = await fallas(c);
+    const cursoId = Number(c.url.searchParams.get('curso_id')) || 0;
+    const rows = (await fallas(c)).filter((x) => !cursoId || x.curso_id === cursoId);
     const filtradas = est === 'todas' ? rows : est === 'pendientes' ? rows.filter((x) => x.estado !== 'hecha') : rows.filter((x) => x.estado === est);
     const cfg = await getConfig(c.env, c.businessId);
     return json({ rows: filtradas, valor: cfg.valorRepo, valorVirtual: cfg.valorRepoVirtual,

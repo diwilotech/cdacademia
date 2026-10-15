@@ -88,7 +88,8 @@
       "icono": "bi-calendar-check",
       "menu": {
         "ruta": "/staff/cuotas.html",
-        "orden": 40
+        "orden": 40,
+        "oculto": true
       },
       "permisos": {
         "ver": "admin",
@@ -115,7 +116,8 @@
       "icono": "bi-arrow-repeat",
       "menu": {
         "ruta": "/staff/reposiciones.html",
-        "orden": 50
+        "orden": 50,
+        "oculto": true
       },
       "permisos": {
         "ver": "staff",

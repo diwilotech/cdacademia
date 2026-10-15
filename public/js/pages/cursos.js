@@ -53,8 +53,10 @@ DW.ready.then(async (me) => {
   if (!id) {
     if (MANAGE) $('[data-acciones]').innerHTML = '<button class="btn btn-primary" data-nuevo><i class="bi bi-plus-lg me-1"></i>Nuevo curso</button>';
     $('[data-nuevo]')?.addEventListener('click', () => editarCurso(null, (nid) => { location.href = `/staff/cursos.html?id=${nid}`; }));
-    AC.vistas([['cursos', 'Cursos', 'bi-mortarboard'], ['calendario', 'Calendario', 'bi-calendar-week']], async (k, view) => {
+    const REPO = me.modules.some((x) => x.id === 'reposiciones');
+    AC.vistas([['cursos', 'Cursos', 'bi-mortarboard'], ['calendario', 'Calendario', 'bi-calendar-week'], ...(REPO ? [['reposiciones', 'Reposiciones', 'bi-arrow-repeat']] : [])], async (k, view) => {
       if (k === 'calendario') return calendario(view);
+      if (k === 'reposiciones') return AC.reposiciones(me).todo(view);
       view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-3"><input class="form-control" data-q placeholder="Buscar curso…" style="max-width:240px" aria-label="Buscar">
         <select class="form-select w-auto" data-act aria-label="Estado"><option value="1">Activos</option><option value="0">Inactivos</option><option value="">Todos</option></select></div><div class="dw-grid" data-lista></div>`;
       const load = async () => {
@@ -118,6 +120,7 @@ DW.ready.then(async (me) => {
   const proxClase = () => { const hoy = C.todayCo(); const c = D.clases.filter((x) => x.fecha && x.fecha <= hoy).pop() || D.clases[0]; return c?.n || 1; };
 
   const tabs = [['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
+  if (me.modules.some((x) => x.id === 'reposiciones')) tabs.push(['reposiciones', 'Reposiciones', 'bi-arrow-repeat']);
   if (me.canManage) tabs.push(['evaluaciones', 'Evaluaciones y cupones', 'bi-ui-checks']);
   const V = AC.vistas(tabs, async (t, view) => {
     await cargar();
@@ -173,6 +176,7 @@ DW.ready.then(async (me) => {
       });
       return;
     }
+    if (t === 'reposiciones') return AC.reposiciones(me, k.id).todo(view);
     if (t === 'clases') {
       view.innerHTML = D.clases.length ? `<div class="dw-card p-0 p-md-2">${table([
         { label: 'Clase', main: true, html: (c) => `Clase ${c.n}${c.tema ? `<div class="small fw-normal">${esc(c.tema)}</div>` : ''}` },

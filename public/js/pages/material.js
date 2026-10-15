@@ -1,4 +1,6 @@
-// Material de estudio: biblioteca por área y nivel con bloques de texto, enlaces, videos y archivos (fotos, PDF…).
+// Material de estudio: biblioteca general (tarjetas) con filtros por área, nivel, curso y uso; cada material es un documento
+// (texto con formato, imágenes con texto al lado, PDF, enlaces y videos) que se edita en una sola superficie como Notas.
+// Un material vive una vez en la biblioteca y se enlaza desde las clases de uno o varios cursos.
 DW.ready.then(async (me) => {
   if (!me.pageAllowed) return;
   const { api, esc, toast, confirm, modal } = window.App;
@@ -6,93 +8,96 @@ DW.ready.then(async (me) => {
   const view = document.querySelector('[data-view]');
   const areas = await AC.listas.areas();
   const RO = me.business.readOnly;
-  const nombreArea = (id) => areas.find((a) => a.id === id)?.nombre;
-  const archivoUrl = (k, dl) => `/api/material/archivos/${encodeURIComponent(k)}${dl ? '?dl=1' : ''}`;
-  const yt = (u) => u.match(/(?:youtu\.be\/|v=|shorts\/)([\w-]{11})/)?.[1];
-  view.innerHTML = '<div data-tabla></div>';
+  const D = AC.doc;
+  const abrirEditor = AC.editorMaterial({ me, areas });
+  const area = (id) => areas.find((a) => a.id === id);
+  let todos = [];
+  const st = { q: '', area: '', nivel: '', curso: '', uso: '', arch: '' };
+
+  document.querySelector('[data-acciones]').innerHTML = RO ? '' : '<button class="btn btn-primary" data-nuevo><i class="bi bi-plus-lg me-1"></i>Nuevo material</button>';
+  document.querySelector('[data-nuevo]')?.addEventListener('click', () => abrirEditor(null, cargar));
+
+  const archivos = (m) => m.bloques.filter((b) => b.tipo === 'archivo');
+  const temas = (m) => m.bloques.filter((b) => b.tipo === 'titulo' || b.tipo === 'subtitulo').map((b) => b.texto.replace(/[*^~]+/g, '')).filter(Boolean);
+
+  function pintar() {
+    const lista = todos.filter((m) => {
+      if (st.q && ![m.titulo, m.descripcion, ...temas(m)].join(' ').toLowerCase().includes(st.q.toLowerCase())) return false;
+      if (st.area === '_sin' ? m.area_id : st.area && String(m.area_id) !== st.area) return false;
+      if (st.nivel && m.nivel !== st.nivel) return false;
+      const nu = m.cursos.length;
+      if (st.uso === 'varios' ? nu < 2 : st.uso === 'uno' ? nu !== 1 : st.uso === 'ninguno' ? nu !== 0 : false) return false;
+      if (st.curso === '_sin' ? nu : st.curso && !m.cursos.some((c) => String(c.id) === st.curso)) return false;
+      if (st.arch === 'con' && !archivos(m).length) return false;
+      if (st.arch === 'sin' && archivos(m).length) return false;
+      return true;
+    });
+    view.querySelector('[data-cont]').textContent = `${lista.length} de ${todos.length} ${todos.length === 1 ? 'material' : 'materiales'}`;
+    view.querySelector('[data-limpiar]').hidden = !(st.area || st.nivel || st.curso || st.uso || st.arch || st.q);
+    view.querySelector('[data-grid]').innerHTML = lista.map((m) => {
+      const ar = area(m.area_id), arc = archivos(m), tm = temas(m);
+      return `<div class="col-md-6 col-xl-4"><div class="dw-card h-100 d-flex flex-column mat-card" data-id="${m.id}">
+        <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
+          ${ar ? `<span class="badge text-bg-primary badge-area">${esc(ar.nombre)}</span>` : '<span class="badge text-bg-light border">Sin área</span>'}
+          <span class="small text-body-secondary">${m.nivel ? `${esc(m.nivel)} · ` : ''}${arc.length} ${arc.length === 1 ? 'archivo' : 'archivos'}</span></div>
+        <h3 class="h5 mb-1">${esc(m.titulo)}</h3>
+        <div class="mb-2">${m.cursos.length > 1 ? `<span class="badge text-bg-info"><i class="bi bi-diagram-3 me-1"></i>En ${m.cursos.length} cursos</span>` : m.cursos.length === 1 ? '<span class="badge text-bg-secondary">Solo en 1 curso</span>' : '<span class="badge text-bg-warning">Sin usar en cursos</span>'}</div>
+        ${m.descripcion ? `<p class="small text-body-secondary mb-2">${esc(m.descripcion)}</p>` : ''}
+        ${tm.length ? `<div class="small mb-2">${tm.slice(0, 4).map((t) => `<div class="text-truncate"><i class="bi bi-dot"></i>${esc(t)}</div>`).join('')}${tm.length > 4 ? `<div class="text-body-secondary">+${tm.length - 4} más</div>` : ''}</div>` : ''}
+        <div class="small flex-grow-1 mb-2">${arc.slice(0, 3).map((b) => `<div class="text-truncate"><i class="bi ${D.iconoArchivo(b)}" style="color:var(--dw-p)"></i> ${esc(b.nombre)}</div>`).join('')}</div>
+        <div class="small text-body-secondary mb-2"><i class="bi bi-journal-bookmark"></i> ${m.cursos.length ? m.cursos.map((c) => esc(c.nombre)).join(' · ') : 'No está en ningún curso todavía'}</div>
+        <div class="d-flex gap-2"><button class="btn btn-sm btn-primary flex-grow-1" data-act="${RO ? 'ver' : 'abrir'}">${RO ? 'Ver' : 'Abrir'}</button>
+          ${RO ? '' : `<button class="btn btn-sm btn-outline-secondary" data-act="ver" title="Ver como lo verá el equipo" aria-label="Ver"><i class="bi bi-eye"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" data-act="duplicar" title="Duplicar" aria-label="Duplicar"><i class="bi bi-copy"></i></button>`}
+          ${me.canManage && !RO ? '<button class="btn btn-sm btn-outline-danger" data-act="borrar" title="Eliminar" aria-label="Eliminar"><i class="bi bi-trash"></i></button>' : ''}</div></div></div>`;
+    }).join('') || `<div class="col-12"><div class="dw-card text-body-secondary small">${todos.length ? 'Ningún material coincide con los filtros.' : 'Aún no hay material. Crea el primero con «Nuevo material»; luego podrás usarlo en las clases de cualquier curso.'}</div></div>`;
+  }
 
   function ver(m) {
-    const bloque = (b) => {
-      const t = b.titulo ? `<h3 class="h6 mt-3">${esc(b.titulo)}</h3>` : '';
-      if (b.tipo === 'texto') return `${t}<p style="white-space:pre-wrap">${esc(b.texto)}</p>`;
-      if (b.tipo === 'video' && yt(b.url)) return `${t}<div class="ratio ratio-16x9 rounded-3 overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${yt(b.url)}" title="${esc(b.titulo || 'Video')}" allowfullscreen loading="lazy"></iframe></div>`;
-      if (b.tipo === 'enlace' || b.tipo === 'video') return `${t}<a href="${esc(b.url)}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>${esc(b.url)}</a>`;
-      if (/^image\//.test(b.tipoArchivo)) return `${t}<img src="${archivoUrl(b.key)}" alt="${esc(b.nombre)}" class="img-fluid rounded-3" loading="lazy">`;
-      return `${t}<a class="btn btn-sm btn-outline-primary" href="${archivoUrl(b.key)}" target="_blank" rel="noopener"><i class="bi bi-file-earmark me-1"></i>${esc(b.nombre)}</a>`;
-    };
-    modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(m.titulo)}</h2><div class="small text-body-secondary">${[nombreArea(m.area_id), m.nivel].filter(Boolean).map(esc).join(' · ')}</div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-      <div class="modal-body">${m.descripcion ? `<p class="text-body-secondary">${esc(m.descripcion)}</p>` : ''}${m.bloques.map(bloque).join('') || '<p class="text-body-secondary">Este material aún no tiene contenido.</p>'}</div>`, { size: 'modal-lg' });
+    const { el } = modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(m.titulo)}</h2><div class="small text-body-secondary">${[area(m.area_id)?.nombre, m.nivel].filter(Boolean).map(esc).join(' · ')}</div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body">${D.html(m.bloques)}</div>`, { size: 'modal-lg modal-dialog-scrollable' });
+    el.addEventListener('click', (e) => D.click(e, (i) => m.bloques[+i]));
   }
 
-  async function editar(row, changed) {
-    if (RO) return;
-    const m = row || { bloques: [] };
-    let bloques = m.bloques.map((b) => ({ ...b }));
-    const { el, m: mm } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${row ? 'Editar material' : 'Nuevo material'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-      <div class="modal-body"><div class="row g-2">
-        <div class="col-12"><label class="form-label small mb-1" for="mt">Título</label><input class="form-control" id="mt" name="titulo" value="${esc(m.titulo || '')}" required></div>
-        <div class="col-sm-6"><label class="form-label small mb-1" for="ma">Área</label><select class="form-select" id="ma" name="area_id">${AC.opts(areas, 'Sin área').map(([v, l]) => `<option value="${v}" ${String(v) === String(m.area_id ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
-        <div class="col-sm-6"><label class="form-label small mb-1" for="mn">Nivel</label><select class="form-select" id="mn" name="nivel"><option value="">Todos</option>${AC.NIVELES.map((n) => `<option ${m.nivel === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        <div class="col-12"><label class="form-label small mb-1" for="md">Descripción</label><textarea class="form-control" id="md" name="descripcion" rows="2">${esc(m.descripcion || '')}</textarea></div>
-        <div class="col-12"><div class="form-label small mb-1">Contenido</div><div data-bloques></div>
-          <div class="d-flex flex-wrap gap-2 mt-2">${[['texto', 'bi-text-paragraph', 'Texto'], ['enlace', 'bi-link-45deg', 'Enlace'], ['video', 'bi-youtube', 'Video'], ['archivo', 'bi-paperclip', 'Archivo']].map(([t, i, l]) => `<button type="button" class="btn btn-sm btn-outline-primary" data-add="${t}"><i class="bi ${i} me-1"></i>${l}</button>`).join('')}
-          <input type="file" hidden data-file></div></div>
-      </div><div class="small text-danger mt-2" data-err></div></div>
-      <div class="modal-footer border-0 pt-0 justify-content-between"><span>${row && me.canManage ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar</button>' : ''}</span>
-        <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar</button></span></div></form>`, { size: 'modal-lg' });
-    const box = el.querySelector('[data-bloques]'), err = el.querySelector('[data-err]'), file = el.querySelector('[data-file]');
-    const draw = () => {
-      box.innerHTML = bloques.map((b, i) => `<div class="border rounded-3 p-2 mb-2" data-i="${i}"><div class="d-flex gap-2 align-items-center mb-1"><span class="badge text-bg-light">${AC.cap(b.tipo)}</span>
-          <input class="form-control form-control-sm" data-k="titulo" value="${esc(b.titulo || '')}" placeholder="Título (opcional)">
-          <button type="button" class="btn btn-sm btn-light" data-up aria-label="Subir"><i class="bi bi-arrow-up"></i></button><button type="button" class="btn btn-sm btn-light" data-x aria-label="Quitar"><i class="bi bi-x-lg"></i></button></div>
-        ${b.tipo === 'texto' ? `<textarea class="form-control form-control-sm" data-k="texto" rows="3">${esc(b.texto || '')}</textarea>`
-          : b.tipo === 'archivo' ? `<div class="small"><i class="bi bi-paperclip me-1"></i>${esc(b.nombre)}</div>`
-          : `<input class="form-control form-control-sm" data-k="url" value="${esc(b.url || '')}" placeholder="https://…">`}</div>`).join('') || '<p class="small text-body-secondary mb-0">Agrega texto, enlaces, videos o archivos.</p>';
-    };
-    draw();
-    box.addEventListener('input', (e) => { const i = e.target.closest('[data-i]')?.dataset.i; if (i != null && e.target.dataset.k) bloques[i][e.target.dataset.k] = e.target.value; });
-    box.addEventListener('click', (e) => {
-      const i = +e.target.closest('[data-i]')?.dataset.i;
-      if (e.target.closest('[data-x]')) { bloques.splice(i, 1); draw(); }
-      if (e.target.closest('[data-up]') && i > 0) { [bloques[i - 1], bloques[i]] = [bloques[i], bloques[i - 1]]; draw(); }
-    });
-    el.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
-      if (b.dataset.add === 'archivo') return file.click();
-      bloques.push({ tipo: b.dataset.add }); draw();
-    }));
-    file.addEventListener('change', async () => {
-      const fl = file.files[0]; if (!fl) return;
-      if (fl.size > 20 * 1024 * 1024) { err.textContent = 'El archivo supera los 20 MB'; return; }
-      err.textContent = 'Subiendo…';
-      try {
-        const r = await fetch(`/api/material/archivos?nombre=${encodeURIComponent(fl.name)}`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': fl.type || 'application/octet-stream', 'x-app': '1' }, body: fl });
-        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'No se pudo subir');
-        bloques.push({ tipo: 'archivo', titulo: '', ...d }); draw(); err.textContent = '';
-      } catch (x) { err.textContent = x.message; }
-      file.value = '';
-    });
-    el.querySelector('[data-del]')?.addEventListener('click', async () => {
-      if (!(await confirm({ title: `¿Borrar «${row.titulo}»?`, text: 'Se borran también sus archivos.' }))) return;
-      try { await api(`/api/material/material/${row.id}`, { method: 'DELETE' }); mm.hide(); toast('Borrado'); changed(); } catch (x) { err.textContent = x.message; }
-    });
-    const f = el.querySelector('form');
-    f.onsubmit = async (e) => {
-      e.preventDefault();
-      const body = { titulo: f.titulo.value, area_id: f.area_id.value, nivel: f.nivel.value, descripcion: f.descripcion.value, bloques };
-      try { await api(row ? `/api/material/material/${row.id}` : '/api/material/material', { method: row ? 'PATCH' : 'POST', body }); mm.hide(); toast('Guardado'); changed(); }
-      catch (x) { err.textContent = x.message; }
-    };
+  async function cargar() {
+    const [{ rows }, { cursos }] = await Promise.all([api('/api/material/material?limit=500'), api('/api/cursos/lista')]);
+    todos = rows;
+    const sel = view.querySelector('[data-f-curso]'), v = sel.value;
+    sel.innerHTML = `<option value="">Todos los cursos</option><option value="_sin">Sin curso</option>${(cursos || []).map((k) => `<option value="${k.id}">${esc(k.nombre)}</option>`).join('')}`;
+    sel.value = v;
+    pintar();
   }
 
-  const ICON = { texto: 'bi-text-paragraph', enlace: 'bi-link-45deg', video: 'bi-youtube', archivo: 'bi-paperclip' };
-  C.table({ el: view.querySelector('[data-tabla]'), base: '/api/material', entity: 'material', title: 'material', newText: 'Nuevo material', emptyIcon: 'bi-journal-richtext', empty: 'Aún no hay material de estudio.',
-    readOnly: RO, onOpen: ver, onEdit: editar,
-    filters: [{ k: 'area_id', options: [['', 'Todas las áreas'], ...areas.map((a) => [a.id, a.nombre])] }, { k: 'nivel', options: [['', 'Todos los niveles'], ...AC.NIVELES.map((n) => [n, n])] }],
-    columns: [
-      { label: 'Material', main: true, html: (r) => `${esc(r.titulo)}${r.descripcion ? `<div class="small text-body-secondary fw-normal text-truncate" style="max-width:420px">${esc(r.descripcion)}</div>` : ''}` },
-      { label: 'Área', html: (r) => esc(nombreArea(r.area_id) || '—') }, { label: 'Nivel', html: (r) => esc(r.nivel || 'Todos') },
-      { label: 'Contenido', html: (r) => r.bloques.map((b) => `<i class="bi ${ICON[b.tipo]} me-1" title="${esc(b.tipo)}"></i>`).join('') || '—' }],
-    rowActions: () => `<button class="btn btn-sm btn-outline-primary" data-act="ver"><i class="bi bi-eye me-1"></i>Ver</button>`,
-    onAction: (a, r) => ver(r),
-  }).load();
+  view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+      <input class="form-control" data-q placeholder="Buscar material o tema…" style="max-width:240px" aria-label="Buscar">
+      <select class="form-select w-auto" data-f-area aria-label="Área"><option value="">Todas las áreas</option>${areas.map((a) => `<option value="${a.id}">${esc(a.nombre)}</option>`).join('')}<option value="_sin">Sin área</option></select>
+      <select class="form-select w-auto" data-f-nivel aria-label="Nivel"><option value="">Todos los niveles</option>${AC.NIVELES.map((n) => `<option>${n}</option>`).join('')}</select>
+      <select class="form-select w-auto" data-f-curso aria-label="Curso"></select>
+      <select class="form-select w-auto" data-f-uso aria-label="Uso"><option value="">Cualquier uso</option><option value="varios">En varios cursos</option><option value="uno">Solo en un curso</option><option value="ninguno">Sin usar</option></select>
+      <select class="form-select w-auto" data-f-arch aria-label="Archivos"><option value="">Con o sin archivos</option><option value="con">Con archivos</option><option value="sin">Sin archivos</option></select>
+      <button class="btn btn-link btn-sm" data-limpiar hidden>Quitar filtros</button><span class="small text-body-secondary ms-auto" data-cont></span></div>
+    <div class="row g-3" data-grid></div>`;
+  let t;
+  view.querySelector('[data-q]').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); pintar(); }, 200); });
+  [['area', 'data-f-area'], ['nivel', 'data-f-nivel'], ['curso', 'data-f-curso'], ['uso', 'data-f-uso'], ['arch', 'data-f-arch']].forEach(([k, a]) => view.querySelector(`[${a}]`).addEventListener('change', (e) => { st[k] = e.target.value; pintar(); }));
+  view.querySelector('[data-limpiar]').addEventListener('click', () => {
+    Object.assign(st, { q: '', area: '', nivel: '', curso: '', uso: '', arch: '' });
+    view.querySelectorAll('select').forEach((s) => { s.value = ''; }); view.querySelector('[data-q]').value = ''; pintar();
+  });
+  view.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const m = todos.find((x) => String(x.id) === b.closest('[data-id]').dataset.id), a = b.dataset.act;
+    try {
+      if (a === 'ver') ver(m);
+      else if (a === 'abrir') abrirEditor(m, cargar);
+      else if (a === 'duplicar') {
+        const r = await api('/api/material/material', { method: 'POST', body: { titulo: `${m.titulo} (copia)`, area_id: m.area_id, nivel: m.nivel, descripcion: m.descripcion, bloques: m.bloques } });
+        toast('Material duplicado'); await cargar(); abrirEditor(todos.find((x) => x.id === r.id), cargar);
+      } else if (a === 'borrar') {
+        if (!(await confirm({ title: `¿Borrar «${m.titulo}»?`, text: m.cursos.length ? `Está en ${m.cursos.length === 1 ? 'un curso' : `${m.cursos.length} cursos`}: se quitará de sus clases. Sus archivos se borran.` : 'Se borran también sus archivos.' }))) return;
+        await api(`/api/material/material/${m.id}`, { method: 'DELETE' }); toast('Material borrado'); cargar();
+      }
+    } catch (x) { toast(x.message, false); }
+  });
+  await cargar().catch((x) => { view.querySelector('[data-grid]').innerHTML = `<div class="col-12 text-danger">${esc(x.message)}</div>`; });
 });

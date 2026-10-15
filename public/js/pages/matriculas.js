@@ -4,11 +4,11 @@ DW.ready.then(async (me) => {
   if (!me.pageAllowed) return;
   const { api, esc, toast, confirm, modal, table, empty } = window.App;
   const C = window.App.Crud;
-  const view = document.querySelector('[data-view]');
   const RO = me.business.readOnly;
   const [cfg, cursos] = await Promise.all([AC.cfg(), AC.listas.cursos()]);
   const S = cfg.termS;
   const EST = { activa: ['ok', 'Activa'], terminada: ['free', 'Terminada'], retirada: ['bad', 'Retirada'] };
+  const montar = async (view) => {
   const st = { q: '', curso_id: new URLSearchParams(location.search).get('curso') || '', estado: 'activa' };
 
   document.querySelector('[data-acciones]').innerHTML = RO ? '' : '<button class="btn btn-primary" data-nueva><i class="bi bi-person-plus me-1"></i>Nueva matrícula</button>';
@@ -136,4 +136,12 @@ DW.ready.then(async (me) => {
   view.querySelector('[data-curso]').addEventListener('change', (e) => { st.curso_id = e.target.value; load(); });
   view.querySelector('[data-estado]').addEventListener('change', (e) => { st.estado = e.target.value; load(); });
   load().catch((x) => toast(x.message, false));
+  };
+
+  const CUOTAS = me.modules.some((m) => m.id === 'cuotas');
+  const cuotas = CUOTAS ? AC.cuotas(me) : null;
+  AC.vistas([['matriculas', 'Matrículas', 'bi-person-plus'], ...(CUOTAS ? [['cartera', 'Cartera', 'bi-calendar-check'], ['pagos', 'Pagos y recibos', 'bi-receipt']] : [])], async (k, view) => {
+    if (k !== 'matriculas') { document.querySelector('[data-acciones]').innerHTML = ''; return cuotas(k, view); }
+    return montar(view);
+  });
 });

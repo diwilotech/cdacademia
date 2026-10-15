@@ -3,25 +3,36 @@
 //   CRUD /api/material/material   ·   POST /api/material/archivos?nombre=  (cuerpo = archivo, máx. 20 MB)
 //   GET  /api/material/archivos/:key   ·   DELETE /api/material/archivos/:key
 import { json, HttpError } from '../lib/http.js';
-import { crud, one } from '../lib/crud.js';
+import { crud, one, all } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { parse } from '../lib/academia.js';
 
 const MOD = 'material';
 const MAX = 20 * 1024 * 1024;
 const INLINE = /^(image\/(png|jpe?g|gif|webp)|application\/pdf|video\/(mp4|webm)|audio\/(mpeg|mp4|wav|ogg|webm))$/;
-const TIPOS = ['texto', 'enlace', 'video', 'archivo'];
+const TEXTOS = ['texto', 'titulo', 'subtitulo', 'destacado', 'lista', 'numerada'];
+const TIPOS = [...TEXTOS, 'separador', 'enlace', 'video', 'archivo'];
+const DISENOS = ['izq', 'der', 'completo'];
+// Cada bloque del documento: texto con formato (**negrita**, *cursiva*), separador, enlace (YouTube/Vimeo se incrustan) o archivo en R2.
 function bloques(c, row) {
   if (!('bloques' in row) || !row.bloques) return;
-  row.bloques = JSON.stringify(row.bloques.slice(0, 80).map((b) => {
+  row.bloques = JSON.stringify(row.bloques.slice(0, 300).map((b) => {
     if (!TIPOS.includes(b.tipo)) throw new HttpError(400, 'Tipo de bloque no válido');
-    const out = { tipo: b.tipo, titulo: String(b.titulo || '').slice(0, 200) };
-    if (b.tipo === 'texto') out.texto = String(b.texto || '').slice(0, 20000);
-    if (b.tipo === 'enlace' || b.tipo === 'video') { const u = String(b.url || '').trim(); if (!/^https:\/\//i.test(u)) throw new HttpError(400, 'Los enlaces deben empezar por https://'); out.url = u.slice(0, 800); }
+    const out = { tipo: b.tipo };
+    if (b.titulo) out.titulo = String(b.titulo).slice(0, 200);
+    if (TEXTOS.includes(b.tipo)) out.texto = String(b.texto || '').slice(0, 20000);
+    if (b.tipo === 'enlace' || b.tipo === 'video') {
+      const u = String(b.url || '').trim();
+      if (!/^https:\/\//i.test(u)) throw new HttpError(400, 'Los enlaces deben empezar por https://');
+      out.url = u.slice(0, 800);
+      if (b.nombre) out.nombre = String(b.nombre).slice(0, 200);
+    }
     if (b.tipo === 'archivo') {
       const key = String(b.key || '');
       if (!key.startsWith(`${c.businessId}/material/`)) throw new HttpError(400, 'Archivo no válido');
-      Object.assign(out, { key, nombre: String(b.nombre || 'archivo').slice(0, 200), tipoArchivo: String(b.tipoArchivo || '').slice(0, 100) });
+      Object.assign(out, { key, nombre: String(b.nombre || 'archivo').slice(0, 200), tipoArchivo: String(b.tipoArchivo || '').slice(0, 100), size: Math.max(0, Math.round(Number(b.size) || 0)) });
+      if (DISENOS.includes(b.diseno)) out.diseno = b.diseno;
+      if (b.texto) out.texto = String(b.texto).slice(0, 5000);
     }
     return out;
   }));
@@ -32,9 +43,18 @@ export const ENTITIES = {
     refs: { area_id: 'ac_areas' },
     beforeCreate: bloques, beforeUpdate: bloques,
     async afterDelete(c, before) {
-      for (const b of parse(before.bloques, [])) if (b.tipo === 'archivo' && b.key?.startsWith(`${c.businessId}/`) && c.env.FILES) await c.env.FILES.delete(b.key);
+      for (const b of parse(before.bloques, [])) {
+        if (b.tipo !== 'archivo' || !b.key?.startsWith(`${c.businessId}/`) || !c.env.FILES) continue;
+        if (await one(c.env, 'SELECT 1 FROM ac_material WHERE business_id = ? AND id <> ? AND bloques LIKE ?', c.businessId, before.id, `%${b.key}%`)) continue;   // una copia lo sigue usando
+        await c.env.FILES.delete(b.key);
+      }
     },
-    decorate(c, rows) { return rows.map((m) => ({ ...m, bloques: parse(m.bloques, []) })); } },
+    async decorate(c, rows) {
+      if (!rows.length) return rows;
+      const uso = await all(c.env, `SELECT DISTINCT cl.material_id, k.id, k.nombre FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+        WHERE cl.business_id = ? AND cl.material_id IN (${rows.map(() => '?').join(',')})`, c.businessId, ...rows.map((m) => m.id));
+      return rows.map((m) => ({ ...m, bloques: parse(m.bloques, []), cursos: uso.filter((u) => u.material_id === m.id).map((u) => ({ id: u.id, nombre: u.nombre })) }));
+    } },
 };
 
 export function routes(r) {
@@ -50,7 +70,7 @@ export function routes(r) {
     const key = `${c.businessId}/material/${crypto.randomUUID()}-${nombre}`;
     await c.env.FILES.put(key, body, { httpMetadata: { contentType: type } });
     await audit(c, `Subió el archivo «${nombre}»`, { modulo: MOD });
-    return json({ key, nombre, tipoArchivo: type }, 201);
+    return json({ key, nombre, tipoArchivo: type, size: body.byteLength }, 201);
   });
   r.get('/api/material/archivos/:key', `tenant:${MOD}`, async (c) => {
     const key = c.params.key;

@@ -48,7 +48,7 @@ export async function regenerarClases(c, cursoId) {
 
 export const ENTITIES = {
   cursos: { table: 'ac_cursos', label: 'el curso', title: 'nombre', search: ['nombre', 'descripcion'], order: "activo DESC, COALESCE(inicio, '9999') DESC, nombre", crear: 'manager',
-    fields: { nombre: 'text!', area_id: 'int', nivel: 'text', precio: 'money', descripcion: 'long', activo: 'bool+', profesional_id: 'int', jornada: 'text',
+    fields: { nombre: 'text!', area_id: 'int', nivel: 'text', precio: 'money', inicial: 'money', descripcion: 'long', activo: 'bool+', profesional_id: 'int', jornada: 'text',
       inicio: 'date', num_clases: 'int', festivos: 'bool+', horario: 'json', plan: 'json' },
     refs: { area_id: 'ac_areas', profesional_id: 'ac_profesionales' },
     beforeCreate(c, row) { validarCurso(row); },
@@ -116,7 +116,50 @@ async function inscripcionesDe(c, cursoId, ids) {
 export function routes(r) {
   crud(r, { base: '/api/cursos', modulo: MOD, entities: ENTITIES });
 
-  r.get('/api/cursos/lista', 'tenant', async (c) => json({ cursos: await all(c.env, 'SELECT id, nombre, nivel, precio, area_id, activo, inicio, num_clases FROM ac_cursos WHERE business_id = ? ORDER BY activo DESC, nombre', c.businessId) }));
+  r.get('/api/cursos/lista', 'tenant', async (c) => json({ cursos: await all(c.env, 'SELECT id, nombre, nivel, precio, inicial, area_id, activo, inicio, num_clases FROM ac_cursos WHERE business_id = ? ORDER BY activo DESC, nombre', c.businessId) }));
+
+  // Tarjetas de la lista: el curso con docente, área, matriculados y avance (clases dictadas de N).
+  r.get('/api/cursos/tarjetas', `tenant:${MOD}`, async (c) => {
+    const hoy = today(), q = (c.url.searchParams.get('q') || '').trim().toLowerCase(), act = c.url.searchParams.get('activo');
+    const [cursos, fechas, ins] = await Promise.all([
+      all(c.env, `SELECT k.*, a.nombre AS area, a.color AS area_color, p.nombre AS profesional FROM ac_cursos k LEFT JOIN ac_areas a ON a.id = k.area_id AND a.business_id = k.business_id
+        LEFT JOIN ac_profesionales p ON p.id = k.profesional_id AND p.business_id = k.business_id WHERE k.business_id = ? ORDER BY k.activo DESC, COALESCE(k.inicio, '9999') DESC, k.nombre`, c.businessId),
+      all(c.env, 'SELECT curso_id, MIN(fecha) AS ini, MAX(fecha) AS fin, SUM(CASE WHEN fecha < ? THEN 1 ELSE 0 END) AS dictadas FROM ac_clases WHERE business_id = ? AND fecha IS NOT NULL GROUP BY curso_id', hoy, c.businessId),
+      all(c.env, "SELECT curso_id, COUNT(*) AS n FROM ac_inscripciones WHERE business_id = ? AND estado <> 'retirada' GROUP BY curso_id", c.businessId),
+    ]);
+    const rows = cursos.filter((k) => (act === null || act === '' || String(k.activo) === act) && (!q || `${k.nombre} ${k.descripcion || ''}`.toLowerCase().includes(q))).map((k) => {
+      const f = fechas.find((x) => x.curso_id === k.id), fin = f?.fin || null;
+      const estado = !k.inicio ? 'Sin programar' : hoy < k.inicio ? 'Por iniciar' : fin && hoy > fin ? 'Finalizado' : 'En curso';
+      return { ...k, horario: parse(k.horario, []), plan: parse(k.plan, []), fin, dictadas: f?.dictadas || 0, estado, inscritos: ins.find((x) => x.curso_id === k.id)?.n || 0 };
+    });
+    return json({ rows });
+  });
+
+  // «Calcular clases y revisar choques»: fechas de las N clases con el horario dado y, para cada una, con qué otras clases del
+  // mismo profesional o del mismo área se cruza, y si cae fuera de la disponibilidad del profesional.
+  r.post('/api/cursos/calcular', `manager:${MOD}`, async (c) => {
+    const b = await readJson(c.req), row = { horario: Array.isArray(b.horario) ? b.horario : [] };
+    validarCurso(row);
+    const horario = parse(row.horario, []), N = Math.min(300, Math.max(0, Number(b.num_clases) || 0));
+    const inicio = b.inicio && DATE.test(b.inicio) ? b.inicio : null;
+    // Con `clases` se revisan las fechas ya editadas a mano; sin ellas se calculan del horario.
+    const ses = Array.isArray(b.clases) && b.clases.length
+      ? b.clases.slice(0, 300).map((x) => ({ fecha: x.fecha && DATE.test(x.fecha) ? x.fecha : null, ini: HORA.test(x.ini) ? x.ini : null, fin: HORA.test(x.fin) ? x.fin : null }))
+      : sesiones({ inicio, num_clases: N, horario, festivos: !!b.festivos });
+    const cursoId = Number(b.curso_id) || 0, prof = Number(b.profesional_id) || 0, area = Number(b.area_id) || 0;
+    const fechas = ses.map((x) => x.fecha).filter(Boolean).sort();
+    const otros = fechas.length && (prof || area) ? await all(c.env, `SELECT cl.fecha, cl.ini, cl.fin, cl.n, k.nombre, k.profesional_id FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+        WHERE cl.business_id = ? AND k.activo = 1 AND k.id <> ? AND cl.fecha BETWEEN ? AND ? AND (k.profesional_id = ? OR k.area_id = ?)`, c.businessId, cursoId, fechas[0], fechas.at(-1), prof || -1, area || -1) : [];
+    const disp = prof ? parse((await one(c.env, 'SELECT horario FROM ac_profesionales WHERE id = ? AND business_id = ?', prof, c.businessId))?.horario, []) : [];
+    const solapa = (x, y) => x.ini && x.fin && y.ini && y.fin && x.ini < y.fin && y.ini < x.fin;
+    const clases = ses.map((x, i) => {
+      const dia = x.fecha ? new Date(`${x.fecha}T12:00:00Z`).getUTCDay() : null;
+      return { n: i + 1, ...x,
+        choques: x.fecha ? otros.filter((o) => o.fecha === x.fecha && solapa(x, o)).map((o) => ({ curso: o.nombre, n: o.n, motivo: prof && o.profesional_id === prof ? 'profesional' : 'área' })) : [],
+        fuera: !!(x.fecha && disp.length && !disp.some((d) => d.dia === dia && d.ini <= x.ini && d.fin >= x.fin)) };
+    });
+    return json({ clases, inicio: fechas[0] || null, fin: fechas.at(-1) || null });
+  });
 
   r.get('/api/cursos/:id/detalle', `tenant:${MOD}`, async (c) => {
     const k = await cursoDe(c, Number(c.params.id));

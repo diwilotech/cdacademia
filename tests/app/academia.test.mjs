@@ -100,6 +100,20 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const meMods = (await A.app('/api/me')).data.modules;
   check('Menú: Cuotas y Reposiciones siguen como módulos pero ocultos del menú', meMods.find((x) => x.id === 'cuotas')?.oculto === true && meMods.find((x) => x.id === 'reposiciones')?.oculto === true && !meMods.find((x) => x.id === 'cursos')?.oculto);
 
+  // Editor de curso: cuota inicial, tarjetas con avance y cálculo de choques
+  const kk2 = await A.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Cejas', area_id: area.data.id, profesional_id: prof.data.id, precio: 500000, inicial: 150000, inicio: '2026-08-03', num_clases: 3, festivos: false, horario: [{ dia: 1, ini: '18:30', fin: '19:30' }] } });
+  check('Cursos: guarda la cuota inicial del curso', kk2.status === 201 && (await A.app('/api/cursos/lista')).data.cursos.find((x) => x.id === kk2.data.id)?.inicial === 150000, JSON.stringify(kk2.data));
+  const calc = await A.app('/api/cursos/calcular', { method: 'POST', body: { inicio: '2026-08-03', num_clases: 3, festivos: false, horario: [{ dia: 1, ini: '18:00', fin: '20:00' }], profesional_id: prof.data.id, area_id: area.data.id, curso_id: kk2.data.id } });
+  check('Cursos: calcula las fechas y marca el choque con otra clase del mismo profesional', calc.status === 200 && calc.data.clases.length === 3 && calc.data.clases[0].fecha === '2026-08-03' && calc.data.clases[0].choques.length >= 1 && calc.data.clases[0].choques[0].curso === 'Automaquillaje', JSON.stringify(calc.data.clases?.[0]));
+  check('Cursos: marca la clase fuera de la disponibilidad del profesional', calc.data.clases[0].fuera === true, JSON.stringify(calc.data.clases?.[0]));
+  const calcEdit = await A.app('/api/cursos/calcular', { method: 'POST', body: { horario: [{ dia: 1, ini: '18:00', fin: '20:00' }], profesional_id: prof.data.id, clases: [{ fecha: '2026-09-07', ini: '09:00', fin: '10:00' }] } });
+  check('Cursos: revisa choques de fechas editadas a mano', calcEdit.status === 200 && calcEdit.data.clases[0].fecha === '2026-09-07' && calcEdit.data.clases[0].choques.length === 0);
+  check('Cursos: horario inválido en el cálculo se rechaza', (await A.app('/api/cursos/calcular', { method: 'POST', body: { horario: [{ dia: 9, ini: 'x', fin: 'y' }] } })).status === 400);
+  const tarj = (await A.app('/api/cursos/tarjetas')).data.rows.find((x) => x.id === k.data.id);
+  check('Cursos: la tarjeta trae profesional, matriculados, avance y estado', tarj?.profesional === 'Laura Docente' && tarj.inscritos === 2 && tarj.dictadas >= 1 && tarj.estado === 'Finalizado' && tarj.fin, JSON.stringify(tarj));
+  check('Cursos: las tarjetas filtran por estado', (await A.app('/api/cursos/tarjetas?activo=0')).data.rows.length === 0);
+  check('Cursos: el personal no calcula horarios (403)', (await S.app('/api/cursos/calcular', { method: 'POST', body: { horario: [] } })).status === 403);
+
   // Aislamiento
   check('Aislamiento: B no ve cursos ni estudiantes de A', (await B.app('/api/cursos/cursos')).data.rows?.length === 0 && (await B.app('/api/estudiantes/estudiantes')).data.rows?.length === 0);
   check('Aislamiento: B no ve el detalle del curso de A', (await B.app(`/api/cursos/${k.data.id}/detalle`)).status === 404);

@@ -78,7 +78,7 @@ DW.ready.then(async (me) => {
     const f = el.querySelector('form'), err = el.querySelector('[data-err]'), inpE = el.querySelector('#me');
     const buscar = () => ests.find((e) => `${e.nombre}${e.documento ? ` · ${e.documento}` : ''}` === inpE.value.trim());
     const upd = () => { el.querySelector('[data-nuevo]').hidden = !inpE.value.trim() || !!buscar(); preview(el, Math.max(0, (+f.valor.value || 0) - (+f.descuento.value || 0)), f, f.fecha.value); };
-    f.curso_id.addEventListener('change', () => { const k = cursos.find((x) => String(x.id) === f.curso_id.value); if (k) f.valor.value = k.precio; upd(); });
+    f.curso_id.addEventListener('change', () => { const k = cursos.find((x) => String(x.id) === f.curso_id.value); if (k) { f.valor.value = k.precio; f.inicial.value = k.inicial || 0; } upd(); });
     f.addEventListener('input', upd); upd();
     f.onsubmit = async (e) => {
       e.preventDefault();

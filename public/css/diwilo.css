@@ -217,3 +217,9 @@ body.dw-embed #dw-shell { display: none; }
 body.dw-embed .dw-main { margin: 0 !important; padding: 20px 16px 28px; max-width: 1200px; }
 @media (min-width: 992px) { body.dw-embed .dw-main { padding: 28px 32px 40px; max-width: none; } }
 body.dw-embed .dw-readonly { top: 0; }
+
+/* ---------- Pasos del editor de curso ---------- */
+.dw-paso { border: 1px solid var(--dw-borde); border-radius: 14px; padding: 14px; background: var(--dw-tarjeta); }
+.dw-paso > h3 { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+.dw-paso .n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dw-p); color: #fff; font-size: .8rem; }
+.dw-resumen { background: rgba(var(--dw-p-rgb), .08); border-radius: 10px; padding: 8px 12px; }

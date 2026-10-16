@@ -15,7 +15,11 @@ DW.ready.then(async (me) => {
 
   /* ---------- crear / editar / duplicar curso ---------- */
   // Cuatro pasos en una ventana: datos, docente y horario (con «Calcular clases y revisar choques»), módulos (material por clases) y cupones.
-  async function editarCurso(k, done, { duplicar = false } = {}) {
+  async function editarCurso(k, done, { duplicar = false, seccion = null, host = null } = {}) {
+    // seccion = 'inicio' | 'clases' con host: se edita esa parte dentro de la página (sin ventana). Sin ellos: ventana completa (curso nuevo o copia).
+    const ver = (x) => !seccion || seccion === x;
+    const oc = (x) => (ver(x) ? '' : 'hidden style="display:none"');
+    const num = (i) => (host ? '' : `<span class="n">${i}</span>`);
     const nuevo = !k || duplicar;
     const c = { activo: 1, festivos: 1, horario: [], num_clases: 8, inicial: 0, ...(k || {}) };
     if (duplicar) { c.nombre = `${c.nombre} (copia)`; c.inicio = ''; }
@@ -34,24 +38,33 @@ DW.ready.then(async (me) => {
     const quitados = [];
     const sel = (name, rows, v, empty) => `<select class="form-select" id="k_${name}" name="${name}">${AC.opts(rows, empty).map(([o, l]) => `<option value="${o}" ${String(o) === String(v ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
     const lbl = (id, t) => `<label class="form-label small mb-1" for="k_${id}">${t}</label>`;
-    const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${duplicar ? 'Duplicar curso para otro grupo' : k ? 'Editar curso' : 'Nuevo curso'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-      <div class="modal-body"><div class="d-flex flex-column gap-3">
-        <section class="dw-paso"><h3><span class="n">1</span>Datos del curso</h3><div class="row g-2">
-          <div class="col-md-8">${lbl('nombre', 'Nombre')}<input class="form-control" id="k_nombre" name="nombre" maxlength="120" value="${esc(c.nombre || '')}" required></div>
-          <div class="col-md-4">${lbl('precio', 'Precio')}<input class="form-control" id="k_precio" name="precio" type="number" min="0" step="1000" value="${c.precio ?? 0}"></div>
+    const cab = host ? '' : `<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${duplicar ? 'Duplicar curso para otro grupo' : k ? 'Editar curso' : 'Nuevo curso'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>`;
+    const pie = host
+      ? `<div class="d-flex justify-content-between align-items-center mt-3"><span>${seccion === 'inicio' && k ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar curso</button>' : ''}</span>
+          <span><button type="button" class="btn btn-light" data-reset>Descartar cambios</button> <button class="btn btn-primary">Guardar</button></span></div>`
+      : `<div class="modal-footer border-0 pt-0 justify-content-between"><span>${k && !duplicar ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar</button>' : ''}</span>
+          <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar curso</button></span></div>`;
+    const html = `<form>${cab}
+      <div class="${host ? '' : 'modal-body'}"><div class="d-flex flex-column gap-3">
+        <section class="dw-paso" ${oc('inicio')}><h3>${num(1)}Datos del curso</h3><div class="row g-2">
+          <div class="col-md-8">${lbl('nombre', 'Título')}<input class="form-control" id="k_nombre" name="nombre" maxlength="120" value="${esc(c.nombre || '')}" required></div>
           <div class="col-md-4">${lbl('nivel', 'Nivel')}<select class="form-select" id="k_nivel" name="nivel"><option value="">—</option>${AC.NIVELES.map((n) => `<option ${c.nivel === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
           <div class="col-md-4">${lbl('area_id', 'Área')}${sel('area_id', areas, c.area_id, 'Sin área')}</div>
-          <div class="col-md-4">${lbl('inicial', 'Cuota inicial')}<input class="form-control" id="k_inicial" name="inicial" type="number" min="0" step="1000" value="${c.inicial || 0}"><div class="form-text">Se propone al matricular; puede ser 0.</div></div>
-          <div class="col-12">${lbl('descripcion', 'Descripción')}<textarea class="form-control" id="k_descripcion" name="descripcion" rows="2" placeholder="Qué aprende la persona, a quién va dirigido…">${esc(c.descripcion || '')}</textarea></div>
+          <div class="col-md-8">${lbl('descripcion', 'Descripción')}<textarea class="form-control" id="k_descripcion" name="descripcion" rows="2" placeholder="Qué aprende la persona, a quién va dirigido…">${esc(c.descripcion || '')}</textarea></div>
         </div></section>
 
-        <section class="dw-paso"><h3><span class="n">2</span>Profesional y horario semanal</h3><div class="row g-2">
-          <div class="col-md-4">${lbl('profesional_id', 'Profesional')}${sel('profesional_id', profs.filter((p) => p.activo || p.id === c.profesional_id), c.profesional_id, 'Sin asignar')}</div>
+        <section class="dw-paso" ${oc('inicio')}><h3>${num(2)}Precio, profesional y jornada</h3><div class="row g-2">
+          <div class="col-md-4">${lbl('precio', 'Precio')}<input class="form-control" id="k_precio" name="precio" type="number" min="0" step="1000" value="${c.precio ?? 0}"></div>
+          <div class="col-md-4">${lbl('inicial', 'Cuota inicial')}<input class="form-control" id="k_inicial" name="inicial" type="number" min="0" step="1000" value="${c.inicial || 0}"><div class="form-text">Se propone al matricular; puede ser 0.</div></div>
           <div class="col-md-4">${lbl('jornada', 'Jornada')}<select class="form-select" id="k_jornada" name="jornada"><option value="">—</option>${['Mañana', 'Tarde', 'Noche', 'Sabatina', 'Dominical'].map((j) => `<option ${c.jornada === j ? 'selected' : ''}>${j}</option>`).join('')}</select></div>
-          <div class="col-md-4">${lbl('inicio', 'Primera clase')}<input class="form-control" id="k_inicio" name="inicio" type="date" value="${esc(c.inicio || '')}"></div>
-          <div class="col-6 col-md-4">${lbl('num_clases', 'Total de clases')}<input class="form-control" id="k_num_clases" name="num_clases" type="number" min="0" max="300" value="${c.num_clases ?? 0}"></div>
-          <div class="col-md-8 d-flex align-items-end gap-4 flex-wrap"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="k_festivos" name="festivos" ${c.festivos ? 'checked' : ''}><label class="form-check-label small" for="k_festivos">Saltar festivos de Colombia</label></div>
-            <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="k_activo" name="activo" ${c.activo ? 'checked' : ''}><label class="form-check-label small" for="k_activo">Curso activo</label></div></div>
+          <div class="col-md-8">${lbl('profesional_id', 'Profesional')}${sel('profesional_id', profs.filter((p) => p.activo || p.id === c.profesional_id), c.profesional_id, 'Sin asignar')}</div>
+          <div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="k_activo" name="activo" ${c.activo ? 'checked' : ''}><label class="form-check-label small" for="k_activo">Curso activo</label></div></div>
+        </div></section>
+
+        <section class="dw-paso" ${oc('clases')}><h3>${num(3)}Primera clase y horario</h3><div class="row g-2">
+          <div class="col-6 col-md-4">${lbl('inicio', 'Primera clase')}<input class="form-control" id="k_inicio" name="inicio" type="date" value="${esc(c.inicio || '')}"></div>
+          <div class="col-6 col-md-4">${lbl('num_clases', 'Cuántas clases')}<input class="form-control" id="k_num_clases" name="num_clases" type="number" min="0" max="300" value="${c.num_clases ?? 0}"></div>
+          <div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="k_festivos" name="festivos" ${c.festivos ? 'checked' : ''}><label class="form-check-label small" for="k_festivos">Saltar festivos de Colombia</label></div></div>
           <div class="col-12"><div class="form-label small mb-1">Clases de la semana <span class="text-body-secondary">· cada franja es una clase; el resto de semanas se llena solo</span></div><div data-horario></div></div>
           <div class="col-12"><div class="dw-resumen small" data-resumen>—</div></div>
           <div class="col-12"><button type="button" class="btn btn-sm btn-outline-secondary" data-calcular><i class="bi bi-calculator me-1"></i>Calcular clases y revisar choques</button>
@@ -59,19 +72,20 @@ DW.ready.then(async (me) => {
           <div class="col-12" data-calculo hidden></div>
         </div></section>
 
-        <section class="dw-paso"><h3><span class="n">3</span>Módulos <span class="small fw-normal text-body-secondary">· el material de estudio de cada clase</span>
+        <section class="dw-paso" ${oc('clases')}><h3>${num(4)}Módulos <span class="small fw-normal text-body-secondary">· el material de estudio de cada clase</span>
             <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-add-mod><i class="bi bi-plus-lg me-1"></i>Agregar módulo</button></h3>
           <div data-mods></div>
           <div class="form-check mt-2 small"><input class="form-check-input" type="checkbox" id="k_otras" data-otras><label class="form-check-label" for="k_otras">Incluir módulos de otras áreas</label></div>
           <div class="form-text">Un módulo puede estar en varios cursos. Se crean y editan en <a href="/staff/material.html">Material</a>.</div></section>
 
-        <section class="dw-paso"><h3><span class="n">4</span>Cupones de descuento
+        <section class="dw-paso" ${oc('inicio')}><h3>${num(5)}Cupones de descuento
             <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-add-cup><i class="bi bi-plus-lg me-1"></i>Agregar cupón</button></h3>
           <div data-cups></div>
           <div class="form-text">Se escriben al matricular. Pueden ser un porcentaje o un valor fijo, con vencimiento y límite de usos.</div></section>
       </div><div class="small text-danger mt-2" data-err></div></div>
-      <div class="modal-footer border-0 pt-0 justify-content-between"><span>${k && !duplicar ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar</button>' : ''}</span>
-        <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar curso</button></span></div></form>`, { size: 'modal-xl modal-dialog-scrollable' });
+      ${pie}</form>`;
+    let el, m;
+    if (host) { host.innerHTML = html; el = host; m = { hide() {} }; } else ({ el, m } = modal(html, { size: 'modal-xl modal-dialog-scrollable' }));
 
     const f = $('form', el), err = $('[data-err]', el);
     const getH = AC.horarioEditor($('[data-horario]', el), c.horario);
@@ -112,14 +126,15 @@ DW.ready.then(async (me) => {
       } catch (x) { resumen.textContent = x.message; }
     };
     let tc;
-    const cambioHorario = () => { clearTimeout(tc); tc = setTimeout(() => refresh(false), 400); };
+    const cambioHorario = () => { if (!ver('clases')) return; clearTimeout(tc); tc = setTimeout(() => refresh(false), 400); };
     ['inicio', 'num_clases', 'festivos', 'profesional_id', 'area_id'].forEach((n) => f[n].addEventListener('input', cambioHorario));
     $('[data-horario]', el).addEventListener('input', cambioHorario);
     $('[data-horario]', el).addEventListener('click', () => setTimeout(cambioHorario, 0));
     $('[data-calcular]', el).addEventListener('click', async () => { abierta = true; caja.hidden = false; await refresh(false); pintarTabla(); });
     caja.addEventListener('input', (e) => { const r = e.target.closest('[data-i]'); if (r && e.target.dataset.k) calc.clases[+r.dataset.i][e.target.dataset.k] = e.target.value; });
     caja.addEventListener('click', async (e) => { if (e.target.closest('[data-revisar]')) { await refresh(true); } });
-    refresh(false);
+    if (ver('clases')) refresh(false);
+    $('[data-reset]', el)?.addEventListener('click', () => done(cursoId));   // descartar = volver a cargar lo guardado
 
     /* --- módulos (material por clases) --- */
     const modsBox = $('[data-mods]', el);
@@ -168,10 +183,10 @@ DW.ready.then(async (me) => {
       e.preventDefault(); err.textContent = '';
       const body = { nombre: f.nombre.value, area_id: f.area_id.value, nivel: f.nivel.value, profesional_id: f.profesional_id.value, precio: f.precio.value, inicial: f.inicial.value, jornada: f.jornada.value,
         num_clases: f.num_clases.value, inicio: f.inicio.value, festivos: f.festivos.checked, activo: f.activo.checked, descripcion: f.descripcion.value, horario: getH() };
-      const vacios = modulos.filter((r) => !r.material_id);
+      const vacios = ver('clases') ? modulos.filter((r) => !r.material_id) : [];
       if (vacios.length) { err.textContent = 'Elige el módulo de cada fila o quita las filas vacías.'; return; }
-      if (modulos.some((r) => r.hasta < r.desde)) { err.textContent = 'En un módulo, la clase final no puede ser antes que la inicial.'; return; }
-      if (cupones.some((x) => !String(x.codigo).trim())) { err.textContent = 'Escribe el código de cada cupón o quítalo.'; return; }
+      if (ver('clases') && modulos.some((r) => r.hasta < r.desde)) { err.textContent = 'En un módulo, la clase final no puede ser antes que la inicial.'; return; }
+      if (ver('inicio') && cupones.some((x) => !String(x.codigo).trim())) { err.textContent = 'Escribe el código de cada cupón o quítalo.'; return; }
       const btn = f.querySelector('button.btn-primary'); btn.disabled = true;
       try {
         const r = await api(cursoId ? `/api/cursos/cursos/${cursoId}` : '/api/cursos/cursos', { method: cursoId ? 'PATCH' : 'POST', body });
@@ -182,15 +197,15 @@ DW.ready.then(async (me) => {
           if (x.fecha !== b0.fecha || x.ini !== b0.ini || x.fin !== b0.fin) await api(`/api/cursos/${cursoId}/clases/${x.n}`, { method: 'PATCH', body: { fecha: x.fecha, ini: x.ini, fin: x.fin } });
         }
         // módulos: el material de cada clase
-        const quiere = {}; for (const r2 of modulos) for (let n = r2.desde; n <= Math.min(r2.hasta, N()); n++) quiere[n] = +r2.material_id;
-        for (let n = 1; n <= N(); n++) {
+        const quiere = {}; if (ver('clases')) for (const r2 of modulos) for (let n = r2.desde; n <= Math.min(r2.hasta, N()); n++) quiere[n] = +r2.material_id;
+        if (ver('clases')) for (let n = 1; n <= N(); n++) {
           const antes = nuevo ? null : (clasesAntes.get(n)?.material_id || null), ahora = quiere[n] || null;
           if (antes !== ahora) await api(`/api/cursos/${cursoId}/clases/${n}`, { method: 'PATCH', body: { material_id: ahora || '' } });
         }
         // cupones
-        for (const id of quitados) await api(`/api/cursos/cupones/${id}`, { method: 'DELETE' });
+        if (ver('inicio')) for (const id of quitados) await api(`/api/cursos/cupones/${id}`, { method: 'DELETE' });
         quitados.length = 0;
-        for (const x of cupones) {
+        if (ver('inicio')) for (const x of cupones) {
           const cb = { codigo: x.codigo, tipo: x.tipo, valor: x.valor || 0, hasta: x.hasta || '', max: x.max || '' };
           if (x.id) await api(`/api/cursos/cupones/${x.id}`, { method: 'PATCH', body: cb });
           else { const nuevoC = await api('/api/cursos/cupones', { method: 'POST', body: { curso_id: cursoId, ...cb } }); x.id = nuevoC.id; }
@@ -229,12 +244,12 @@ DW.ready.then(async (me) => {
             <div class="d-flex justify-content-between small text-body-secondary mb-1"><span>${esc(c.estado)}</span><span>${c.dictadas}/${N} clases</span></div>
             ${C.meter(c.dictadas, N)}
             <div class="d-flex gap-2 mt-3"><a class="btn btn-sm btn-primary flex-grow-1" href="/staff/cursos.html?id=${c.id}">Abrir curso</a>
-              ${MANAGE ? `<button class="btn btn-sm btn-outline-secondary" data-edit title="Editar" aria-label="Editar"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-secondary" data-dup title="Duplicar para otro grupo" aria-label="Duplicar"><i class="bi bi-copy"></i></button>` : ''}</div></div>`;
+              ${MANAGE ? `<button class="btn btn-sm btn-outline-secondary" data-dup title="Duplicar para otro grupo" aria-label="Duplicar"><i class="bi bi-copy"></i></button>` : ''}</div></div>`;
         }).join('') : `<div style="grid-column:1/-1">${empty('bi-mortarboard', MANAGE ? 'Aún no hay cursos. Crea el primero.' : 'Aún no hay cursos.')}</div>`;
         $('[data-lista]', view).rows = rows;
       };
       view.addEventListener('click', (e) => {
-        const b = e.target.closest('[data-edit],[data-dup]'); if (!b) return;
+        const b = e.target.closest('[data-dup]'); if (!b) return;
         const k = $('[data-lista]', view).rows.find((x) => String(x.id) === b.closest('[data-id]').dataset.id);
         editarCurso(k, (nid) => { if (b.hasAttribute('data-dup')) location.href = `/staff/cursos.html?id=${nid}`; else load(); }, { duplicar: b.hasAttribute('data-dup') });
       });
@@ -256,18 +271,17 @@ DW.ready.then(async (me) => {
   const parseEx = (x) => { if (!x) return null; if (typeof x === 'object') return x; try { return JSON.parse(x); } catch { return null; } };
   const preguntasDe = (ev) => parseEx(ev.examen)?.preguntas || [];
   $('[data-h1]').innerHTML = `${esc(k.nombre)} ${C.chip(ESTADO[k.estado] || 'free', k.estado)}`;
-  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-primary" data-editar><i class="bi bi-pencil me-1"></i>Editar</button><button class="btn btn-outline-secondary" data-duplicar><i class="bi bi-copy me-1"></i>Duplicar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
-  $('[data-editar]')?.addEventListener('click', () => editarCurso({ ...k }, () => location.reload()));
+  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-secondary" data-duplicar><i class="bi bi-copy me-1"></i>Duplicar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
   $('[data-duplicar]')?.addEventListener('click', () => editarCurso({ ...k }, (nid) => { location.href = `/staff/cursos.html?id=${nid}`; }, { duplicar: true }));
   document.title = `${k.nombre} · ${document.title}`;
   const sub = `<p class="small text-body-secondary">${[k.area, k.nivel, k.profesional && `Profesional: ${k.profesional}`, AC.horario(k.horario), k.inicio && `${C.day(k.inicio)} – ${C.day(k.fin)}`, `${k.dictadas} de ${k.num_clases} clases dictadas`].filter(Boolean).map(esc).join(' · ')}</p>`;
   const proxClase = () => { const hoy = C.todayCo(); const c = D.clases.filter((x) => x.fecha && x.fecha <= hoy).pop() || D.clases[0]; return c?.n || 1; };
 
-  const tabs = [['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
+  const tabs = [...(MANAGE ? [['inicio', 'Inicio', 'bi-house']] : []), ['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
   if (me.modules.some((x) => x.id === 'reposiciones')) tabs.push(['reposiciones', 'Reposiciones', 'bi-arrow-repeat']);
-  if (me.canManage) tabs.push(['evaluaciones', 'Evaluaciones y cupones', 'bi-ui-checks']);
   const V = AC.vistas(tabs, async (t, view) => {
     await cargar();
+    if (t === 'inicio') return editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'inicio', host: view });
     if (t === 'inscritos') {
       view.innerHTML = sub + (D.inscritos.length ? `<div class="dw-card p-0 p-md-2">${table([
         { label: AC.cap(S), main: true, html: (i) => `${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}` },
@@ -331,7 +345,7 @@ DW.ready.then(async (me) => {
       return;
     }
     if (t === 'notas') {
-      if (!D.evaluaciones.length) { view.innerHTML = empty('bi-star', me.canManage ? 'Crea las evaluaciones del curso en la pestaña «Evaluaciones y cupones».' : 'El curso aún no tiene evaluaciones.'); return; }
+      if (!D.evaluaciones.length) { view.innerHTML = empty('bi-star', me.canManage ? 'Crea la primera evaluación del curso aquí abajo.' : 'El curso aún no tiene evaluaciones.'); montarEvaluaciones(view); return; }
       const exStat = new Map(((await api(`/api/cursos/${id}/examenes`).catch(() => ({ rows: [] }))).rows).map((x) => [`${x.inscripcion_id}-${x.evaluacion_id}`, x]));
       const botonEx = (i, e) => {
         const x = exStat.get(`${i.id}-${e.id}`), n = e.examen?.preguntas?.length || 0;
@@ -377,6 +391,7 @@ DW.ready.then(async (me) => {
           await cargar(); toast(n ? 'Notas guardadas' : 'No había cambios'); V.reload();
         } catch (x) { toast(x.message, false); }
       });
+      montarEvaluaciones(view);
       return;
     }
     if (t === 'reposiciones') return AC.reposiciones(me, k.id).todo(view);
@@ -388,10 +403,15 @@ DW.ready.then(async (me) => {
         { label: '', cls: 'text-end', html: (c) => (RO ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
         : empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.');
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-clase]'); if (b) editarClase(D.clases.find((c) => c.n === +b.dataset.clase), () => V.reload()); });
+      if (MANAGE) { view.insertAdjacentHTML('afterbegin', '<div data-editar-clases class="mb-3"></div>'); await editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'clases', host: $('[data-editar-clases]', view) }); }
       return;
     }
-    // evaluaciones y cupones
-    view.innerHTML = '<h2 class="h6">Evaluaciones <span class="small text-body-secondary fw-normal">· los pesos deberían sumar 100%</span></h2><div data-ev class="mb-4"></div><h2 class="h6">Cupones de descuento</h2><div data-cup></div>';
+  });
+
+  // Evaluaciones del curso (crear, editar, borrar, preguntas): van al final de Notas, solo para quien configura.
+  function montarEvaluaciones(view) {
+    if (!MANAGE) return;
+    view.insertAdjacentHTML('beforeend', '<h2 class="h6 mt-4">Evaluaciones <span class="small text-body-secondary fw-normal">· los pesos deberían sumar 100%</span></h2><div data-ev></div>');
     C.table({ el: $('[data-ev]', view), base: '/api/cursos', entity: 'evaluaciones', title: 'evaluación', newText: 'Nueva evaluación', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ui-checks', empty: 'Sin evaluaciones.',
       fields: [{ k: 'nombre', label: 'Nombre', required: true, placeholder: 'Parcial, práctica final…' }, { k: 'peso', label: 'Peso (%)', type: 'int', required: true },
         { k: 'tipo', label: 'Tipo', type: 'select', options: [['examen', 'Examen (foto o PDF de cada estudiante)'], ['multiple', 'Selección múltiple (preguntas en la app)']] },
@@ -405,12 +425,7 @@ DW.ready.then(async (me) => {
         const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
         AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen), materiales: parseEx(r.materiales) || [] }, { curso: k.nombre, area: k.area, areaId: k.area_id, materialSugerido: D.clases.find((c) => c.n === r.clase_n)?.material_id, nivel: k.nivel, temas }, () => V.reload());
       } }).load();
-    C.table({ el: $('[data-cup]', view), base: '/api/cursos', entity: 'cupones', title: 'cupón', newText: 'Nuevo cupón', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ticket-perforated', empty: 'Sin cupones.',
-      fields: [{ k: 'codigo', label: 'Código', required: true, placeholder: 'AMIGA10' }, { k: 'tipo', label: 'Tipo', type: 'select', options: [['pct', 'Porcentaje'], ['valor', 'Valor fijo']] },
-        { k: 'valor', label: 'Descuento', type: 'money', required: true, hint: '% o pesos' }, { k: 'hasta', label: 'Válido hasta', type: 'date' }, { k: 'max', label: 'Usos máximos', type: 'int', hint: 'vacío = sin límite' }],
-      columns: [{ label: 'Código', main: true, html: (r) => `<code>${esc(r.codigo)}</code>` }, { label: 'Descuento', html: (r) => (r.tipo === 'pct' ? `${r.valor}%` : C.money(r.valor)) },
-        { label: 'Vigencia', html: (r) => (r.hasta ? `Hasta ${C.day(r.hasta)}` : 'Sin fecha') }, { label: 'Usos', html: (r) => `${r.usos}${r.max ? ` de ${r.max}` : ''}` }] }).load();
-  });
+  }
 
   // Editar una evaluación desde Notas: nombre, peso, clase y tipo (examen subido ⇄ selección múltiple) y sus preguntas.
   function editarEvaluacion(ev) {

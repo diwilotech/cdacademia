@@ -14,7 +14,10 @@ DW.ready.then(async (me) => {
   let todos = [];
   const st = { q: '', area: '', nivel: '', curso: '', uso: '', arch: '' };
 
-  document.querySelector('[data-acciones]').innerHTML = RO ? '' : '<button class="btn btn-primary" data-nuevo><i class="bi bi-plus-lg me-1"></i>Nuevo material</button>';
+  document.querySelector('[data-acciones]').innerHTML = RO ? '' : `${me.canManage ? '<button class="btn btn-outline-secondary" data-ejemplos title="Agrega materiales de muestra a la biblioteca (no repite los que ya existen)"><i class="bi bi-magic me-1"></i>Cargar ejemplos</button>' : ''}<button class="btn btn-primary" data-nuevo><i class="bi bi-plus-lg me-1"></i>Nuevo material</button>`;
+  document.querySelector('[data-ejemplos]')?.addEventListener('click', async () => {
+    try { const r = await api('/api/material/ejemplos', { method: 'POST' }); toast(r.creados ? `${r.creados} materiales de ejemplo cargados` : 'Los ejemplos ya estaban cargados'); cargar(); } catch (x) { toast(x.message, false); }
+  });
   document.querySelector('[data-nuevo]')?.addEventListener('click', () => abrirEditor(null, cargar));
 
   const archivos = (m) => m.bloques.filter((b) => b.tipo === 'archivo');

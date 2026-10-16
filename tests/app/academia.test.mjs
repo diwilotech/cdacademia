@@ -20,6 +20,16 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Cursos: horario inválido se rechaza', (await A.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Malo', horario: [{ dia: 9, ini: '25:00', fin: '1' }] } })).status === 400);
   const ev = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k.data.id, nombre: 'Final', peso: 100 } });
   check('Cursos: crea una evaluación', ev.status === 201);
+  // Materiales de ejemplo y examen ligado a materiales (solo los del propio negocio)
+  const ej = await A.app('/api/material/ejemplos', { method: 'POST' }), ej2 = await A.app('/api/material/ejemplos', { method: 'POST' });
+  check('Material: carga los ejemplos una sola vez', ej.status === 201 && ej.data.creados > 0 && ej2.data.creados === 0, JSON.stringify(ej.data));
+  const mats = (await A.app('/api/material/material?limit=50')).data.rows, matsB = await B.app('/api/material/material?limit=50');
+  check('Material: los ejemplos de A no aparecen en B', matsB.data.rows.length === 0 && mats.length === ej.data.creados);
+  await B.app('/api/material/ejemplos', { method: 'POST' });
+  const ajeno = (await B.app('/api/material/material?limit=50')).data.rows[0].id;
+  await A.app(`/api/cursos/evaluaciones/${ev.data.id}`, { method: 'PATCH', body: { tipo: 'multiple', materiales: [mats[0].id, mats[1].id, ajeno, mats[0].id] } });
+  const evs = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.evaluaciones.find((x) => x.id === ev.data.id);
+  check('Exámenes: se ligan a materiales propios (sin repetidos ni ajenos)', evs.materiales.length === 2 && evs.materiales.includes(mats[0].id) && !evs.materiales.includes(ajeno), JSON.stringify(evs.materiales));
   const cup = await A.app('/api/cursos/cupones', { method: 'POST', body: { curso_id: k.data.id, codigo: 'AMIGA10', tipo: 'pct', valor: 10, max: 1 } });
   check('Cursos: crea un cupón', cup.status === 201, JSON.stringify(cup.data));
 

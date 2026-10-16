@@ -67,9 +67,9 @@ export const ENTITIES = {
     },
     decorate(c, rows) { return rows.map((k) => ({ ...k, horario: parse(k.horario, []), plan: parse(k.plan, []) })); } },
   evaluaciones: { table: 'ac_evaluaciones', label: 'la evaluación', title: 'nombre', search: ['nombre'], order: 'curso_id, COALESCE(clase_n, 999), id', crear: 'manager',
-    fields: { curso_id: 'int!', nombre: 'text!', peso: 'int', clase_n: 'int', tipo: ['examen', 'multiple'], examen: 'doc' },
+    fields: { curso_id: 'int!', nombre: 'text!', peso: 'int', clase_n: 'int', tipo: ['examen', 'multiple'], examen: 'doc', materiales: 'json' },
     refs: { curso_id: 'ac_cursos' },
-    beforeCreate(c, row) { validarEval(row); }, beforeUpdate(c, row) { validarEval(row); },
+    beforeCreate(c, row) { return validarEval(c, row); }, beforeUpdate(c, row) { return validarEval(c, row); },
     async afterDelete(c, before) {
       for (const f of await all(c.env, 'SELECT archivos FROM ac_examenes WHERE business_id = ? AND evaluacion_id = ?', c.businessId, before.id)) for (const a of parse(f.archivos, [])) await c.env.FILES?.delete(a.key);
       await c.env.DB.batch(['ac_notas', 'ac_examenes'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND evaluacion_id = ?`).bind(c.businessId, before.id)));
@@ -79,7 +79,12 @@ export const ENTITIES = {
     refs: { curso_id: 'ac_cursos' },
     beforeCreate(c, row) { validarCupon(row); }, beforeUpdate(c, row) { validarCupon(row); } },
 };
-function validarEval(row) {
+async function validarEval(c, row) {
+  if ('materiales' in row && row.materiales) {   // solo materiales de este negocio, sin repetir
+    const ids = [...new Set(row.materiales.map(Number).filter(Number.isInteger))].slice(0, 30);
+    const ok = ids.length ? new Set((await all(c.env, `SELECT id FROM ac_material WHERE business_id = ? AND id IN (${ids.map(() => '?').join(',')})`, c.businessId, ...ids)).map((x) => x.id)) : new Set();
+    row.materiales = JSON.stringify(ids.filter((id) => ok.has(id)));
+  }
   if ('peso' in row && row.peso != null && (row.peso < 0 || row.peso > 100)) throw new HttpError(400, 'El peso va de 0 a 100');
   if ('examen' in row && row.examen) {
     let ex; try { ex = JSON.parse(row.examen); } catch { throw new HttpError(400, 'El examen no es un JSON válido'); }
@@ -173,7 +178,7 @@ export function routes(r) {
     const cfg = await getConfig(c.env, c.businessId);
     const [clases, evs, cupones, inscritos, area, prof] = await Promise.all([
       all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, material_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
-      all(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
+      all(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen, materiales FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
       all(c.env, 'SELECT id, codigo, tipo, valor, hasta, max, usos FROM ac_cupones WHERE business_id = ? AND curso_id = ? ORDER BY codigo', c.businessId, k.id),
       inscritosCurso(c, k.id, cfg),
       k.area_id ? one(c.env, 'SELECT nombre, color FROM ac_areas WHERE id = ? AND business_id = ?', k.area_id, c.businessId) : null,
@@ -184,7 +189,7 @@ export function routes(r) {
     const estado = !k.inicio ? 'Sin programar' : hoy < k.inicio ? 'Por iniciar' : fin && hoy > fin ? 'Finalizado' : 'En curso';
     return json({ curso: { ...k, horario: parse(k.horario, []), plan: parse(k.plan, []), area: area?.nombre || null, profesional: prof?.nombre || null, estado, fin,
       dictadas: fechas.filter((f) => f < hoy).length },
-      clases: clases.map((x) => ({ ...x, metodos: parse(x.metodos, []) })), evaluaciones: evs.map((e) => ({ ...e, examen: parse(e.examen, null) })), cupones, inscritos, config: { escala: cfg.escala, notaMin: cfg.notaMin, asisMin: cfg.asisMin } });
+      clases: clases.map((x) => ({ ...x, metodos: parse(x.metodos, []) })), evaluaciones: evs.map((e) => ({ ...e, examen: parse(e.examen, null), materiales: parse(e.materiales, []) })), cupones, inscritos, config: { escala: cfg.escala, notaMin: cfg.notaMin, asisMin: cfg.asisMin } });
   });
 
   r.patch('/api/cursos/:id/clases/:n', `tenant:${MOD}`, async (c) => {

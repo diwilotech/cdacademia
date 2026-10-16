@@ -35,6 +35,7 @@ for (const [nombre, peso] of [['Teórico', 30], ['Práctica en modelo', 40], ['F
 const evCejas = [];
 for (const [nombre, peso] of [['Diseño de cejas', 50], ['Final', 50]]) evCejas.push(await api('/api/cursos/evaluaciones', 'POST', { curso_id: cursoCejas.id, nombre, peso }));
 
+await api('/api/material/ejemplos', 'POST', {});
 await api('/api/cursos/cupones', 'POST', { curso_id: cursoAuto.id, codigo: 'AMIGA10', tipo: 'pct', valor: 10, max: 5 });
 await api('/api/cursos/cupones', 'POST', { curso_id: cursoCejas.id, codigo: 'BECA100', tipo: 'valor', valor: 100000, max: 3 });
 

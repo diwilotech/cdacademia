@@ -124,8 +124,10 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
 
   /* ---------- editor de preguntas de una evaluación ---------- */
   // ev = { id, nombre, examen: {instrucciones, preguntas}|null }  ·  ctx = { curso, area, nivel, temas } para el prompt de la IA
-  function editarPreguntas(ev, ctx, done) {
+  async function editarPreguntas(ev, ctx, done) {
     let preg = structuredClone(ev.examen?.preguntas || []);
+    const biblioteca = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
+    const elegidos = new Set((ev.materiales || []).map(Number));
     const nueva = (t) => {
       const q = { id: `q${uid()}`, tipo: t, enunciado: '', puntos: 1 };
       if (t === 'unica' || t === 'multiple') q.opciones = [{ id: `o${uid()}`, texto: '', ok: false }, { id: `o${uid()}`, texto: '', ok: false }];
@@ -135,27 +137,20 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
     };
     const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Preguntas · ${esc(ev.nombre || 'Evaluación')}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body">
+        <div class="border rounded p-3 mb-3" data-mats><div class="fw-semibold mb-1"><i class="bi bi-journal-bookmark me-1"></i>Material del examen</div>
+          <p class="small text-body-secondary mb-2">Marca los materiales de la biblioteca sobre los que trata este examen.</p>
+          <div class="row g-1" data-mats-lista></div></div>
         <label class="form-label small mb-1" for="ex_instr">Instrucciones <span class="text-body-secondary">(opcional)</span></label><textarea class="form-control mb-3" id="ex_instr" rows="2" maxlength="1000">${esc(ev.examen?.instrucciones || '')}</textarea>
         <div class="d-flex flex-column gap-2" data-lista></div>
         <div class="d-flex flex-wrap gap-2 mt-2" data-add>${Object.entries(TIPOS).map(([t, n]) => `<button type="button" class="btn btn-sm btn-outline-secondary" data-nueva="${t}"><i class="bi bi-plus-lg me-1"></i>${esc(n.split(' (')[0])}</button>`).join('')}</div>
-        <details class="mt-3"><summary class="fw-semibold">Crear las preguntas desde un archivo JSON</summary>
-          <div class="dw-paso mt-2">
-            <p class="small text-body-secondary mb-2">1) Escribe el tema y la cantidad, copia el prompt y pégalo en tu IA (ChatGPT, Claude, Gemini…). 2) Pega aquí el JSON que te devuelva y pulsa Importar. Si el JSON no cumple el formato, no se importa nada y se explica qué corregir.</p>
-            <div class="row g-2 mb-2" data-ia>
-              <div class="col-md-7"><input class="form-control form-control-sm" data-tema placeholder="Tema o texto del que salen las preguntas (opcional)" aria-label="Tema"></div>
-              <div class="col-5 col-md-2"><input class="form-control form-control-sm" type="number" min="1" max="50" value="10" data-cant aria-label="Cantidad de preguntas"></div>
-              <div class="col-7 col-md-3"><button type="button" class="btn btn-sm btn-outline-primary w-100" data-prompt><i class="bi bi-clipboard me-1"></i>Copiar prompt para la IA</button></div>
-              <div class="col-12 small">${Object.entries(TIPOS_IA).map(([t, n]) => `<label class="me-3"><input type="checkbox" class="form-check-input me-1" value="${t}" ${['unica', 'multiple', 'vf'].includes(t) ? 'checked' : ''}>${esc(n.split(' (')[0])}</label>`).join('')}</div></div>
-            <textarea class="form-control font-monospace small" rows="6" data-json placeholder='{"preguntas":[{"tipo":"unica","enunciado":"…","opciones":[{"texto":"…","correcta":true},{"texto":"…"}]}]}' aria-label="JSON de preguntas"></textarea>
-            <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-              <button type="button" class="btn btn-sm btn-primary" data-importar>Importar preguntas</button>
-              <label class="btn btn-sm btn-outline-secondary mb-0">Subir archivo .json<input type="file" accept=".json,application/json" hidden data-archivo></label>
-              <button type="button" class="btn btn-sm btn-link" data-ejemplo><i class="bi bi-download me-1"></i>Descargar ejemplo</button>
-              <label class="small ms-auto"><input type="checkbox" class="form-check-input me-1" data-reemplaza>Reemplazar las que ya hay</label></div>
-            <div class="small mt-2" data-msg></div></div></details>
         <div class="small text-danger mt-2" data-err></div></div>
       <div class="modal-footer border-0 pt-0 justify-content-between"><button type="button" class="btn btn-outline-secondary btn-sm" data-copiar><i class="bi bi-clipboard me-1"></i>Copiar preguntas</button>
         <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar preguntas</button></span></div></form>`, { size: 'modal-xl modal-dialog-scrollable' });
+    // Material de la biblioteca: primero los marcados y los del área del curso.
+    el.querySelector('[data-mats-lista]').innerHTML = biblioteca.length
+      ? [...biblioteca].sort((x, y) => (elegidos.has(y.id) - elegidos.has(x.id)) || ((y.area_id === ctx.areaId) - (x.area_id === ctx.areaId)) || x.titulo.localeCompare(y.titulo))
+        .map((x) => `<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="em${x.id}" data-mat="${x.id}" ${elegidos.has(x.id) ? 'checked' : ''}><label class="form-check-label small" for="em${x.id}">${esc(x.titulo)}${x.nivel ? ` <span class="text-body-secondary">· ${esc(x.nivel)}</span>` : ''}</label></div></div>`).join('')
+      : '<div class="col-12 small text-body-secondary">Aún no hay materiales. Créalos en Material (o usa «Cargar ejemplos»).</div>';
     const lista = el.querySelector('[data-lista]'), err = el.querySelector('[data-err]'), instr = el.querySelector('#ex_instr');
     const pintar = () => {
       lista.innerHTML = preg.map((q, k) => `<div class="border rounded p-3" data-k="${k}"><div class="d-flex gap-2 align-items-start"><span class="badge text-bg-primary mt-1">${k + 1}</span>
@@ -174,7 +169,7 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
         <div class="btn-group-vertical btn-group-sm"><button type="button" class="btn btn-outline-secondary" data-up ${k === 0 ? 'disabled' : ''} title="Subir" aria-label="Subir"><i class="bi bi-arrow-up"></i></button>
           <button type="button" class="btn btn-outline-secondary" data-down ${k === preg.length - 1 ? 'disabled' : ''} title="Bajar" aria-label="Bajar"><i class="bi bi-arrow-down"></i></button>
           <button type="button" class="btn btn-outline-danger" data-delq title="Quitar pregunta" aria-label="Quitar pregunta"><i class="bi bi-trash"></i></button></div></div></div>`).join('')
-        || '<div class="small text-body-secondary border rounded p-3 text-center">Sin preguntas. Agrega la primera con los botones de abajo, o impórtalas desde un JSON.</div>';
+        || '<div class="small text-body-secondary border rounded p-3 text-center">Sin preguntas. Agrega la primera con los botones de abajo.</div>';
     };
     pintar();
     el.querySelector('[data-add]').addEventListener('click', (e) => { const b = e.target.closest('[data-nueva]'); if (b) { preg.push(nueva(b.dataset.nueva)); pintar(); } });
@@ -204,35 +199,9 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
       else return;
       pintar();
     });
-    // IA / JSON
-    const datosIa = () => {
-      const tipos = [...el.querySelectorAll('[data-ia] input[type=checkbox]:checked')].map((i) => i.value);
-      return { tema: el.querySelector('[data-tema]').value, cantidad: Math.max(1, Math.min(50, +el.querySelector('[data-cant]').value || 10)), tipos: tipos.length ? tipos : ['unica'] };
-    };
-    el.querySelector('[data-prompt]').addEventListener('click', () => copiar(promptIA(datosIa(), { ...ctx, evaluacion: ev.nombre }), 'Prompt copiado: pégalo en tu IA y luego trae aquí el JSON que te devuelva'));
+    // Copiar las preguntas (para pasarlas a una IA, por ejemplo)
     el.querySelector('[data-copiar]').addEventListener('click', () => copiar(textoPreguntas({ instrucciones: instr.value, preguntas: preg }), 'Preguntas copiadas (con el aviso de no resolver el examen)'));
-    el.querySelector('[data-ejemplo]').addEventListener('click', () => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([JSON.stringify(EJEMPLO, null, 2)], { type: 'application/json' }));
-      a.download = 'ejemplo-examen.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    });
-    const importar = () => {
-      const msg = el.querySelector('[data-msg]'), txt = el.querySelector('[data-json]').value.trim();
-      const mal = (t) => { msg.className = 'small text-danger mt-2'; msg.innerHTML = t; };
-      if (!txt) { mal('Pega el JSON o sube el archivo.'); return; }
-      let datos; try { datos = JSON.parse(txt); } catch (x) { mal(`El JSON no es válido: ${esc(x.message)}`); return; }
-      const lis = Array.isArray(datos) ? datos : datos.preguntas;
-      if (!Array.isArray(lis) || !lis.length) { mal('No encontré la lista «preguntas». Descarga el ejemplo para ver el formato.'); return; }
-      const nuevas = [], errores = [];
-      lis.forEach((s, i) => { const r = preguntaDesdeJSON(s || {}, i); if (r.error) errores.push(r.error); else nuevas.push(r.q); });
-      if (errores.length) { mal(`No se importó nada. Corrige:<ul class="mb-0">${errores.slice(0, 8).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${errores.length > 8 ? `…y ${errores.length - 8} más` : ''}`); return; }
-      preg = el.querySelector('[data-reemplaza]').checked ? nuevas : [...preg, ...nuevas];
-      if (!Array.isArray(datos) && datos.instrucciones && !instr.value.trim()) instr.value = String(datos.instrucciones).slice(0, 300);
-      pintar(); el.querySelector('[data-json]').value = '';
-      msg.className = 'small text-success mt-2'; msg.textContent = `${nuevas.length} ${nuevas.length === 1 ? 'pregunta importada' : 'preguntas importadas'}. Revísalas y pulsa «Guardar preguntas».`;
-    };
-    el.querySelector('[data-importar]').addEventListener('click', importar);
-    el.querySelector('[data-archivo]').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = new FileReader(); r.onload = () => { el.querySelector('[data-json]').value = r.result; importar(); }; r.readAsText(f); });
+
     el.querySelector('form').onsubmit = async (e) => {
       e.preventDefault(); err.textContent = '';
       for (const [k, q] of preg.entries()) {
@@ -245,7 +214,7 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
         if (q.tipo === 'corta' && !String(q.respuesta || '').trim()) { err.textContent = `Escribe la respuesta aceptada de la pregunta ${k + 1}`; return; }
       }
       try {
-        await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { examen: preg.length ? JSON.stringify({ instrucciones: instr.value.trim(), preguntas: preg }) : '', tipo: 'multiple' } });
+        await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { examen: preg.length ? JSON.stringify({ instrucciones: instr.value.trim(), preguntas: preg }) : '', tipo: 'multiple', materiales: [...el.querySelectorAll('[data-mat]:checked')].map((x) => +x.dataset.mat) } });
         m.hide(); toast('Preguntas guardadas'); done?.();
       } catch (x) { err.textContent = x.message; }
     };

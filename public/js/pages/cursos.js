@@ -397,13 +397,13 @@ DW.ready.then(async (me) => {
         { k: 'tipo', label: 'Tipo', type: 'select', options: [['examen', 'Examen (foto o PDF de cada estudiante)'], ['multiple', 'Selección múltiple (preguntas en la app)']] },
         { k: 'clase_n', label: 'En la clase', type: 'select', options: [['', '—'], ...D.clases.map((c) => [c.n, `Clase ${c.n}${c.fecha ? ` · ${C.day(c.fecha)}` : ''}`])] }],
       columns: [{ label: 'Evaluación', main: true, html: (r) => esc(r.nombre) }, { label: 'Peso', html: (r) => `${r.peso}%` }, { label: 'Clase', html: (r) => (r.clase_n ? `Clase ${r.clase_n}` : '—') },
-        { label: 'Tipo', html: (r) => { const n = preguntasDe(r).length; return r.tipo === 'multiple' ? `Selección múltiple<div>${n ? C.chip('ok', `Creado · ${n} ${n === 1 ? 'pregunta' : 'preguntas'}`) : C.chip('soon', 'Por crear')}</div>` : 'Examen<div class="small text-body-secondary">se sube en Notas</div>'; } }],
+        { label: 'Tipo', html: (r) => { const n = preguntasDe(r).length; const nm = (parseEx(r.materiales) || []).length; return r.tipo === 'multiple' ? `Selección múltiple<div>${n ? C.chip('ok', `Creado · ${n} ${n === 1 ? 'pregunta' : 'preguntas'}`) : C.chip('soon', 'Por crear')}</div><div class="small text-body-secondary">${nm ? `Sobre ${nm} ${nm === 1 ? 'material' : 'materiales'}` : 'Sin material asignado'}</div>` : 'Examen<div class="small text-body-secondary">se sube en Notas</div>'; } }],
       rowActions: (r) => (r.tipo === 'multiple' && !RO ? `<button class="btn btn-sm ${preguntasDe(r).length ? 'btn-outline-secondary' : 'btn-primary'}" data-act="preguntas"><i class="bi bi-card-checklist me-1"></i>${preguntasDe(r).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : ''),
       onAction: async (a, r) => {
         if (a !== 'preguntas') return;
         const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
         const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
-        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen) }, { curso: k.nombre, area: k.area, nivel: k.nivel, temas }, () => V.reload());
+        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen), materiales: parseEx(r.materiales) || [] }, { curso: k.nombre, area: k.area, areaId: k.area_id, nivel: k.nivel, temas }, () => V.reload());
       } }).load();
     C.table({ el: $('[data-cup]', view), base: '/api/cursos', entity: 'cupones', title: 'cupón', newText: 'Nuevo cupón', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ticket-perforated', empty: 'Sin cupones.',
       fields: [{ k: 'codigo', label: 'Código', required: true, placeholder: 'AMIGA10' }, { k: 'tipo', label: 'Tipo', type: 'select', options: [['pct', 'Porcentaje'], ['valor', 'Valor fijo']] },
@@ -436,7 +436,7 @@ DW.ready.then(async (me) => {
         const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
         const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
         m.hide();
-        AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen }, { curso: k.nombre, area: k.area, nivel: k.nivel, temas }, () => V.reload());
+        AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen, materiales: ev.materiales }, { curso: k.nombre, area: k.area, areaId: k.area_id, nivel: k.nivel, temas }, () => V.reload());
       } catch (x) { err.textContent = x.message; }
     });
     f.onsubmit = async (e) => {

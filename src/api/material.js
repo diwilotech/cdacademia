@@ -6,6 +6,7 @@ import { json, HttpError } from '../lib/http.js';
 import { crud, one, all } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { parse } from '../lib/academia.js';
+import { MATERIALES_EJEMPLO } from '../lib/material-ejemplo.js';
 
 const MOD = 'material';
 const MAX = 20 * 1024 * 1024;
@@ -59,6 +60,17 @@ export const ENTITIES = {
 
 export function routes(r) {
   crud(r, { base: '/api/material', modulo: MOD, entities: ENTITIES });
+  // Carga la biblioteca de ejemplo (los que ya existan por título no se repiten). Solo propietario y administradores.
+  r.post('/api/material/ejemplos', `manager:${MOD}`, async (c) => {
+    const areas = await all(c.env, 'SELECT id, nombre FROM ac_areas WHERE business_id = ?', c.businessId);
+    const tengo = new Set((await all(c.env, 'SELECT titulo FROM ac_material WHERE business_id = ?', c.businessId)).map((m) => m.titulo));
+    const t = Date.now();
+    const nuevos = MATERIALES_EJEMPLO.filter((m) => !tengo.has(m.titulo));
+    if (nuevos.length) await c.env.DB.batch(nuevos.map((m) => c.env.DB.prepare('INSERT INTO ac_material (business_id, titulo, area_id, nivel, descripcion, bloques, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .bind(c.businessId, m.titulo, areas.find((a) => a.nombre.toLowerCase() === (m.area || '').toLowerCase())?.id ?? null, m.nivel, m.descripcion, JSON.stringify(m.bloques), t, t)));
+    await audit(c, `Cargó ${nuevos.length} materiales de ejemplo`, { modulo: MOD });
+    return json({ creados: nuevos.length }, 201);
+  });
   r.post('/api/material/archivos', `tenant:${MOD}`, async (c) => {
     if (!c.env.FILES) throw new HttpError(501, 'Esta app no tiene almacenamiento de archivos configurado');
     if (Number(c.req.headers.get('content-length') || 0) > MAX) throw new HttpError(413, 'El archivo supera los 20 MB');

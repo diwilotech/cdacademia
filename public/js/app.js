@@ -45,7 +45,7 @@
     const el = document.createElement('div');
     el.className = 'modal fade';
     el.tabIndex = -1;
-    el.innerHTML = `<div class="modal-dialog modal-dialog-centered ${size}"><div class="modal-content">${html}</div></div>`;
+    el.innerHTML = `<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable ${size}"><div class="modal-content">${html}</div></div>`;
     document.body.appendChild(el);
     const m = new bootstrap.Modal(el);
     el.addEventListener('hidden.bs.modal', () => el.remove());

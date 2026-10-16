@@ -8,6 +8,7 @@ import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { getConfig, estadoCuotas } from '../lib/academia.js';
+import { movimientoFinanzas } from '../lib/central.js';
 
 const MOD = 'cuotas';
 const METODOS = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Bre-B', 'Otro'];
@@ -47,7 +48,8 @@ export async function registrarPago(c, b) {
   const res = await c.env.DB.prepare('INSERT INTO ac_pagos (business_id, num, inscripcion_id, valor, metodo, concepto, fecha, tipo, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(c.businessId, num, ins.id, valor, metodo, cast('concepto', 'text', b.concepto) || (tipo === 'reposicion' ? 'Reposición de clase' : 'Abono a cuotas'), fecha, tipo, c.session.user_id, t, t).run();
   await audit(c, `Registró el pago N.º ${num} de ${ins.nombre} por ${pesos(valor)} (${ins.curso})`, { modulo: MOD });
-  return { id: res.meta.last_row_id, num };
+  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso });
+  return { id: res.meta.last_row_id, num, finanzas: fin.enviado };
 }
 
 function recibo(p, cfg, negocio) {
@@ -93,12 +95,27 @@ export function routes(r) {
   r.post('/api/cuotas/pagos', `tenant:${MOD}`, async (c) => json(await registrarPago(c, await readJson(c.req)), 201));
 
   r.post('/api/cuotas/pagos/:id/anular', `manager:${MOD}`, async (c) => {
-    const p = await one(c.env, 'SELECT num, valor FROM ac_pagos WHERE id = ? AND business_id = ? AND anulado = 0', Number(c.params.id), c.businessId);
+    const p = await one(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
+      JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
+      JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE p.id = ? AND p.business_id = ? AND p.anulado = 0`, Number(c.params.id), c.businessId);
     if (!p) throw new HttpError(404, 'Pago no encontrado o ya anulado');
     await c.env.DB.prepare('UPDATE ac_pagos SET anulado = 1, updated_at = ? WHERE id = ? AND business_id = ?').bind(now(), Number(c.params.id), c.businessId).run();
     await c.env.DB.prepare('UPDATE ac_reposiciones SET pago_id = NULL WHERE pago_id = ? AND business_id = ?').bind(Number(c.params.id), c.businessId).run();
     await audit(c, `Anuló el pago N.º ${p.num} por ${pesos(p.valor)}`, { modulo: MOD });
+    await movimientoFinanzas(c, { ...p, anulado: true, hoy: today() });
     return json({ ok: true });
+  });
+
+  // Manda a Finanzas los pagos de antes (no duplica los que ya están). Hasta 500 por vez.
+  r.post('/api/cuotas/sync-finanzas', `manager:${MOD}`, async (c) => {
+    const pagos = await all(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
+      JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
+      JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE p.business_id = ? AND p.anulado = 0 ORDER BY p.num LIMIT 500`, c.businessId);
+    let nuevos = 0, enviados = 0;
+    for (const p of pagos) { const r = await movimientoFinanzas(c, p); if (r.enviado) enviados++; if (r.nuevo) nuevos++; }
+    if (pagos.length && !enviados) throw new HttpError(409, 'Finanzas no está activo para este negocio o no respondió');
+    await audit(c, `Envió ${nuevos} pagos nuevos a Finanzas`, { modulo: MOD });
+    return json({ revisados: pagos.length, nuevos });
   });
 
   r.get('/api/cuotas/pagos/:id/recibo', `tenant:${MOD}`, async (c) => {

@@ -41,8 +41,12 @@ window.AC.cuotas = function (me) {
     }
     const hoy = C.todayCo();
     view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-2 align-items-center"><input class="form-control" data-q placeholder="Buscar estudiante, curso o N.º" style="max-width:260px" aria-label="Buscar">
-      <input class="form-control w-auto" type="date" data-desde value="${hoy.slice(0, 8)}01" aria-label="Desde"><input class="form-control w-auto" type="date" data-hasta value="${hoy}" aria-label="Hasta"></div>
+      <input class="form-control w-auto" type="date" data-desde value="${hoy.slice(0, 8)}01" aria-label="Desde"><input class="form-control w-auto" type="date" data-hasta value="${hoy}" aria-label="Hasta">
+        ${me.canManage && me.modules.some((m) => m.id === 'finanzas') ? '<button class="btn btn-outline-secondary ms-auto" data-sync title="Cada pago nuevo ya se envía solo; esto manda los de antes"><i class="bi bi-box-arrow-up-right me-1"></i>Enviar pagos a Finanzas</button>' : ''}</div>
       <div class="dw-grid dw-grid--kpi mb-3" data-kpis></div><div class="dw-card p-0 p-md-2" data-lista></div>`;
+    view.querySelector('[data-sync]')?.addEventListener('click', async () => {
+      try { const r = await api('/api/cuotas/sync-finanzas', { method: 'POST' }); toast(r.nuevos ? `${r.nuevos} pagos nuevos enviados a Finanzas` : 'Finanzas ya tenía todos los pagos'); } catch (x) { toast(x.message, false); }
+    });
     const load = async () => {
       const qs = new URLSearchParams({ q: view.querySelector('[data-q]').value.trim(), desde: view.querySelector('[data-desde]').value, hasta: view.querySelector('[data-hasta]').value });
       const { rows } = await api(`/api/cuotas/pagos?${qs}`);

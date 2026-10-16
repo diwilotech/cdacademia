@@ -63,6 +63,8 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
 
   // Pagos y recibo
   const p1 = await A.app('/api/cuotas/pagos', { method: 'POST', body: { inscripcion_id: m1.data.id, valor: 300000, metodo: 'Nequi' } });
+  const mov1 = (await A.app('/api/finanzas/movements?limit=200')).data.rows || [];
+  check('Finanzas: cada pago crea su ingreso automático', p1.data.finanzas === true && mov1.some((x) => x.kind === 'ingreso' && x.amount === 300000 && String(x.description).includes(`N.º ${p1.data.num}`)), JSON.stringify([p1.data, mov1.length]));
   check('Cuotas: registra un pago con consecutivo desde 100', p1.status === 201 && p1.data.num === 100, JSON.stringify(p1.data));
   const cu = (await A.app(`/api/matriculas/${m1.data.id}/cuotas`)).data;
   check('Cuotas: el pago cubre la inicial y abona a la cuota 1', cu.cuotas?.[0].estado === 'pagada' && cu.cuotas[1].abonado === 100000, JSON.stringify(cu.cuotas));
@@ -204,6 +206,10 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Cuotas inactivo: su API responde 403', (await A.app('/api/cuotas/cartera')).status === 403);
   await diwilo('PUT', `/businesses/${A.id}/modules`, { modules: [] });
   check('Cuotas: anula un pago', (await A.app(`/api/cuotas/pagos/${p1.data.id}/anular`, { method: 'POST' })).status === 200 && (await A.app(`/api/matriculas/${m1.data.id}/cuotas`)).data.pagado === 0);
+  const mov2 = (await A.app('/api/finanzas/movements?limit=200')).data.rows || [];
+  check('Finanzas: anular el pago registra el egreso que lo revierte', mov2.some((x) => x.kind === 'gasto' && x.amount === 300000 && String(x.description).includes('Anulación')), JSON.stringify(mov2.length));
+  const sy = await A.app('/api/cuotas/sync-finanzas', { method: 'POST' });
+  check('Finanzas: enviar los pagos de antes no duplica', sy.status === 200 && (await A.app('/api/finanzas/movements?limit=200')).data.rows.filter((x) => String(x.description).includes(`N.º ${p1.data.num}`) && x.kind === 'ingreso').length === 1, JSON.stringify(sy.data));
 
   // Módulos centrales (Diwilo Modulos): Finanzas y Marketing por RPC, con su página en el shell de la app
   check('Centrales: Finanzas responde desde Diwilo Modulos', (await A.app('/api/finanzas/summary')).status === 200);

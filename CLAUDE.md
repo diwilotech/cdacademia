@@ -10,6 +10,7 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 - Dirección fija por negocio: `/<slug>` (ej. `/demo`) es el ingreso y, con sesión, el panel (`public/staff/panel.html`): menú + un marco (`#dw-frame`) donde se carga cada módulo (`/staff/<modulo>.html`) sin cambiar la URL. Las páginas incrustadas las detecta `shell.js` (`window.top !== window.self`) y no pintan menú. Abrir `/staff/*` directo redirige a `/<slug>?go=…`. `wrangler.jsonc` → `run_worker_first` manda todo al Worker salvo css/js/íconos.
 - `src/index.js` rutas; `src/api/platform.js` + `src/lib/platform-rpc.js` = contrato con Diwilo (NO tocar).
 - `src/lib/central.js` = puente a Diwilo Modulos (binding `MODULOS`): `/api/finanzas|marketing/*`, `/staff/<modulo>.html`, `/m/*`, `/l/*`, `/validar/*`, `/c/*` (tarjetas), herramientas IA.
+- Pagos → Finanzas: `registrarPago`/anular llaman `movimientoFinanzas` (central.js) → `POST /api/finanzas/movements/externo` con `ref academia:pago:<N.º>` (no duplica); la anulación crea un egreso `…:anulado`. Botón «Enviar pagos a Finanzas» en Pagos para los de antes.
 - `modulos.app.json` (`"centrales": ["finanzas","marketing"]`). Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.
 - Turnstile: `TURNSTILE_SITE_KEY` en wrangler, secreto `TURNSTILE_SECRET_KEY`.
 

@@ -287,3 +287,7 @@ body.dw-embed .dw-readonly { top: 0; }
 .dw-mes td:not(.abierto) .dw-ev:nth-of-type(n+4) { display: none; }
 .dw-mas { font-size: .72rem; }
 @media (max-width: 767.98px) { .dw-mes td { height: auto; } .dw-mes td.vacio { display: none; } .dw-mes td::before { content: attr(data-dia); display: block; font-weight: 600; font-size: .78rem; } .dw-mes-n { display: none !important; } .dw-ev--mini { white-space: normal; } }
+
+/* Ventanas con formulario: el cuerpo se desplaza (slider) y el encabezado y los botones quedan fijos */
+.modal-dialog-scrollable .modal-content > form { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; }
+.modal-dialog-scrollable .modal-content > form > .modal-body { overflow-y: auto; }

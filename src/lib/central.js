@@ -24,6 +24,25 @@ async function ctxOf(c) {
   };
 }
 
+// Cada pago de la academia se vuelve un ingreso en Finanzas (y la anulación, un egreso que lo revierte), sin duplicarse (ref).
+// Es un efecto automático: se hace con permisos de titular y nunca hace fallar el pago si Finanzas no responde o no está activo.
+export async function movimientoFinanzas(c, p) {
+  try {
+    if (!CENTRALES.includes('finanzas') || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas') || !c.env.MODULOS) return { enviado: false };
+    const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+    const anulado = !!p.anulado;
+    const body = {
+      ref: `academia:pago:${p.num}${anulado ? ':anulado' : ''}`, kind: anulado ? 'gasto' : 'ingreso', date: anulado ? (p.hoy || p.fecha) : p.fecha, amount: p.valor,
+      category: anulado ? 'Anulación de recibos' : p.tipo === 'reposicion' ? 'Reposiciones' : 'Matrículas y cuotas',
+      description: `${anulado ? 'Anulación del recibo' : 'Recibo'} N.º ${p.num} · ${p.estudiante || ''} · ${p.curso || ''}${p.metodo ? ` (${p.metodo})` : ''}`.slice(0, 300),
+      counterparty: p.estudiante || null, centro_costo: p.curso || null,
+    };
+    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/movements/externo', body: JSON.stringify(body) });
+    await saveAudit(c, r.audit);
+    return { enviado: r.status < 300, nuevo: r.status === 201 };
+  } catch (x) { console.error('ingreso en Finanzas', x.message); return { enviado: false }; }
+}
+
 // Escribe en la bitácora del negocio lo que hizo el módulo central.
 async function saveAudit(c, entries = []) {
   if (!entries.length) return;

@@ -138,19 +138,26 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
     const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Preguntas · ${esc(ev.nombre || 'Evaluación')}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body">
         <div class="border rounded p-3 mb-3" data-mats><div class="fw-semibold mb-1"><i class="bi bi-journal-bookmark me-1"></i>Material del examen</div>
-          <p class="small text-body-secondary mb-2">Marca los materiales de la biblioteca sobre los que trata este examen.</p>
-          <div class="row g-1" data-mats-lista></div></div>
+          <p class="small text-body-secondary mb-2">Por defecto el examen es de un solo material. Si quieres, une más materiales en el mismo examen; otros exámenes pueden usar el mismo material, o dejarlo sin material.</p>
+          <div class="d-grid gap-2" data-mats-lista></div>
+          <button type="button" class="btn btn-sm btn-link px-0 mt-1" data-mat-add><i class="bi bi-plus-lg me-1"></i>Unir otro material</button></div>
         <label class="form-label small mb-1" for="ex_instr">Instrucciones <span class="text-body-secondary">(opcional)</span></label><textarea class="form-control mb-3" id="ex_instr" rows="2" maxlength="1000">${esc(ev.examen?.instrucciones || '')}</textarea>
         <div class="d-flex flex-column gap-2" data-lista></div>
         <div class="d-flex flex-wrap gap-2 mt-2" data-add>${Object.entries(TIPOS).map(([t, n]) => `<button type="button" class="btn btn-sm btn-outline-secondary" data-nueva="${t}"><i class="bi bi-plus-lg me-1"></i>${esc(n.split(' (')[0])}</button>`).join('')}</div>
         <div class="small text-danger mt-2" data-err></div></div>
       <div class="modal-footer border-0 pt-0 justify-content-between"><button type="button" class="btn btn-outline-secondary btn-sm" data-copiar><i class="bi bi-clipboard me-1"></i>Copiar preguntas</button>
         <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar preguntas</button></span></div></form>`, { size: 'modal-xl modal-dialog-scrollable' });
-    // Material de la biblioteca: primero los marcados y los del área del curso.
-    el.querySelector('[data-mats-lista]').innerHTML = biblioteca.length
-      ? [...biblioteca].sort((x, y) => (elegidos.has(y.id) - elegidos.has(x.id)) || ((y.area_id === ctx.areaId) - (x.area_id === ctx.areaId)) || x.titulo.localeCompare(y.titulo))
-        .map((x) => `<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="em${x.id}" data-mat="${x.id}" ${elegidos.has(x.id) ? 'checked' : ''}><label class="form-check-label small" for="em${x.id}">${esc(x.titulo)}${x.nivel ? ` <span class="text-body-secondary">· ${esc(x.nivel)}</span>` : ''}</label></div></div>`).join('')
-      : '<div class="col-12 small text-body-secondary">Aún no hay materiales. Créalos en Material (o usa «Cargar ejemplos»).</div>';
+    // Material: un selector por defecto (con el sugerido: el de la clase de esta evaluación); «Unir otro material» agrega selectores.
+    const ordenada = [...biblioteca].sort((x, y) => ((y.area_id === ctx.areaId) - (x.area_id === ctx.areaId)) || x.titulo.localeCompare(y.titulo));
+    const matsBox = el.querySelector('[data-mats-lista]');
+    const opciones = (sel) => `<option value="">— Sin material —</option>${ordenada.map((x) => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.titulo)}${x.nivel ? ` · ${esc(x.nivel)}` : ''}</option>`).join('')}`;
+    const filaMat = (sel, quitar) => `<div class="input-group input-group-sm" data-matrow><select class="form-select" data-mat aria-label="Material">${opciones(sel)}</select>${quitar ? '<button type="button" class="btn btn-outline-danger" data-mat-del title="Quitar este material" aria-label="Quitar este material"><i class="bi bi-x-lg"></i></button>' : ''}</div>`;
+    const inicial = [...elegidos].length ? [...elegidos] : (ctx.materialSugerido && biblioteca.some((x) => x.id === ctx.materialSugerido) ? [ctx.materialSugerido] : [null]);
+    matsBox.innerHTML = inicial.map((id, i) => filaMat(id, i > 0)).join('');
+    if (!biblioteca.length) matsBox.insertAdjacentHTML('afterend', '<div class="small text-body-secondary">Aún no hay materiales. Créalos en Material (o usa «Cargar ejemplos»).</div>');
+    el.querySelector('[data-mat-add]').addEventListener('click', () => matsBox.insertAdjacentHTML('beforeend', filaMat(null, true)));
+    matsBox.addEventListener('click', (e) => { e.target.closest('[data-mat-del]')?.closest('[data-matrow]').remove(); });
+    const materialesElegidos = () => [...new Set([...el.querySelectorAll('select[data-mat]')].map((x) => +x.value).filter(Boolean))];
     const lista = el.querySelector('[data-lista]'), err = el.querySelector('[data-err]'), instr = el.querySelector('#ex_instr');
     const pintar = () => {
       lista.innerHTML = preg.map((q, k) => `<div class="border rounded p-3" data-k="${k}"><div class="d-flex gap-2 align-items-start"><span class="badge text-bg-primary mt-1">${k + 1}</span>
@@ -214,7 +221,7 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
         if (q.tipo === 'corta' && !String(q.respuesta || '').trim()) { err.textContent = `Escribe la respuesta aceptada de la pregunta ${k + 1}`; return; }
       }
       try {
-        await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { examen: preg.length ? JSON.stringify({ instrucciones: instr.value.trim(), preguntas: preg }) : '', tipo: 'multiple', materiales: [...el.querySelectorAll('[data-mat]:checked')].map((x) => +x.dataset.mat) } });
+        await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { examen: preg.length ? JSON.stringify({ instrucciones: instr.value.trim(), preguntas: preg }) : '', tipo: 'multiple', materiales: materialesElegidos() } });
         m.hide(); toast('Preguntas guardadas'); done?.();
       } catch (x) { err.textContent = x.message; }
     };

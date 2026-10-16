@@ -403,7 +403,7 @@ DW.ready.then(async (me) => {
         if (a !== 'preguntas') return;
         const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
         const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
-        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen), materiales: parseEx(r.materiales) || [] }, { curso: k.nombre, area: k.area, areaId: k.area_id, nivel: k.nivel, temas }, () => V.reload());
+        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen), materiales: parseEx(r.materiales) || [] }, { curso: k.nombre, area: k.area, areaId: k.area_id, materialSugerido: D.clases.find((c) => c.n === r.clase_n)?.material_id, nivel: k.nivel, temas }, () => V.reload());
       } }).load();
     C.table({ el: $('[data-cup]', view), base: '/api/cursos', entity: 'cupones', title: 'cupón', newText: 'Nuevo cupón', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ticket-perforated', empty: 'Sin cupones.',
       fields: [{ k: 'codigo', label: 'Código', required: true, placeholder: 'AMIGA10' }, { k: 'tipo', label: 'Tipo', type: 'select', options: [['pct', 'Porcentaje'], ['valor', 'Valor fijo']] },
@@ -436,7 +436,7 @@ DW.ready.then(async (me) => {
         const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
         const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
         m.hide();
-        AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen, materiales: ev.materiales }, { curso: k.nombre, area: k.area, areaId: k.area_id, nivel: k.nivel, temas }, () => V.reload());
+        AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen, materiales: ev.materiales }, { curso: k.nombre, area: k.area, areaId: k.area_id, materialSugerido: D.clases.find((c) => c.n === ev.clase_n)?.material_id, nivel: k.nivel, temas }, () => V.reload());
       } catch (x) { err.textContent = x.message; }
     });
     f.onsubmit = async (e) => {

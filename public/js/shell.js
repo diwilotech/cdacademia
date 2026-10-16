@@ -83,7 +83,7 @@
       <aside class="offcanvas-lg offcanvas-start dw-side" tabindex="-1" id="dwSide" aria-label="Menú">
         <div class="offcanvas-header border-bottom"><span class="fw-bold">${esc(me.app.nombre)}</span><button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#dwSide" aria-label="Cerrar"></button></div>
         <div class="offcanvas-body"><nav><ul class="dw-nav">${mods.slice(0, -BASE_END.length).map(link).join('')}</ul></nav></div>
-        <div class="dw-side__foot"><ul class="dw-nav dw-nav--foot">${BASE_END.map(link).join('')}</ul><button class="dw-iconbtn dw-collapse" data-mini title="Contraer o expandir el menú" aria-label="Contraer o expandir el menú"><i class="bi bi-chevron-double-left"></i></button></div>
+        <div class="dw-side__foot"><ul class="dw-nav dw-nav--foot">${BASE_END.map(link).join('')}</ul><button class="dw-iconbtn w-100 dw-collapse" data-mini title="Contraer o expandir el menú" aria-label="Contraer o expandir el menú"><i class="bi bi-chevron-double-left"></i></button></div>
       </aside>
       <nav class="dw-bottom" aria-label="Menú principal">
         ${bottom.map((m) => `<a data-mod="${esc(m.id)}" href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}"><i class="bi ${esc(m.icono)}"></i><span>${esc(m.nombre)}</span></a>`).join('')}

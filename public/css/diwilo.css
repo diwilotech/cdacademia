@@ -104,7 +104,7 @@ body.dw { background: var(--dw-fondo); font-family: Inter, system-ui, -apple-sys
 @media (min-width: 992px) {
   .dw-side { position: fixed; top: var(--dw-top-h); bottom: 0; left: 0; width: var(--dw-side-w); border-right: 1px solid var(--dw-borde); display: flex; flex-direction: column; z-index: 1020; transition: width .2s; }
   .dw-side .offcanvas-body { flex: 1; overflow-y: auto; padding: 0; display: block; }
-  .dw-collapse { display: grid; margin: 0 10px; }
+  .dw-collapse { display: grid; margin: 0 10px; width: calc(100% - 20px) !important; }
   .dw-main { margin-left: var(--dw-side-w); padding: calc(var(--dw-top-h) + 28px) 32px 40px; max-width: none; }
   .dw-bottom, .dw-mobile-only { display: none !important; }
   /* barra lateral contraída: solo íconos */

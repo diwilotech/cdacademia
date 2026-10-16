@@ -345,7 +345,11 @@ DW.ready.then(async (me) => {
       return;
     }
     if (t === 'notas') {
-      if (!D.evaluaciones.length) { view.innerHTML = empty('bi-star', me.canManage ? 'Crea la primera evaluación del curso aquí abajo.' : 'El curso aún no tiene evaluaciones.'); montarEvaluaciones(view); return; }
+      if (!D.evaluaciones.length) {
+        view.innerHTML = empty('bi-star', MANAGE ? 'Crea la primera evaluación del curso.' : 'El curso aún no tiene evaluaciones.') + (MANAGE ? '<div class="text-center mt-2"><button class="btn btn-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button></div>' : '');
+        view.querySelector('[data-nueva-ev]')?.addEventListener('click', () => editarEvaluacion(null));
+        return;
+      }
       const exStat = new Map(((await api(`/api/cursos/${id}/examenes`).catch(() => ({ rows: [] }))).rows).map((x) => [`${x.inscripcion_id}-${x.evaluacion_id}`, x]));
       const botonEx = (i, e) => {
         const x = exStat.get(`${i.id}-${e.id}`), n = e.examen?.preguntas?.length || 0;
@@ -355,9 +359,9 @@ DW.ready.then(async (me) => {
         }
         return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen="${e.id}" title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
       };
-      const act = activos(), pesoTotal = D.evaluaciones.reduce((a, e) => a + e.peso, 0) || 100;
-      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}
-          <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}</span></div>
+      const act = activos(), pesoTotal = D.evaluaciones.reduce((a, e) => a + e.peso, 0);
+      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
+          <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}${MANAGE && pesoTotal !== 100 ? ` · <span class="text-warning-emphasis fw-semibold">los pesos suman ${pesoTotal}%</span>` : ''}</span></div>
         ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
           ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}${RO || !me.canManage ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
           <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
@@ -366,12 +370,13 @@ DW.ready.then(async (me) => {
       const resumen = (tr) => {
         let suma = 0, pesos = 0;
         for (const e of D.evaluaciones) { const v = tr.querySelector(`[data-nota="${e.id}"]`).value; if (v !== '' && !Number.isNaN(+v)) { suma += +v * e.peso; pesos += e.peso; } }
-        const prom = pesos ? Math.round(suma / pesos * 100) / 100 : null, ev = Math.round(pesos / pesoTotal * 100);
+        const prom = pesos ? Math.round(suma / pesos * 100) / 100 : null, ev = Math.round(pesos / (pesoTotal || 100) * 100);
         tr.querySelector('[data-res]').innerHTML = `<div class="fw-semibold ${prom !== null && prom < D.config.notaMin ? 'text-danger' : ''}">${prom === null ? '—' : prom.toFixed(1)}</div><div class="small text-body-secondary">${ev}% evaluado</div>${C.meter(ev, 100)}`;
       };
       view.querySelectorAll('tbody tr').forEach(resumen);
       view.addEventListener('input', (e) => { const tr = e.target.closest('tr[data-ins]'); if (tr && e.target.dataset.nota !== undefined) resumen(tr); });
       view.addEventListener('click', async (e) => {
+        if (e.target.closest('[data-nueva-ev]')) return editarEvaluacion(null);
         const ed = e.target.closest('[data-editev]');
         if (ed) return editarEvaluacion(D.evaluaciones.find((x) => x.id === +ed.dataset.editev));
         const b = e.target.closest('[data-examen]');
@@ -391,7 +396,6 @@ DW.ready.then(async (me) => {
           await cargar(); toast(n ? 'Notas guardadas' : 'No había cambios'); V.reload();
         } catch (x) { toast(x.message, false); }
       });
-      montarEvaluaciones(view);
       return;
     }
     if (t === 'reposiciones') return AC.reposiciones(me, k.id).todo(view);
@@ -408,41 +412,25 @@ DW.ready.then(async (me) => {
     }
   });
 
-  // Evaluaciones del curso (crear, editar, borrar, preguntas): van al final de Notas, solo para quien configura.
-  function montarEvaluaciones(view) {
-    if (!MANAGE) return;
-    view.insertAdjacentHTML('beforeend', '<h2 class="h6 mt-4">Evaluaciones <span class="small text-body-secondary fw-normal">· los pesos deberían sumar 100%</span></h2><div data-ev></div>');
-    C.table({ el: $('[data-ev]', view), base: '/api/cursos', entity: 'evaluaciones', title: 'evaluación', newText: 'Nueva evaluación', fixed: { curso_id: k.id }, readOnly: RO, emptyIcon: 'bi-ui-checks', empty: 'Sin evaluaciones.',
-      fields: [{ k: 'nombre', label: 'Nombre', required: true, placeholder: 'Parcial, práctica final…' }, { k: 'peso', label: 'Peso (%)', type: 'int', required: true },
-        { k: 'tipo', label: 'Tipo', type: 'select', options: [['examen', 'Examen (foto o PDF de cada estudiante)'], ['multiple', 'Selección múltiple (preguntas en la app)']] },
-        { k: 'clase_n', label: 'En la clase', type: 'select', options: [['', '—'], ...D.clases.map((c) => [c.n, `Clase ${c.n}${c.fecha ? ` · ${C.day(c.fecha)}` : ''}`])] }],
-      columns: [{ label: 'Evaluación', main: true, html: (r) => esc(r.nombre) }, { label: 'Peso', html: (r) => `${r.peso}%` }, { label: 'Clase', html: (r) => (r.clase_n ? `Clase ${r.clase_n}` : '—') },
-        { label: 'Tipo', html: (r) => { const n = preguntasDe(r).length; const nm = (parseEx(r.materiales) || []).length; return r.tipo === 'multiple' ? `Selección múltiple<div>${n ? C.chip('ok', `Creado · ${n} ${n === 1 ? 'pregunta' : 'preguntas'}`) : C.chip('soon', 'Por crear')}</div><div class="small text-body-secondary">${nm ? `Sobre ${nm} ${nm === 1 ? 'material' : 'materiales'}` : 'Sin material asignado'}</div>` : 'Examen<div class="small text-body-secondary">se sube en Notas</div>'; } }],
-      rowActions: (r) => (r.tipo === 'multiple' && !RO ? `<button class="btn btn-sm ${preguntasDe(r).length ? 'btn-outline-secondary' : 'btn-primary'}" data-act="preguntas"><i class="bi bi-card-checklist me-1"></i>${preguntasDe(r).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : ''),
-      onAction: async (a, r) => {
-        if (a !== 'preguntas') return;
-        const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
-        const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
-        AC.examen.editarPreguntas({ id: r.id, nombre: r.nombre, examen: parseEx(r.examen), materiales: parseEx(r.materiales) || [] }, { curso: k.nombre, area: k.area, areaId: k.area_id, materialSugerido: D.clases.find((c) => c.n === r.clase_n)?.material_id, nivel: k.nivel, temas }, () => V.reload());
-      } }).load();
-  }
-
   // Editar una evaluación desde Notas: nombre, peso, clase y tipo (examen subido ⇄ selección múltiple) y sus preguntas.
   function editarEvaluacion(ev) {
-    const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Editar ${esc(ev.nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+    const nueva = !ev;
+    ev = ev || { nombre: '', peso: '', tipo: 'examen', clase_n: null, materiales: [] };
+    const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${nueva ? 'Nueva evaluación' : `Editar ${esc(ev.nombre)}`}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body"><div class="row g-2">
-        <div class="col-sm-8"><label class="form-label small mb-1" for="ev_n">Nombre</label><input class="form-control" id="ev_n" name="nombre" value="${esc(ev.nombre)}" required></div>
+        <div class="col-sm-8"><label class="form-label small mb-1" for="ev_n">Nombre</label><input class="form-control" id="ev_n" name="nombre" value="${esc(ev.nombre)}" placeholder="Parcial, práctica final…" required></div>
         <div class="col-sm-4"><label class="form-label small mb-1" for="ev_p">Peso (%)</label><input class="form-control" id="ev_p" name="peso" type="number" min="0" max="100" value="${ev.peso}" required></div>
+        <div class="col-12"><label class="form-label small mb-1" for="ev_c">En la clase</label><select class="form-select" id="ev_c" name="clase_n"><option value="">— Sin clase —</option>${D.clases.map((c) => `<option value="${c.n}" ${c.n === ev.clase_n ? 'selected' : ''}>Clase ${c.n}${c.fecha ? ` · ${C.day(c.fecha)}` : ''}</option>`).join('')}</select></div>
         <div class="col-12"><label class="form-label small mb-1" for="ev_t">Tipo de examen</label><select class="form-select" id="ev_t" name="tipo">
           <option value="examen" ${ev.tipo === 'multiple' ? '' : 'selected'}>Examen: se sube la foto o el PDF de cada estudiante</option>
           <option value="multiple" ${ev.tipo === 'multiple' ? 'selected' : ''}>Selección múltiple: preguntas dentro de la app</option></select>
-          <div class="form-text">Al cambiar el tipo no se borra lo ya cargado (archivos o respuestas); solo cambia cómo se califica de aquí en adelante.</div></div>
+          ${nueva ? '' : '<div class="form-text">Al cambiar el tipo no se borra lo ya cargado (archivos o respuestas); solo cambia cómo se califica de aquí en adelante.</div>'}</div>
       </div><div class="small text-danger mt-2" data-err></div></div>
-      <div class="modal-footer border-0 pt-0 justify-content-between"><span data-preg></span>
-        <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar</button></span></div></form>`);
+      <div class="modal-footer border-0 pt-0 justify-content-between"><span class="d-flex gap-2"><span data-preg></span>${nueva ? '' : '<button type="button" class="btn btn-outline-danger" data-del title="Borrar la evaluación"><i class="bi bi-trash"></i></button>'}</span>
+        <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">${nueva ? 'Crear' : 'Guardar'}</button></span></div></form>`);
     const f = el.querySelector('form'), err = el.querySelector('[data-err]');
     const preg = el.querySelector('[data-preg]');
-    const pinta = () => { preg.innerHTML = f.tipo.value === 'multiple' ? `<button type="button" class="btn btn-outline-secondary" data-preguntas><i class="bi bi-card-checklist me-1"></i>${preguntasDe(ev).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : ''; };
+    const pinta = () => { preg.innerHTML = !nueva && f.tipo.value === 'multiple' ? `<button type="button" class="btn btn-outline-secondary" data-preguntas><i class="bi bi-card-checklist me-1"></i>${preguntasDe(ev).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : (nueva && f.tipo.value === 'multiple' ? '<span class="small text-body-secondary align-self-center">Las preguntas se crean después de guardar.</span>' : ''); };
     pinta(); f.tipo.onchange = pinta;
     preg.addEventListener('click', async (e) => {
       if (!e.target.closest('[data-preguntas]')) return;
@@ -454,10 +442,18 @@ DW.ready.then(async (me) => {
         AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen, materiales: ev.materiales }, { curso: k.nombre, area: k.area, areaId: k.area_id, materialSugerido: D.clases.find((c) => c.n === ev.clase_n)?.material_id, nivel: k.nivel, temas }, () => V.reload());
       } catch (x) { err.textContent = x.message; }
     });
+    el.querySelector('[data-del]')?.addEventListener('click', async () => {
+      if (!(await confirm({ title: `¿Borrar «${ev.nombre}»?`, text: 'Se borran también las notas y los exámenes de esta evaluación.', ok: 'Borrar' }))) return;
+      try { await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'DELETE' }); m.hide(); toast('Evaluación borrada'); V.reload(); } catch (x) { err.textContent = x.message; }
+    });
     f.onsubmit = async (e) => {
       e.preventDefault();
-      try { await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { nombre: f.nombre.value, peso: +f.peso.value, tipo: f.tipo.value } }); m.hide(); toast('Evaluación guardada'); V.reload(); }
-      catch (x) { err.textContent = x.message; }
+      const body = { nombre: f.nombre.value, peso: +f.peso.value, tipo: f.tipo.value, clase_n: f.clase_n.value };
+      try {
+        if (nueva) await api('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k.id, ...body } });
+        else await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body });
+        m.hide(); toast(nueva ? 'Evaluación creada' : 'Evaluación guardada'); V.reload();
+      } catch (x) { err.textContent = x.message; }
     };
   }
 

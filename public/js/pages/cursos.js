@@ -40,12 +40,13 @@ DW.ready.then(async (me) => {
     const lbl = (id, t) => `<label class="form-label small mb-1" for="k_${id}">${t}</label>`;
     const cab = host ? '' : `<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${duplicar ? 'Duplicar curso para otro grupo' : k ? 'Editar curso' : 'Nuevo curso'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>`;
     const pie = host
-      ? `<div class="d-flex justify-content-between align-items-center mt-3"><span>${seccion === 'inicio' && k ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar curso</button>' : ''}</span>
+      ? `<div class="d-flex justify-content-between align-items-center mt-3" data-pie hidden><span>${seccion === 'inicio' && k ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar curso</button>' : ''}</span>
           <span><button type="button" class="btn btn-light" data-reset>Descartar cambios</button> <button class="btn btn-primary">Guardar</button></span></div>`
       : `<div class="modal-footer border-0 pt-0 justify-content-between"><span>${k && !duplicar ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar</button>' : ''}</span>
           <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar curso</button></span></div>`;
     const html = `<form>${cab}
-      <div class="${host ? '' : 'modal-body'}"><div class="d-flex flex-column gap-3">
+      ${host ? '<div class="d-flex justify-content-between align-items-center mb-2" data-barra><span class="small text-body-secondary"><i class="bi bi-lock me-1"></i>Bloqueado: pulsa Editar para cambiar los datos.</span><button type="button" class="btn btn-outline-primary btn-sm" data-editar-parte><i class="bi bi-pencil me-1"></i>Editar</button></div>' : ''}
+      <fieldset class="border-0 p-0 m-0" style="min-width:0" data-bloqueo ${host ? 'disabled' : ''}><div class="${host ? '' : 'modal-body'}"><div class="d-flex flex-column gap-3">
         <section class="dw-paso" ${oc('inicio')}><h3>${num(1)}Datos del curso</h3><div class="row g-2">
           <div class="col-md-8">${lbl('nombre', 'Título')}<input class="form-control" id="k_nombre" name="nombre" maxlength="120" value="${esc(c.nombre || '')}" required></div>
           <div class="col-md-4">${lbl('nivel', 'Nivel')}<select class="form-select" id="k_nivel" name="nivel"><option value="">—</option>${AC.NIVELES.map((n) => `<option ${c.nivel === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -82,7 +83,7 @@ DW.ready.then(async (me) => {
             <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-add-cup><i class="bi bi-plus-lg me-1"></i>Agregar cupón</button></h3>
           <div data-cups></div>
           <div class="form-text">Se escriben al matricular. Pueden ser un porcentaje o un valor fijo, con vencimiento y límite de usos.</div></section>
-      </div><div class="small text-danger mt-2" data-err></div></div>
+      </div><div class="small text-danger mt-2" data-err></div></div></fieldset>
       ${pie}</form>`;
     let el, m;
     if (host) { host.innerHTML = html; el = host; m = { hide() {} }; } else ({ el, m } = modal(html, { size: 'modal-xl modal-dialog-scrollable' }));
@@ -134,6 +135,8 @@ DW.ready.then(async (me) => {
     caja.addEventListener('input', (e) => { const r = e.target.closest('[data-i]'); if (r && e.target.dataset.k) calc.clases[+r.dataset.i][e.target.dataset.k] = e.target.value; });
     caja.addEventListener('click', async (e) => { if (e.target.closest('[data-revisar]')) { await refresh(true); } });
     if (ver('clases')) refresh(false);
+    // Desbloquear todo en modo edición
+    $('[data-editar-parte]', el)?.addEventListener('click', () => { $('[data-bloqueo]', el).disabled = false; $('[data-barra]', el).hidden = true; $('[data-pie]', el).hidden = false; });
     $('[data-reset]', el)?.addEventListener('click', () => done(cursoId));   // descartar = volver a cargar lo guardado
 
     /* --- módulos (material por clases) --- */
@@ -284,7 +287,7 @@ DW.ready.then(async (me) => {
     if (t === 'inicio') return editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'inicio', host: view });
     if (t === 'inscritos') {
       view.innerHTML = sub + (D.inscritos.length ? `<div class="dw-card p-0 p-md-2">${table([
-        { label: AC.cap(S), main: true, html: (i) => `${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}` },
+        { label: AC.cap(S), main: true, html: (i) => `<div>${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}</div><div class="text-body-secondary fw-normal" style="font-size:.75rem">${i.documento ? `CC ${esc(i.documento)}` : 'Sin documento'}</div>` },
         { label: 'Asistencia', html: (i) => `${i.resumen_asistencia.pct == null ? '—' : `${i.resumen_asistencia.pct}%`}${i.resumen_asistencia.por_reponer ? `<div class="small text-body-secondary">${i.resumen_asistencia.por_reponer} por reponer</div>` : ''}` },
         { label: 'Promedio', html: (i) => `${i.resumen_notas.prom ?? '—'}<div class="small text-body-secondary">${i.resumen_notas.evaluado}% evaluado</div>` },
         { label: 'Estado', html: (i) => C.chip(...i.academico) },

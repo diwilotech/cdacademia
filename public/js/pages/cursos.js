@@ -448,11 +448,14 @@ DW.ready.then(async (me) => {
 
   async function editarClase(c, done) {
     const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
+    const areasC = await AC.listas.areas().catch(() => []);
     const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Clase ${c.n}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body"><div class="row g-2">
-        <div class="col-sm-8"><label class="form-label small mb-1" for="c_material">Material de la clase</label><select class="form-select" id="c_material" name="material_id">${AC.opts(mats, 'Ninguno', 'titulo').map(([v, l]) => `<option value="${v}" ${String(v) === String(c.material_id ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="col-12"><div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-1"><label class="form-label small mb-0" for="c_area">Material de la clase</label>
+          <select class="form-select form-select-sm w-auto" id="c_area" aria-label="Área de los materiales"><option value="">Todas las áreas</option>${areasC.map((x) => `<option value="${x.id}" ${x.id === k.area_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div>
+          <input type="hidden" name="material_id" value="${c.material_id ?? ''}">
+          <div class="row g-2 mat-pick" data-pick style="max-height:260px;overflow:auto"></div></div>
         <div class="col-sm-4 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c_virtual" name="virtual" ${c.virtual ? 'checked' : ''}><label class="form-check-label" for="c_virtual">Virtual</label></div></div>
-        <div class="col-12 small text-body-secondary" data-concepto></div>
         ${me.canManage ? `<div class="col-12"><h3 class="h6 mt-2 mb-0">Mover la clase</h3></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_fecha">Fecha</label><input class="form-control" id="c_fecha" name="fecha" type="date" value="${esc(c.fecha || '')}"></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_ini">Desde</label><input class="form-control" id="c_ini" name="ini" type="time" value="${esc(c.ini || '')}"></div>
@@ -460,8 +463,19 @@ DW.ready.then(async (me) => {
       </div><div class="small text-danger mt-2" data-err></div></div>
       <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar</button></div></form>`, { size: 'modal-lg' });
     const f = $('form', el);
-    const concepto = () => { const x = mats.find((y) => String(y.id) === f.material_id.value); $('[data-concepto]', el).innerHTML = x ? `El tema es <b>${esc(x.titulo)}</b>${x.descripcion ? ` · ${esc(x.descripcion)}` : ''}. Lo da el material.` : 'Elige el material: él define el tema y el concepto de la clase.'; };
-    f.material_id.onchange = concepto; concepto();
+    // Materiales en tarjetas pequeñas (título y descripción), filtradas por área (la del curso al abrir; se puede escoger otra).
+    const pick = $('[data-pick]', el), areaSel = $('#c_area', el);
+    const card = (x, sel, vacio) => `<div class="col-sm-6"><button type="button" class="btn w-100 h-100 text-start p-2 border ${sel ? 'border-primary bg-primary-subtle' : 'bg-body'}" data-m="${vacio ? '' : x.id}" aria-pressed="${sel}">
+      <div class="fw-semibold small text-truncate">${vacio ? '<i class="bi bi-slash-circle me-1"></i>Sin material' : esc(x.titulo)}</div>
+      <div class="small text-body-secondary" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${vacio ? 'La clase no tendrá tema todavía.' : esc(x.descripcion || 'Sin descripción')}</div></button></div>`;
+    const pinta = () => {
+      const cur = String(f.material_id.value || ''), ar = areaSel.value;
+      const lista = mats.filter((x) => !ar || String(x.area_id) === ar || String(x.id) === cur);   // el elegido siempre se ve
+      pick.innerHTML = card(null, !cur, true) + lista.map((x) => card(x, String(x.id) === cur)).join('')
+        + (lista.length ? '' : '<div class="col-12 small text-body-secondary">No hay materiales en esta área: crea uno en Material o escoge otra área.</div>');
+    };
+    pick.onclick = (e) => { const b = e.target.closest('[data-m]'); if (b) { f.material_id.value = b.dataset.m; pinta(); } };
+    areaSel.onchange = pinta; pinta();
     f.onsubmit = async (e) => {
       e.preventDefault();
       const body = { virtual: f.virtual.checked, material_id: f.material_id.value };

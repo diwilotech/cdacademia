@@ -345,7 +345,7 @@ DW.ready.then(async (me) => {
       view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}
           <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}</span></div>
         ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
-          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
+          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}${RO || !me.canManage ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
           <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
             <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
             <td class="text-center" data-res></td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
@@ -358,6 +358,8 @@ DW.ready.then(async (me) => {
       view.querySelectorAll('tbody tr').forEach(resumen);
       view.addEventListener('input', (e) => { const tr = e.target.closest('tr[data-ins]'); if (tr && e.target.dataset.nota !== undefined) resumen(tr); });
       view.addEventListener('click', async (e) => {
+        const ed = e.target.closest('[data-editev]');
+        if (ed) return editarEvaluacion(D.evaluaciones.find((x) => x.id === +ed.dataset.editev));
         const b = e.target.closest('[data-examen]');
         if (b) {
           const ev = D.evaluaciones.find((x) => x.id === +b.dataset.examen), ins = D.inscritos.find((i) => String(i.id) === b.closest('[data-ins]').dataset.ins);
@@ -409,6 +411,40 @@ DW.ready.then(async (me) => {
       columns: [{ label: 'Código', main: true, html: (r) => `<code>${esc(r.codigo)}</code>` }, { label: 'Descuento', html: (r) => (r.tipo === 'pct' ? `${r.valor}%` : C.money(r.valor)) },
         { label: 'Vigencia', html: (r) => (r.hasta ? `Hasta ${C.day(r.hasta)}` : 'Sin fecha') }, { label: 'Usos', html: (r) => `${r.usos}${r.max ? ` de ${r.max}` : ''}` }] }).load();
   });
+
+  // Editar una evaluación desde Notas: nombre, peso, clase y tipo (examen subido ⇄ selección múltiple) y sus preguntas.
+  function editarEvaluacion(ev) {
+    const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Editar ${esc(ev.nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body"><div class="row g-2">
+        <div class="col-sm-8"><label class="form-label small mb-1" for="ev_n">Nombre</label><input class="form-control" id="ev_n" name="nombre" value="${esc(ev.nombre)}" required></div>
+        <div class="col-sm-4"><label class="form-label small mb-1" for="ev_p">Peso (%)</label><input class="form-control" id="ev_p" name="peso" type="number" min="0" max="100" value="${ev.peso}" required></div>
+        <div class="col-12"><label class="form-label small mb-1" for="ev_t">Tipo de examen</label><select class="form-select" id="ev_t" name="tipo">
+          <option value="examen" ${ev.tipo === 'multiple' ? '' : 'selected'}>Examen: se sube la foto o el PDF de cada estudiante</option>
+          <option value="multiple" ${ev.tipo === 'multiple' ? 'selected' : ''}>Selección múltiple: preguntas dentro de la app</option></select>
+          <div class="form-text">Al cambiar el tipo no se borra lo ya cargado (archivos o respuestas); solo cambia cómo se califica de aquí en adelante.</div></div>
+      </div><div class="small text-danger mt-2" data-err></div></div>
+      <div class="modal-footer border-0 pt-0 justify-content-between"><span data-preg></span>
+        <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar</button></span></div></form>`);
+    const f = el.querySelector('form'), err = el.querySelector('[data-err]');
+    const preg = el.querySelector('[data-preg]');
+    const pinta = () => { preg.innerHTML = f.tipo.value === 'multiple' ? `<button type="button" class="btn btn-outline-secondary" data-preguntas><i class="bi bi-card-checklist me-1"></i>${preguntasDe(ev).length ? 'Editar preguntas' : 'Crear preguntas'}</button>` : ''; };
+    pinta(); f.tipo.onchange = pinta;
+    preg.addEventListener('click', async (e) => {
+      if (!e.target.closest('[data-preguntas]')) return;
+      try {
+        if (ev.tipo !== 'multiple') { await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { tipo: 'multiple' } }); ev.tipo = 'multiple'; }
+        const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
+        const temas = [...new Set([...D.clases.map((c) => c.tema), ...D.clases.map((c) => mats.find((x) => x.id === c.material_id)?.titulo)].filter(Boolean))].slice(0, 40);
+        m.hide();
+        AC.examen.editarPreguntas({ id: ev.id, nombre: ev.nombre, examen: ev.examen }, { curso: k.nombre, area: k.area, nivel: k.nivel, temas }, () => V.reload());
+      } catch (x) { err.textContent = x.message; }
+    });
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      try { await api(`/api/cursos/evaluaciones/${ev.id}`, { method: 'PATCH', body: { nombre: f.nombre.value, peso: +f.peso.value, tipo: f.tipo.value } }); m.hide(); toast('Evaluación guardada'); V.reload(); }
+      catch (x) { err.textContent = x.message; }
+    };
+  }
 
   async function editarClase(c, done) {
     const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);

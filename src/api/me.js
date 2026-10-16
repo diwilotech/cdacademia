@@ -15,7 +15,7 @@ export async function businessSettings(env, businessId) {
 export function routes(r) {
   r.get('/api/me', 'tenant', async (c) => {
     const s = c.session;
-    const mods = await visibleModules(c.env, c.businessId, c.role);
+    const mods = await visibleModules(c.env, c.businessId, c.role, c.modulos);
     return json({
       app: APP,
       user: { id: s.user_id, email: s.email, name: s.name },

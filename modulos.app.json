@@ -163,7 +163,8 @@
       "icono": "bi-person-badge",
       "menu": {
         "ruta": "/staff/profesionales.html",
-        "orden": 65
+        "orden": 65,
+        "oculto": true
       },
       "permisos": {
         "ver": "staff",

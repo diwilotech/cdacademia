@@ -49,10 +49,21 @@ export async function activeModuleIds(env, businessId) {
   return all.filter((m) => on.has(m.id)).map((m) => m.id);
 }
 
-// Módulos que ve un usuario: activos para el negocio y permitidos para su rol.
-export async function visibleModules(env, businessId, role) {
+// Lo que el personal NO ve mientras no se le asigne (propietario y administradores ven todo).
+export const STAFF_SIN_ACCESO = ['matriculas', 'cuotas', 'finanzas', 'marketing'];
+export const parseModulos = (raw) => { try { const a = JSON.parse(raw); return Array.isArray(a) ? a : null; } catch { return null; } };
+// ¿Esta persona puede abrir el módulo? `modulos` = lista elegida para ella (null = la de su rol).
+// «profesionales» ya vive dentro de Equipo (y los cursos lo usan para elegir docente): siempre permitido.
+export const moduleAllowed = (role, modulos, id) => role !== 'staff' || id === 'profesionales' || (modulos ? modulos.includes(id) : !STAFF_SIN_ACCESO.includes(id));
+// Módulos que se le pueden dar o quitar al personal (los que el personal puede ver por su rol).
+export async function assignableModules(env) {
+  return (await allModules(env)).filter((m) => (m.permisos?.ver || 'staff') === 'staff' && m.id !== 'profesionales');
+}
+
+// Módulos que ve un usuario: activos para el negocio, permitidos para su rol y asignados a él.
+export async function visibleModules(env, businessId, role, modulos = null) {
   const active = new Set(await activeModuleIds(env, businessId));
-  return (await allModules(env)).filter((m) => active.has(m.id) && roleReaches(role, m.permisos?.ver || 'staff'));
+  return (await allModules(env)).filter((m) => active.has(m.id) && roleReaches(role, m.permisos?.ver || 'staff') && moduleAllowed(role, modulos, m.id));
 }
 
 // Lo llama authenticate() en cada ruta que declara su módulo ('tenant:items'): inactivo o sin permiso = 403.
@@ -62,6 +73,6 @@ export async function requireModule(c, moduleId) {
   if (!(await activeModuleIds(c.env, c.businessId)).includes(moduleId)) {
     throw new HttpError(403, `El módulo ${m.nombre} no está activo para este negocio`, 'MODULE_OFF');
   }
-  if (!roleReaches(c.role, m.permisos?.ver || 'staff')) throw new HttpError(403, `Tu rol no tiene acceso a ${m.nombre}`);
+  if (!roleReaches(c.role, m.permisos?.ver || 'staff') || !moduleAllowed(c.role, c.modulos, moduleId)) throw new HttpError(403, `Tu rol no tiene acceso a ${m.nombre}`);
   c.module = m;
 }

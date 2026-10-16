@@ -4,7 +4,7 @@
 import { HttpError, getCookie } from './http.js';
 import { db, nowIso, isoIn } from './db.js';
 import { isPlatformCall } from './platform-rpc.js';
-import { requireModule } from './modules.js';
+import { requireModule, parseModulos } from './modules.js';
 
 export const SESSION_COOKIE = 'cda_sid';   // cámbialo por app (cdp_, cdn_, cdc_...) para que no choquen en el navegador
 const SESSION_HOURS = 24 * 30;              // 30 días (cookie HttpOnly + Secure)
@@ -135,7 +135,7 @@ export async function loadSession(req, env) {
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
   return db(env).first(
     `SELECT s.id AS session_id, s.business_id, u.id AS user_id, u.email, u.name,
-            b.name AS business_name, b.slug AS business_slug, b.paid_until, m.role
+            b.name AS business_name, b.slug AS business_slug, b.paid_until, m.role, m.modulos
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN businesses b ON b.id = s.business_id AND b.status = 'active' AND b.archived_at IS NULL
@@ -165,6 +165,7 @@ export async function authenticate(c, spec) {
   if (!s.business_id || !s.role) throw new HttpError(409, 'Elige un negocio', 'NO_BUSINESS');
   c.businessId = s.business_id;
   c.role = s.role;
+  c.modulos = parseModulos(s.modulos);
   c.readOnly = isExpired(s.paid_until);
   if (c.readOnly && c.req.method !== 'GET') {
     throw new HttpError(402, 'La suscripción del negocio está vencida: solo lectura.', 'READ_ONLY');

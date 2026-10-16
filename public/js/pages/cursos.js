@@ -272,7 +272,7 @@ DW.ready.then(async (me) => {
   const parseEx = (x) => { if (!x) return null; if (typeof x === 'object') return x; try { return JSON.parse(x); } catch { return null; } };
   const preguntasDe = (ev) => parseEx(ev.examen)?.preguntas || [];
   $('[data-h1]').innerHTML = `${esc(k.nombre)} ${C.chip(ESTADO[k.estado] || 'free', k.estado)}`;
-  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${RO ? '' : '<button class="btn btn-outline-primary" data-edicion><i class="bi bi-pencil me-1"></i>Editar</button>'}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
+  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-primary" data-edicion><i class="bi bi-pencil me-1"></i>Editar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
   // Modo edición: todo bloqueado hasta que se pulsa «Editar» (arriba); «Listo» vuelve a bloquear.
   let edicion = false;
   const pintaEdicion = () => { const b = $('[data-edicion]'); if (!b) return; b.className = `btn ${edicion ? 'btn-primary' : 'btn-outline-primary'}`; b.innerHTML = edicion ? '<i class="bi bi-check-lg me-1"></i>Listo' : '<i class="bi bi-pencil me-1"></i>Editar'; };
@@ -302,7 +302,9 @@ DW.ready.then(async (me) => {
     if (t === 'asistencia') {
       if (!D.clases.length) { view.innerHTML = empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.'); return; }
       const ORDEN = ['', 'P', 'T', 'J', 'A'], info = Object.fromEntries(ASIS.map(([v, l, c]) => [v, { l, c }]));
-      const editando = edicion;
+      const hoy = C.todayCo(), claseHoy = D.clases.find((c) => c.fecha === hoy)?.n;
+      const modifica = (n) => !RO && (n === claseHoy || (MANAGE && edicion));   // el día de la clase; el titular, cualquiera con Editar
+      const hayEdicion = !RO && (claseHoy != null || (MANAGE && edicion));
       const marcas = {}; for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia };
       const cambios = new Set();   // `${ins}:${n}`
       const orig = (insId, n) => D.inscritos.find((i) => i.id === insId)?.asistencia[n] || '';
@@ -313,22 +315,22 @@ DW.ready.then(async (me) => {
       const pinta = () => {
         const act = activos();
         view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-            ${RO || !editando ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button><button class="btn btn-light btn-sm" data-cancelar>Descartar</button>'}
+            ${hayEdicion ? '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button><button class="btn btn-light btn-sm" data-cancelar>Descartar</button>' : ''}
             <span class="small text-body-secondary ms-auto">${ASIS.map(([v, l, c]) => `<span class="me-2"><span class="dw-as dw-as--${v}">${v}</span> ${l}</span>`).join('')}</span></div>
-          ${editando ? '<div class="small text-body-secondary mb-2"><i class="bi bi-hand-index me-1"></i>Toca una casilla para cambiar entre presente, tarde, excusa y ausente. Toca el número de una clase para marcar presentes a todos los que no tienen marca.</div>' : ''}
-          ${act.length ? `<div class="table-responsive dw-matriz ${editando ? 'dw-matriz--edit' : ''}"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
-            ${D.clases.map((c) => `<th class="text-center"><${editando ? 'button type="button" class="btn btn-link p-0 text-reset text-decoration-none" data-col="' + c.n + '"' : 'span'}>${c.n}</${editando ? 'button' : 'span'}><div class="small fw-normal text-body-secondary">${c.fecha ? C.day(c.fecha).replace(/ de /g, ' ').replace(/\s\d{4}$/, '') : ''}</div></th>`).join('')}<th class="text-center">Asistencia</th></tr></thead>
+          ${hayEdicion ? `<div class="small text-body-secondary mb-2"><i class="bi bi-hand-index me-1"></i>${claseHoy != null ? `<span class="badge text-bg-warning me-1">Hoy · clase ${claseHoy}</span>` : ''}Toca una casilla para cambiar entre presente, tarde, excusa y ausente. Toca el número de una clase para marcar presentes a todos los que no tienen marca.</div>` : '<div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>La asistencia se marca el día de cada clase (ese día la columna se resalta).</div>'}
+          ${act.length ? `<div class="table-responsive dw-matriz ${hayEdicion ? 'dw-matriz--edit' : ''}"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
+            ${D.clases.map((c) => `<th class="text-center" ${c.n === claseHoy ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}><${modifica(c.n) ? 'button type="button" class="btn btn-link p-0 text-reset text-decoration-none" data-col="' + c.n + '"' : 'span'}>${c.n}</${modifica(c.n) ? 'button' : 'span'}><div class="small fw-normal text-body-secondary">${c.fecha ? C.day(c.fecha).replace(/ de /g, ' ').replace(/\s\d{4}$/, '') : ''}</div></th>`).join('')}<th class="text-center">Asistencia</th></tr></thead>
             <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.clases.map((c) => { const v = marcas[i.id][c.n] || '';
-              return `<td class="text-center"><button type="button" class="dw-as ${v ? `dw-as--${v}` : 'dw-as--vacia'} ${cambios.has(`${i.id}:${c.n}`) ? 'dw-as--cambio' : ''}" data-cel="${c.n}" ${editando ? '' : 'tabindex="-1"'} aria-label="${esc(i.nombre)}, clase ${c.n}: ${v ? info[v].l : 'sin marca'}">${v || '·'}</button></td>`; }).join('')}
+              return `<td class="text-center" ${c.n === claseHoy ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}><button type="button" class="dw-as ${v ? `dw-as--${v}` : 'dw-as--vacia'} ${cambios.has(`${i.id}:${c.n}`) ? 'dw-as--cambio' : ''}" data-cel="${c.n}" ${modifica(c.n) ? '' : 'tabindex="-1"'} aria-label="${esc(i.nombre)}, clase ${c.n}: ${v ? info[v].l : 'sin marca'}">${v || '·'}</button></td>`; }).join('')}
               <td class="text-center fw-semibold">${pct(i)}</td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
       };
       pinta();
       view.addEventListener('click', async (e) => {
         if (e.target.closest('[data-cancelar]')) { for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia }; cambios.clear(); pinta(); return; }
         const col = e.target.closest('[data-col]');
-        if (col && editando) { const n = +col.dataset.col; activos().forEach((i) => { if (!marcas[i.id][n]) { marcas[i.id][n] = 'P'; cambios.add(`${i.id}:${n}`); } }); pinta(); return; }
+        if (col && modifica(+col.dataset.col)) { const n = +col.dataset.col; activos().forEach((i) => { if (!marcas[i.id][n]) { marcas[i.id][n] = 'P'; cambios.add(`${i.id}:${n}`); } }); pinta(); return; }
         const cel = e.target.closest('[data-cel]');
-        if (cel && editando) {
+        if (cel && modifica(+cel.dataset.cel)) {
           const insId = +cel.closest('[data-ins]').dataset.ins, n = +cel.dataset.cel;
           const sig = ORDEN[(ORDEN.indexOf(marcas[insId][n] || '') + 1) % ORDEN.length];
           if (sig) marcas[insId][n] = sig; else delete marcas[insId][n];
@@ -361,13 +363,14 @@ DW.ready.then(async (me) => {
         }
         return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen="${e.id}" title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
       };
+      const claseHoyN = D.clases.find((c) => c.fecha === C.todayCo())?.n, esHoy = (e) => claseHoyN != null && e.clase_n === claseHoyN;
       const act = activos(), pesoTotal = D.evaluaciones.reduce((a, e) => a + e.peso, 0);
-      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO || !edicion ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE && edicion ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
+      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE && edicion ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
           <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}${MANAGE && pesoTotal !== 100 ? ` · <span class="text-warning-emphasis fw-semibold">los pesos suman ${pesoTotal}%</span>` : ''}</span></div>
         ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
-          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}${RO || !me.canManage || !edicion ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
-          <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
-            <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO || !edicion ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
+          ${D.evaluaciones.map((e) => `<th class="text-center" ${esHoy(e) ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}>${esc(e.nombre)}${RO || !me.canManage || !edicion ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
+          <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td ${esHoy(e) ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
+            <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
             <td class="text-center" data-res></td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
       const resumen = (tr) => {
         let suma = 0, pesos = 0;

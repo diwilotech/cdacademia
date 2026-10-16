@@ -15,7 +15,7 @@ DW.ready.then(async (me) => {
 
   /* ---------- crear / editar / duplicar curso ---------- */
   // Cuatro pasos en una ventana: datos, docente y horario (con «Calcular clases y revisar choques»), módulos (material por clases) y cupones.
-  async function editarCurso(k, done, { duplicar = false, seccion = null, host = null } = {}) {
+  async function editarCurso(k, done, { duplicar = false, seccion = null, host = null, editable = false } = {}) {
     // seccion = 'inicio' | 'clases' con host: se edita esa parte dentro de la página (sin ventana). Sin ellos: ventana completa (curso nuevo o copia).
     const ver = (x) => !seccion || seccion === x;
     const oc = (x) => (ver(x) ? '' : 'hidden style="display:none"');
@@ -40,13 +40,12 @@ DW.ready.then(async (me) => {
     const lbl = (id, t) => `<label class="form-label small mb-1" for="k_${id}">${t}</label>`;
     const cab = host ? '' : `<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${duplicar ? 'Duplicar curso para otro grupo' : k ? 'Editar curso' : 'Nuevo curso'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>`;
     const pie = host
-      ? `<div class="d-flex justify-content-between align-items-center mt-3" data-pie hidden><span>${seccion === 'inicio' && k ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar curso</button>' : ''}</span>
+      ? `<div class="d-flex justify-content-between align-items-center mt-3" data-pie ${editable ? '' : 'hidden'}><span class="d-flex gap-2">${seccion === 'inicio' && k ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar curso</button><button type="button" class="btn btn-outline-secondary btn-sm" data-dup><i class="bi bi-copy me-1"></i>Duplicar para otro grupo</button>' : ''}</span>
           <span><button type="button" class="btn btn-light" data-reset>Descartar cambios</button> <button class="btn btn-primary">Guardar</button></span></div>`
       : `<div class="modal-footer border-0 pt-0 justify-content-between"><span>${k && !duplicar ? '<button type="button" class="btn btn-outline-danger btn-sm" data-del><i class="bi bi-trash me-1"></i>Borrar</button>' : ''}</span>
           <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar curso</button></span></div>`;
     const html = `<form>${cab}
-      ${host ? '<div class="d-flex justify-content-between align-items-center mb-2" data-barra><span class="small text-body-secondary"><i class="bi bi-lock me-1"></i>Bloqueado: pulsa Editar para cambiar los datos.</span><button type="button" class="btn btn-outline-primary btn-sm" data-editar-parte><i class="bi bi-pencil me-1"></i>Editar</button></div>' : ''}
-      <fieldset class="border-0 p-0 m-0" style="min-width:0" data-bloqueo ${host ? 'disabled' : ''}><div class="${host ? '' : 'modal-body'}"><div class="d-flex flex-column gap-3">
+      <fieldset class="border-0 p-0 m-0" style="min-width:0" data-bloqueo ${host && !editable ? 'disabled' : ''}><div class="${host ? '' : 'modal-body'}"><div class="d-flex flex-column gap-3">
         <section class="dw-paso" ${oc('inicio')}><h3>${num(1)}Datos del curso</h3><div class="row g-2">
           <div class="col-md-8">${lbl('nombre', 'Título')}<input class="form-control" id="k_nombre" name="nombre" maxlength="120" value="${esc(c.nombre || '')}" required></div>
           <div class="col-md-4">${lbl('nivel', 'Nivel')}<select class="form-select" id="k_nivel" name="nivel"><option value="">—</option>${AC.NIVELES.map((n) => `<option ${c.nivel === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -135,8 +134,7 @@ DW.ready.then(async (me) => {
     caja.addEventListener('input', (e) => { const r = e.target.closest('[data-i]'); if (r && e.target.dataset.k) calc.clases[+r.dataset.i][e.target.dataset.k] = e.target.value; });
     caja.addEventListener('click', async (e) => { if (e.target.closest('[data-revisar]')) { await refresh(true); } });
     if (ver('clases')) refresh(false);
-    // Desbloquear todo en modo edición
-    $('[data-editar-parte]', el)?.addEventListener('click', () => { $('[data-bloqueo]', el).disabled = false; $('[data-barra]', el).hidden = true; $('[data-pie]', el).hidden = false; });
+    $('[data-dup]', el)?.addEventListener('click', () => editarCurso({ ...k }, (nid) => { location.href = `/staff/cursos.html?id=${nid}`; }, { duplicar: true }));
     $('[data-reset]', el)?.addEventListener('click', () => done(cursoId));   // descartar = volver a cargar lo guardado
 
     /* --- módulos (material por clases) --- */
@@ -274,8 +272,11 @@ DW.ready.then(async (me) => {
   const parseEx = (x) => { if (!x) return null; if (typeof x === 'object') return x; try { return JSON.parse(x); } catch { return null; } };
   const preguntasDe = (ev) => parseEx(ev.examen)?.preguntas || [];
   $('[data-h1]').innerHTML = `${esc(k.nombre)} ${C.chip(ESTADO[k.estado] || 'free', k.estado)}`;
-  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-secondary" data-duplicar><i class="bi bi-copy me-1"></i>Duplicar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
-  $('[data-duplicar]')?.addEventListener('click', () => editarCurso({ ...k }, (nid) => { location.href = `/staff/cursos.html?id=${nid}`; }, { duplicar: true }));
+  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${RO ? '' : '<button class="btn btn-outline-primary" data-edicion><i class="bi bi-pencil me-1"></i>Editar</button>'}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
+  // Modo edición: todo bloqueado hasta que se pulsa «Editar» (arriba); «Listo» vuelve a bloquear.
+  let edicion = false;
+  const pintaEdicion = () => { const b = $('[data-edicion]'); if (!b) return; b.className = `btn ${edicion ? 'btn-primary' : 'btn-outline-primary'}`; b.innerHTML = edicion ? '<i class="bi bi-check-lg me-1"></i>Listo' : '<i class="bi bi-pencil me-1"></i>Editar'; };
+  $('[data-edicion]')?.addEventListener('click', () => { edicion = !edicion; pintaEdicion(); V.reload(); });
   document.title = `${k.nombre} · ${document.title}`;
   const sub = `<p class="small text-body-secondary">${[k.area, k.nivel, k.profesional && `Profesional: ${k.profesional}`, AC.horario(k.horario), k.inicio && `${C.day(k.inicio)} – ${C.day(k.fin)}`, `${k.dictadas} de ${k.num_clases} clases dictadas`].filter(Boolean).map(esc).join(' · ')}</p>`;
   const proxClase = () => { const hoy = C.todayCo(); const c = D.clases.filter((x) => x.fecha && x.fecha <= hoy).pop() || D.clases[0]; return c?.n || 1; };
@@ -284,7 +285,7 @@ DW.ready.then(async (me) => {
   if (me.modules.some((x) => x.id === 'reposiciones')) tabs.push(['reposiciones', 'Reposiciones', 'bi-arrow-repeat']);
   const V = AC.vistas(tabs, async (t, view) => {
     await cargar();
-    if (t === 'inicio') return editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'inicio', host: view });
+    if (t === 'inicio') return editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'inicio', host: view, editable: edicion });
     if (t === 'inscritos') {
       view.innerHTML = sub + (D.inscritos.length ? `<div class="dw-card p-0 p-md-2">${table([
         { label: AC.cap(S), main: true, html: (i) => `<div>${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}</div><div class="text-body-secondary fw-normal" style="font-size:.75rem">${i.documento ? `CC ${esc(i.documento)}` : 'Sin documento'}</div>` },
@@ -301,7 +302,7 @@ DW.ready.then(async (me) => {
     if (t === 'asistencia') {
       if (!D.clases.length) { view.innerHTML = empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.'); return; }
       const ORDEN = ['', 'P', 'T', 'J', 'A'], info = Object.fromEntries(ASIS.map(([v, l, c]) => [v, { l, c }]));
-      let editando = false;
+      const editando = edicion;
       const marcas = {}; for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia };
       const cambios = new Set();   // `${ins}:${n}`
       const orig = (insId, n) => D.inscritos.find((i) => i.id === insId)?.asistencia[n] || '';
@@ -312,8 +313,7 @@ DW.ready.then(async (me) => {
       const pinta = () => {
         const act = activos();
         view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-            ${RO ? '' : editando ? '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button><button class="btn btn-light btn-sm" data-cancelar>Cancelar</button>'
-              : '<button class="btn btn-outline-primary btn-sm" data-editar-as><i class="bi bi-pencil me-1"></i>Editar</button>'}
+            ${RO || !editando ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button><button class="btn btn-light btn-sm" data-cancelar>Descartar</button>'}
             <span class="small text-body-secondary ms-auto">${ASIS.map(([v, l, c]) => `<span class="me-2"><span class="dw-as dw-as--${v}">${v}</span> ${l}</span>`).join('')}</span></div>
           ${editando ? '<div class="small text-body-secondary mb-2"><i class="bi bi-hand-index me-1"></i>Toca una casilla para cambiar entre presente, tarde, excusa y ausente. Toca el número de una clase para marcar presentes a todos los que no tienen marca.</div>' : ''}
           ${act.length ? `<div class="table-responsive dw-matriz ${editando ? 'dw-matriz--edit' : ''}"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
@@ -324,8 +324,7 @@ DW.ready.then(async (me) => {
       };
       pinta();
       view.addEventListener('click', async (e) => {
-        if (e.target.closest('[data-editar-as]')) { editando = true; pinta(); return; }
-        if (e.target.closest('[data-cancelar]')) { for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia }; cambios.clear(); editando = false; pinta(); return; }
+        if (e.target.closest('[data-cancelar]')) { for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia }; cambios.clear(); pinta(); return; }
         const col = e.target.closest('[data-col]');
         if (col && editando) { const n = +col.dataset.col; activos().forEach((i) => { if (!marcas[i.id][n]) { marcas[i.id][n] = 'P'; cambios.add(`${i.id}:${n}`); } }); pinta(); return; }
         const cel = e.target.closest('[data-cel]');
@@ -349,7 +348,7 @@ DW.ready.then(async (me) => {
     }
     if (t === 'notas') {
       if (!D.evaluaciones.length) {
-        view.innerHTML = empty('bi-star', MANAGE ? 'Crea la primera evaluación del curso.' : 'El curso aún no tiene evaluaciones.') + (MANAGE ? '<div class="text-center mt-2"><button class="btn btn-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button></div>' : '');
+        view.innerHTML = empty('bi-star', MANAGE ? 'El curso aún no tiene evaluaciones. Pulsa Editar para crear la primera.' : 'El curso aún no tiene evaluaciones.') + (MANAGE && edicion ? '<div class="text-center mt-2"><button class="btn btn-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button></div>' : '');
         view.querySelector('[data-nueva-ev]')?.addEventListener('click', () => editarEvaluacion(null));
         return;
       }
@@ -363,12 +362,12 @@ DW.ready.then(async (me) => {
         return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen="${e.id}" title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
       };
       const act = activos(), pesoTotal = D.evaluaciones.reduce((a, e) => a + e.peso, 0);
-      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
+      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO || !edicion ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE && edicion ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
           <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}${MANAGE && pesoTotal !== 100 ? ` · <span class="text-warning-emphasis fw-semibold">los pesos suman ${pesoTotal}%</span>` : ''}</span></div>
         ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
-          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}${RO || !me.canManage ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
+          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}${RO || !me.canManage || !edicion ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
           <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
-            <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
+            <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO || !edicion ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
             <td class="text-center" data-res></td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
       const resumen = (tr) => {
         let suma = 0, pesos = 0;
@@ -407,10 +406,11 @@ DW.ready.then(async (me) => {
         { label: 'Clase', main: true, html: (c) => `Clase ${c.n}${c.tema ? `<div class="small fw-normal">${esc(c.tema)}</div>` : ''}` },
         { label: 'Fecha', html: (c) => `${c.fecha ? C.day(c.fecha) : '—'}${c.ini ? ` · ${esc(c.ini)}–${esc(c.fin)}` : ''}${c.movida ? ` ${C.chip('soon', 'Movida')}` : ''}` },
         { label: 'Concepto', html: (c) => `<span class="small">${c.material_id ? esc(c.detalle || 'Según el material') : '<span class="text-body-secondary">Sin material asignado</span>'}</span>${c.virtual ? ` ${C.chip('free', 'Virtual')}` : ''}` },
-        { label: '', cls: 'text-end', html: (c) => (RO ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
+        { label: '', cls: 'text-end', html: (c) => (RO || !edicion ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
         : empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.');
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-clase]'); if (b) editarClase(D.clases.find((c) => c.n === +b.dataset.clase), () => V.reload()); });
-      if (MANAGE) { view.insertAdjacentHTML('afterbegin', '<div data-editar-clases class="mb-3"></div>'); await editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'clases', host: $('[data-editar-clases]', view) }); }
+      if (MANAGE && edicion) { view.insertAdjacentHTML('afterbegin', '<div data-editar-clases class="mb-3"></div>'); await editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'clases', host: $('[data-editar-clases]', view), editable: true }); }
+      else if (MANAGE && k.inicio) view.insertAdjacentHTML('afterbegin', `<p class="small text-body-secondary"><i class="bi bi-calendar-range me-1"></i>Primera clase ${C.day(k.inicio)} · ${k.num_clases} clases${k.festivos ? ' · salta festivos' : ''} · ${esc(AC.horario(k.horario))}. Pulsa Editar para cambiar el horario o los módulos.</p>`);
       return;
     }
   });

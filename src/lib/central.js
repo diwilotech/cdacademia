@@ -43,6 +43,16 @@ export async function movimientoFinanzas(c, p) {
   } catch (x) { console.error('ingreso en Finanzas', x.message); return { enviado: false }; }
 }
 
+// Lee de Finanzas (GET) con permisos de titular. Devuelve el JSON, o lanza 409 si Finanzas no está activo para el negocio.
+export async function finanzasLeer(c, path) {
+  if (!CENTRALES.includes('finanzas') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas')) throw new HttpError(409, 'Finanzas no está activo para este negocio');
+  const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+  const [p, q = ''] = path.split('?');
+  const r = await c.env.MODULOS.call(ctx, { method: 'GET', path: p, query: q ? `?${q}` : '' });
+  if (r.status >= 300) throw new HttpError(502, 'Finanzas no respondió');
+  try { return JSON.parse(r.body); } catch { throw new HttpError(502, 'Finanzas respondió algo que no se entiende'); }
+}
+
 // Escribe en la bitácora del negocio lo que hizo el módulo central.
 async function saveAudit(c, entries = []) {
   if (!entries.length) return;

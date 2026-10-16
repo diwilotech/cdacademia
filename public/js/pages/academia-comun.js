@@ -85,20 +85,19 @@ window.AC = (function () {
     const [f, c] = await Promise.all([api(`/api/estudiantes/${id}/ficha`), cfg()]);
     const e = f.estudiante, dinero = me.canManage;
     const ac = (a) => C.chip(a[0], a[1]);
-    modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(e.nombre)}</h2><div class="small text-body-secondary">${[e.documento && `Doc. ${esc(e.documento)}`, e.telefono && `<a href="https://wa.me/57${esc(String(e.telefono).replace(/\D/g, '').slice(-10))}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(e.telefono)}</a>`, e.email && esc(e.email)].filter(Boolean).join(' · ')}</div></div>
+    const { el: fichaEl } = modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(e.nombre)}</h2><div class="small text-body-secondary">${[e.documento && `Doc. ${esc(e.documento)}`, e.telefono && `<a href="https://wa.me/57${esc(String(e.telefono).replace(/\D/g, '').slice(-10))}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ${esc(e.telefono)}</a>`, e.email && esc(e.email)].filter(Boolean).join(' · ')}</div></div>
       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body">
         <h3 class="h6">Cursos</h3>
         ${f.matriculas.length ? f.matriculas.map((m) => `<div class="dw-card mb-2"><div class="d-flex flex-wrap gap-2 align-items-center"><b class="flex-grow-1">${esc(m.curso)}</b>${ac(m.academico)}${m.estado !== 'activa' ? C.chip('free', cap(m.estado)) : ''}</div>
           <div class="row small mt-2 g-2"><div class="col-6 col-md-3">Asistencia<br><b>${m.asistencia.pct == null ? '—' : m.asistencia.pct + '%'}</b>${m.asistencia.por_reponer ? ` · ${m.asistencia.por_reponer} por reponer` : ''}</div>
           <div class="col-6 col-md-3">Promedio<br><b>${m.notas.prom ?? '—'}</b> / ${c.escala} · ${m.notas.evaluado}% evaluado</div>
-          ${dinero ? `<div class="col-6 col-md-3">Pagado<br><b>${C.money(m.pagado)}</b> de ${C.money(m.total)}</div><div class="col-6 col-md-3">Saldo<br><b class="${m.vencido ? 'text-danger' : ''}">${C.money(m.saldo)}</b>${m.vencido ? ` · vencido ${C.money(m.vencido)}` : ''}</div>` : ''}</div></div>`).join('')
+          ${dinero ? `<div class="col-6 col-md-3">Pagado<br><b>${C.money(m.pagado)}</b> de ${C.money(m.total)}</div><div class="col-6 col-md-3">Saldo<br><b class="${m.vencido ? 'text-danger' : ''}">${C.money(m.saldo)}</b>${m.vencido ? ` · vencido ${C.money(m.vencido)}` : ''}</div>` : ''}</div>
+          ${dinero && me.modules.some((x) => x.id === 'cuotas') ? `<button type="button" class="btn btn-sm btn-outline-primary mt-2" data-pagos="${m.id}" data-curso="${esc(m.curso)}"><i class="bi bi-receipt me-1"></i>Ver pagos y recibos</button>` : ''}</div>`).join('')
         : '<p class="text-body-secondary small">Aún no está matriculado en ningún curso.</p>'}
-        ${dinero && f.pagos?.length ? `<h3 class="h6 mt-3">Pagos</h3>${window.App.table([
-          { label: 'Recibo', main: true, html: (p) => `N.º ${esc(p.num)}${p.anulado ? ' ' + C.chip('bad', 'Anulado') : ''}` }, { label: 'Fecha', html: (p) => C.day(p.fecha) },
-          { label: 'Curso', html: (p) => esc(p.curso) }, { label: 'Valor', cls: 'text-end', html: (p) => C.money(p.valor) }], f.pagos)}` : ''}
         ${e.notas ? `<h3 class="h6 mt-3">Notas</h3><p class="small mb-0" style="white-space:pre-wrap">${esc(e.notas)}</p>` : ''}
       </div>`, { size: 'modal-lg' });
+    fichaEl.addEventListener('click', (ev) => { const b = ev.target.closest('[data-pagos]'); if (b) verPagos({ id: b.dataset.pagos, estudiante: e.nombre, curso: b.dataset.curso }); });
   }
 
   // Calendario de la semana (lunes a domingo) por momentos del día: Mañana, Tarde y Noche. Muestra las clases de los cursos activos y los
@@ -180,5 +179,24 @@ window.AC = (function () {
     return ir(vista);
   }
 
-  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana, mes, calendario };
+  // Pagos y recibos de una matrícula: salen de Finanzas (ahí está el libro). m = { id, estudiante, curso }
+  async function verPagos(m) {
+    const { api, esc, modal, toast, table, empty } = window.App;
+    const C = window.App.Crud;
+    let d;
+    try { d = await api(`/api/matriculas/${m.id}/pagos`); } catch (x) { toast(x.message, false); return; }
+    modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">Pagos y recibos</h2><div class="small text-body-secondary">${esc(d.estudiante)} · ${esc(d.curso)} · desde Finanzas</div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body">${d.pagos.length ? `${table([
+        { label: 'Recibo', main: true, html: (p) => `N.º ${esc(p.num)}${p.anulado ? ' ' + C.chip('bad', 'Anulado') : ''}${p.en_finanzas ? '' : ' ' + C.chip('soon', 'Sin enviar')}` },
+        { label: 'Fecha', html: (p) => C.day(p.fecha) },
+        { label: 'Concepto', html: (p) => `${esc(p.concepto || p.categoria || '')}<div class="small text-body-secondary">${esc(p.metodo || '')}</div>` },
+        { label: 'Valor', cls: 'text-end', html: (p) => `<span class="${p.anulado ? 'text-decoration-line-through text-body-secondary' : ''}">${C.money(p.valor)}</span>` },
+        { label: '', cls: 'text-end', html: (p) => (p.en_finanzas ? `<a class="btn btn-sm btn-outline-primary" href="/api/matriculas/${m.id}/pagos/${p.num}/recibo" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Recibo</a>` : '') }], d.pagos)}
+        <div class="d-flex mt-3"><span class="flex-grow-1 text-body-secondary small">${d.pagos.length} ${d.pagos.length === 1 ? 'pago' : 'pagos'}</span><span>Total pagado <b>${C.money(d.total)}</b></span></div>
+        ${d.faltan ? `<div class="small text-warning-emphasis mt-2"><i class="bi bi-exclamation-triangle me-1"></i>${d.faltan} ${d.faltan === 1 ? 'pago aún no está' : 'pagos aún no están'} en Finanzas: usa «Enviar pagos a Finanzas» en Matrículas.</div>` : ''}`
+        : empty('bi-receipt', 'Todavía no hay pagos de esta matrícula.')}</div>
+      <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>`, { size: 'modal-lg' });
+  }
+
+  return { verPagos, DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana, mes, calendario };
 })();

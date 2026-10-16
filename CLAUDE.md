@@ -11,6 +11,7 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 - `src/index.js` rutas; `src/api/platform.js` + `src/lib/platform-rpc.js` = contrato con Diwilo (NO tocar).
 - `src/lib/central.js` = puente a Diwilo Modulos (binding `MODULOS`): `/api/finanzas|marketing/*`, `/staff/<modulo>.html`, `/m/*`, `/l/*`, `/validar/*`, `/c/*` (tarjetas), herramientas IA.
 - Pagos → Finanzas: `registrarPago`/anular llaman `movimientoFinanzas` (central.js) → `POST /api/finanzas/movements/externo` con `ref academia:pago:<N.º>` (no duplica); la anulación crea un egreso `…:anulado`. Botón «Enviar pagos a Finanzas» en Pagos para los de antes.
+- Pagos y recibos en pantalla salen de Finanzas (`GET /api/matriculas/:id/pagos` y `/pagos/:num/recibo`, vía `finanzasLeer`); `ac_pagos` queda solo como índice interno para saldo/cartera. Matrículas ya no tiene pestañas Cartera/Pagos: filtro «Cobro».
 - `modulos.app.json` (`"centrales": ["finanzas","marketing"]`). Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.
 - Turnstile: `TURNSTILE_SITE_KEY` en wrangler, secreto `TURNSTILE_SECRET_KEY`.
 

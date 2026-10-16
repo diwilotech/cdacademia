@@ -52,7 +52,7 @@ export async function registrarPago(c, b) {
   return { id: res.meta.last_row_id, num, finanzas: fin.enviado };
 }
 
-function recibo(p, cfg, negocio) {
+export function recibo(p, cfg, negocio) {
   const carta = cfg.recibo === 'carta';
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recibo N.º ${p.num}</title>
 <style>body{font:14px/1.45 system-ui,sans-serif;color:#111;margin:0;background:#f4f4f4}.r{background:#fff;margin:16px auto;padding:${carta ? '40px' : '18px'};width:${carta ? '680px' : '300px'};max-width:calc(100% - 32px)}

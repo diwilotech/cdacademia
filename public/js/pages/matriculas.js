@@ -8,18 +8,28 @@ DW.ready.then(async (me) => {
   const [cfg, cursos] = await Promise.all([AC.cfg(), AC.listas.cursos()]);
   const S = cfg.termS;
   const EST = { activa: ['ok', 'Activa'], terminada: ['free', 'Terminada'], retirada: ['bad', 'Retirada'] };
+  // Recordatorio por WhatsApp a quien tiene cuotas vencidas.
+  const recordar = (r) => {
+    const tel = String(r.telefono || '').replace(/\D/g, '').slice(-10);
+    if (!tel) return '';
+    const txt = `Hola ${String(r.estudiante).split(' ')[0]}, te saludamos de ${me.business.name}. Te recordamos que tienes cuotas vencidas del curso ${r.curso} por ${C.money(r.vencido)}. ¿Nos confirmas cuándo podrías ponerte al día?`;
+    return `<a class="btn btn-sm btn-outline-success" href="https://wa.me/57${tel}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" aria-label="Recordar por WhatsApp" title="Recordar por WhatsApp"><i class="bi bi-whatsapp"></i></a> `;
+  };
   const montar = async (view) => {
   const st = { q: '', curso_id: new URLSearchParams(location.search).get('curso') || '', estado: 'activa' };
+  let pago = '';   // filtro de cobro (en pantalla): '' | mora | hoy | saldo | pagada
 
-  document.querySelector('[data-acciones]').innerHTML = RO ? '' : '<button class="btn btn-primary" data-nueva><i class="bi bi-person-plus me-1"></i>Nueva matrícula</button>';
+  document.querySelector('[data-acciones]').innerHTML = RO ? '' : `${me.canManage && me.modules.some((m) => m.id === 'finanzas') ? '<button class="btn btn-outline-secondary" data-sync title="Cada pago nuevo ya se envía solo a Finanzas; esto manda los de antes"><i class="bi bi-box-arrow-up-right me-1"></i>Enviar pagos a Finanzas</button>' : ''}<button class="btn btn-primary" data-nueva><i class="bi bi-person-plus me-1"></i>Nueva matrícula</button>`;
   view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-2"><input class="form-control" data-q placeholder="Buscar ${esc(S)} o curso…" style="max-width:260px" aria-label="Buscar">
       <select class="form-select w-auto" data-curso aria-label="Curso"><option value="">Todos los cursos</option>${cursos.map((k) => `<option value="${k.id}" ${String(k.id) === st.curso_id ? 'selected' : ''}>${esc(k.nombre)}</option>`).join('')}</select>
-      <select class="form-select w-auto" data-estado aria-label="Estado"><option value="activa">Activas</option><option value="terminada">Terminadas</option><option value="retirada">Retiradas</option><option value="">Todas</option></select></div>
+      <select class="form-select w-auto" data-estado aria-label="Estado"><option value="activa">Activas</option><option value="terminada">Terminadas</option><option value="retirada">Retiradas</option><option value="">Todas</option></select>
+      <select class="form-select w-auto" data-pago aria-label="Cobro"><option value="">Cobro: todas</option><option value="mora">En mora (vencidas)</option><option value="hoy">Cuota vence hoy</option><option value="saldo">Con saldo pendiente</option><option value="pagada">Pagadas del todo</option></select></div>
     <div class="dw-grid dw-grid--kpi mb-3" data-kpis></div><div class="dw-card p-0 p-md-2" data-lista></div>`;
 
   async function load() {
     const qs = new URLSearchParams(Object.entries(st).filter(([, v]) => v));
-    const { rows } = await api(`/api/matriculas?${qs}`);
+    let { rows } = await api(`/api/matriculas?${qs}`);
+    if (pago) rows = rows.filter((r) => (pago === 'mora' ? r.vencido > 0 : pago === 'hoy' ? r.proxima?.estado === 'hoy' : pago === 'saldo' ? r.saldo > 0 : r.saldo <= 0 && r.total > 0));
     const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
     C.kpis(view.querySelector('[data-kpis]'), [['Matrículas', C.num(rows.length), '', 'bi-person-plus'], ['Valor total', C.money(sum('total')), '', 'bi-cash-stack'],
       ['Recaudado', C.money(sum('pagado')), '', 'bi-check2-circle'], ['Vencido', `<span class="${sum('vencido') ? 'text-danger' : ''}">${C.money(sum('vencido'))}</span>`, `saldo ${C.money(sum('saldo'))}`, 'bi-exclamation-circle']]);
@@ -29,7 +39,7 @@ DW.ready.then(async (me) => {
       { label: 'Pagado', html: (r) => `${C.money(r.pagado)}${C.meter(r.pagado, r.total)}` },
       { label: 'Próxima cuota', html: (r) => (r.proxima ? `${C.chip(...AC.CUOTA[r.proxima.estado])} <span class="small">${C.money(r.proxima.falta)} · ${C.day(r.proxima.vence)}</span>` : C.chip('ok', 'Al día')) },
       { label: 'Estado', html: (r) => C.chip(...EST[r.estado]) },
-      { label: '', cls: 'text-end text-nowrap', html: (r) => `<div data-id="${r.id}">${!RO && r.saldo > 0 ? '<button class="btn btn-sm btn-primary" data-act="pagar"><i class="bi bi-cash-coin me-1"></i>Pagar</button> ' : ''}<button class="btn btn-sm btn-outline-primary" data-act="cuotas">Cuotas</button>
+      { label: '', cls: 'text-end text-nowrap', html: (r) => `<div data-id="${r.id}">${!RO && r.saldo > 0 ? '<button class="btn btn-sm btn-primary" data-act="pagar"><i class="bi bi-cash-coin me-1"></i>Pagar</button> ' : ''}<button class="btn btn-sm btn-outline-primary" data-act="cuotas">Cuotas</button> ${me.modules.some((m) => m.id === 'cuotas') ? '<button class="btn btn-sm btn-outline-secondary" data-act="pagos" title="Ver los pagos y los recibos (desde Finanzas)"><i class="bi bi-receipt"></i></button> ' : ''}${r.vencido > 0 ? recordar(r) : ''}
         ${RO ? '' : `<div class="dropdown d-inline-block"><button class="btn btn-sm btn-light" data-bs-toggle="dropdown" aria-label="Más acciones"><i class="bi bi-three-dots"></i></button><ul class="dropdown-menu dropdown-menu-end">
           ${r.estado !== 'activa' ? '<li><button class="dropdown-item" data-act="activa">Marcar activa</button></li>' : ''}${r.estado !== 'terminada' ? '<li><button class="dropdown-item" data-act="terminada">Marcar terminada</button></li>' : ''}${r.estado !== 'retirada' ? '<li><button class="dropdown-item" data-act="retirada">Marcar retirada</button></li>' : ''}
           <li><button class="dropdown-item" data-act="plan">Cambiar plan de cuotas</button></li><li><hr class="dropdown-divider"></li><li><button class="dropdown-item text-danger" data-act="borrar">Borrar</button></li></ul></div>`}</div>` }], rows)
@@ -124,6 +134,7 @@ DW.ready.then(async (me) => {
     const a = b.dataset.act;
     try {
       if (a === 'pagar') pagar(r);
+      else if (a === 'pagos') await AC.verPagos({ id: r.id, estudiante: r.estudiante, curso: r.curso });
       else if (a === 'cuotas') await verCuotas(r);
       else if (a === 'plan') await plan(r);
       else if (a === 'borrar') { if (await confirm({ title: '¿Borrar la matrícula?', text: 'Se borran sus cuotas, asistencia y notas. Si tiene pagos, márcala como retirada.' })) { await api(`/api/matriculas/${r.id}`, { method: 'DELETE' }); toast('Borrada'); load(); } }
@@ -131,6 +142,10 @@ DW.ready.then(async (me) => {
     } catch (x) { toast(x.message, false); }
   });
   document.querySelector('[data-nueva]')?.addEventListener('click', nueva);
+  document.querySelector('[data-sync]')?.addEventListener('click', async () => {
+    try { const r = await api('/api/cuotas/sync-finanzas', { method: 'POST' }); toast(r.nuevos ? `${r.nuevos} pagos nuevos enviados a Finanzas` : 'Finanzas ya tenía todos los pagos'); } catch (x) { toast(x.message, false); }
+  });
+  view.querySelector('[data-pago]').addEventListener('change', (e) => { pago = e.target.value; load(); });
   let t;
   view.querySelector('[data-q]').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value.trim(); load(); }, 250); });
   view.querySelector('[data-curso]').addEventListener('change', (e) => { st.curso_id = e.target.value; load(); });
@@ -138,10 +153,6 @@ DW.ready.then(async (me) => {
   load().catch((x) => toast(x.message, false));
   };
 
-  const CUOTAS = me.modules.some((m) => m.id === 'cuotas');
-  const cuotas = CUOTAS ? AC.cuotas(me) : null;
-  AC.vistas([['matriculas', 'Matrículas', 'bi-person-plus'], ...(CUOTAS ? [['cartera', 'Cartera', 'bi-calendar-check'], ['pagos', 'Pagos y recibos', 'bi-receipt']] : [])], async (k, view) => {
-    if (k !== 'matriculas') { document.querySelector('[data-acciones]').innerHTML = ''; return cuotas(k, view); }
-    return montar(view);
-  });
+  // Cartera y Pagos ya no son pestañas: la cartera se filtra aquí (Cobro) y los pagos y recibos se ven por matrícula, desde Finanzas.
+  AC.vistas([['matriculas', 'Matrículas', 'bi-person-plus']], (k, view) => montar(view));
 });

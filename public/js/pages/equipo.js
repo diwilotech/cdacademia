@@ -52,6 +52,8 @@ DW.ready.then(async (me) => {
       { label: '', cls: 'text-end text-nowrap', html: (r) => {
         const u = r.user, id = esc(u?.id || '');
         return [
+          u && !r.prof && canManage ? `<button class="btn btn-sm btn-outline-info" data-hacerprof="${id}" title="Convertir en profesional (docente)"><i class="bi bi-mortarboard me-1"></i>Hacer profesional</button>` : '',
+          u && r.prof && canManage ? `<button class="btn btn-sm btn-outline-warning" data-quitarprof="${r.prof.id}" title="Dejar de ser profesional (conserva su acceso a la app)"><i class="bi bi-person-dash"></i></button>` : '',
           r.prof && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-ficha="${r.prof.id}" title="Ficha del profesional"><i class="bi bi-person-badge"></i></button>` : '',
           u && u.role === 'staff' && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-mods="${id}" title="Módulos que puede abrir"><i class="bi bi-grid"></i></button>` : '',
           !u && r.prof && me.canManage ? `<button class="btn btn-sm btn-primary" data-dar="${r.prof.id}" title="Invitarlo a la app con su correo"><i class="bi bi-person-plus me-1"></i>Dar acceso</button>` : '',
@@ -87,9 +89,22 @@ DW.ready.then(async (me) => {
     try { await api(`/api/team/${s.dataset.role}`, { method: 'PATCH', body: { role: s.value } }); toast('Rol actualizado'); load(); } catch (ex) { toast(ex.message, false); load(); }
   });
   list.addEventListener('click', async (e) => {
-    const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), da = e.target.closest('[data-dar]');
+    const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), hp = e.target.closest('[data-hacerprof]'), qp = e.target.closest('[data-quitarprof]'), da = e.target.closest('[data-dar]');
     try {
       if (fi) AC.fichaProfesional({ row: profs.find((p) => p.id === +fi.dataset.ficha), areas, changed: load });
+      if (hp) {
+        const u = users.find((x) => x.id === hp.dataset.hacerprof);
+        const r = await api('/api/profesionales/profesionales', { method: 'POST', body: { nombre: u.name || u.email, email: u.email, activo: true } });
+        toast('Ahora también es profesional'); await load();
+        const row = profs.find((p) => p.id === (r.id ?? r.row?.id)) || profs.find((p) => key(p.email) === key(u.email));
+        if (row) AC.fichaProfesional({ row, areas, changed: load });   // para ponerle áreas y horario
+      }
+      if (qp) {
+        const p = profs.find((x) => x.id === +qp.dataset.quitarprof);
+        if (await confirm({ title: `¿Quitar a ${p.nombre} como profesional?`, text: 'Conserva su acceso a la app. Los cursos que dicta quedan sin profesional.', ok: 'Quitar' })) {
+          await api(`/api/profesionales/profesionales/${p.id}`, { method: 'DELETE' }); toast('Ya no es profesional'); load();
+        }
+      }
       if (da) { const p = profs.find((x) => x.id === +da.dataset.dar); invitar({ email: p.email, name: p.nombre }, p.id); }
       if (mo) {
         const u = users.find((x) => x.id === mo.dataset.mods);

@@ -246,7 +246,7 @@ DW.ready.then(async (me) => {
     return;
   }
 
-  const calendario = (view) => AC.semana(view);
+  function calendario(view) { return AC.calendario(view); }   // declarada como función: se usa más arriba, en la lista
 
   /* ---------- detalle del curso ---------- */
   let D;
@@ -279,58 +279,101 @@ DW.ready.then(async (me) => {
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-ficha]'); if (b) AC.ficha(b.dataset.ficha, me).catch((x) => toast(x.message, false)); });
       return;
     }
+    const activos = () => D.inscritos.filter((i) => i.estado === 'activa');
+    const celdaNombre = (i) => `<td class="dw-sticky"><div class="fw-semibold">${esc(i.nombre)}</div><div class="small text-body-secondary">${i.documento ? `CC ${esc(i.documento)}` : 'Sin documento'}</div></td>`;
     if (t === 'asistencia') {
       if (!D.clases.length) { view.innerHTML = empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.'); return; }
-      const n0 = proxClase();
-      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-3"><select class="form-select w-auto" data-clase aria-label="Clase">${D.clases.map((c) => `<option value="${c.n}" ${c.n === n0 ? 'selected' : ''}>Clase ${c.n}${c.fecha ? ` · ${C.day(c.fecha)}` : ''}${c.tema ? ` · ${esc(c.tema)}` : ''}</option>`).join('')}</select>
-        ${RO ? '' : '<button class="btn btn-light btn-sm" data-todos>Todos presentes</button>'}</div><div class="dw-card" data-lista></div>`;
-      const draw = () => {
-        const n = +$('[data-clase]', view).value;
-        const act = D.inscritos.filter((i) => i.estado === 'activa');
-        $('[data-lista]', view).innerHTML = act.length ? `${act.map((i) => `<div class="d-flex flex-wrap align-items-center gap-2 py-2 border-bottom" data-ins="${i.id}"><span class="flex-grow-1 fw-semibold">${esc(i.nombre)}</span>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Asistencia de ${esc(i.nombre)}">${ASIS.map(([v, l, c]) => `<input type="radio" class="btn-check" name="a${i.id}" id="a${i.id}${v}" value="${v}" ${i.asistencia[n] === v ? 'checked' : ''} ${RO ? 'disabled' : ''}><label class="btn btn-outline-${c}" for="a${i.id}${v}">${l}</label>`).join('')}</div></div>`).join('')}
-          ${RO ? '' : '<div class="mt-3"><button class="btn btn-primary" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button></div>'}` : empty('bi-people', `No hay ${P} activos en el curso.`);
+      const ORDEN = ['', 'P', 'T', 'J', 'A'], info = Object.fromEntries(ASIS.map(([v, l, c]) => [v, { l, c }]));
+      let editando = false;
+      const marcas = {}; for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia };
+      const cambios = new Set();   // `${ins}:${n}`
+      const orig = (insId, n) => D.inscritos.find((i) => i.id === insId)?.asistencia[n] || '';
+      const pct = (i) => {
+        const m = Object.values(marcas[i.id]).filter(Boolean); if (!m.length) return '—';
+        return cambios.size ? `${Math.round((m.length - m.filter((x) => x === 'A').length) / m.length * 100)}%` : (i.resumen_asistencia.pct == null ? '—' : `${i.resumen_asistencia.pct}%`);
       };
-      draw();
-      $('[data-clase]', view).addEventListener('change', draw);
-      $('[data-todos]', view)?.addEventListener('click', () => view.querySelectorAll('[data-ins]').forEach((r) => { if (!r.querySelector('input:checked')) r.querySelector('input[value="P"]').checked = true; }));
+      const pinta = () => {
+        const act = activos();
+        view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            ${RO ? '' : editando ? '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar asistencia</button><button class="btn btn-light btn-sm" data-cancelar>Cancelar</button>'
+              : '<button class="btn btn-outline-primary btn-sm" data-editar-as><i class="bi bi-pencil me-1"></i>Editar</button>'}
+            <span class="small text-body-secondary ms-auto">${ASIS.map(([v, l, c]) => `<span class="me-2"><span class="dw-as dw-as--${v}">${v}</span> ${l}</span>`).join('')}</span></div>
+          ${editando ? '<div class="small text-body-secondary mb-2"><i class="bi bi-hand-index me-1"></i>Toca una casilla para cambiar entre presente, tarde, excusa y ausente. Toca el número de una clase para marcar presentes a todos los que no tienen marca.</div>' : ''}
+          ${act.length ? `<div class="table-responsive dw-matriz ${editando ? 'dw-matriz--edit' : ''}"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
+            ${D.clases.map((c) => `<th class="text-center"><${editando ? 'button type="button" class="btn btn-link p-0 text-reset text-decoration-none" data-col="' + c.n + '"' : 'span'}>${c.n}</${editando ? 'button' : 'span'}><div class="small fw-normal text-body-secondary">${c.fecha ? C.day(c.fecha).replace(/ de /g, ' ').replace(/\s\d{4}$/, '') : ''}</div></th>`).join('')}<th class="text-center">Asistencia</th></tr></thead>
+            <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.clases.map((c) => { const v = marcas[i.id][c.n] || '';
+              return `<td class="text-center"><button type="button" class="dw-as ${v ? `dw-as--${v}` : 'dw-as--vacia'} ${cambios.has(`${i.id}:${c.n}`) ? 'dw-as--cambio' : ''}" data-cel="${c.n}" ${editando ? '' : 'tabindex="-1"'} aria-label="${esc(i.nombre)}, clase ${c.n}: ${v ? info[v].l : 'sin marca'}">${v || '·'}</button></td>`; }).join('')}
+              <td class="text-center fw-semibold">${pct(i)}</td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
+      };
+      pinta();
       view.addEventListener('click', async (e) => {
-        if (!e.target.closest('[data-guardar]')) return;
-        const marcas = [...view.querySelectorAll('[data-ins]')].map((r) => ({ inscripcion_id: +r.dataset.ins, estado: r.querySelector('input:checked')?.value || '' }));
-        try { await api(`/api/cursos/${id}/asistencia`, { method: 'POST', body: { clase_n: +$('[data-clase]', view).value, marcas } }); await cargar(); toast('Asistencia guardada'); } catch (x) { toast(x.message, false); }
+        if (e.target.closest('[data-editar-as]')) { editando = true; pinta(); return; }
+        if (e.target.closest('[data-cancelar]')) { for (const i of D.inscritos) marcas[i.id] = { ...i.asistencia }; cambios.clear(); editando = false; pinta(); return; }
+        const col = e.target.closest('[data-col]');
+        if (col && editando) { const n = +col.dataset.col; activos().forEach((i) => { if (!marcas[i.id][n]) { marcas[i.id][n] = 'P'; cambios.add(`${i.id}:${n}`); } }); pinta(); return; }
+        const cel = e.target.closest('[data-cel]');
+        if (cel && editando) {
+          const insId = +cel.closest('[data-ins]').dataset.ins, n = +cel.dataset.cel;
+          const sig = ORDEN[(ORDEN.indexOf(marcas[insId][n] || '') + 1) % ORDEN.length];
+          if (sig) marcas[insId][n] = sig; else delete marcas[insId][n];
+          if ((sig || '') === orig(insId, n)) cambios.delete(`${insId}:${n}`); else cambios.add(`${insId}:${n}`);
+          pinta(); return;
+        }
+        if (e.target.closest('[data-guardar]')) {
+          const porClase = {};
+          for (const k2 of cambios) { const [insId, n] = k2.split(':').map(Number); (porClase[n] ||= []).push({ inscripcion_id: insId, estado: marcas[insId][n] || '' }); }
+          try {
+            for (const [n, ms] of Object.entries(porClase)) await api(`/api/cursos/${id}/asistencia`, { method: 'POST', body: { clase_n: +n, marcas: ms } });
+            await cargar(); toast(cambios.size ? 'Asistencia guardada' : 'No había cambios'); V.reload();
+          } catch (x) { toast(x.message, false); }
+        }
       });
       return;
     }
     if (t === 'notas') {
       if (!D.evaluaciones.length) { view.innerHTML = empty('bi-star', me.canManage ? 'Crea las evaluaciones del curso en la pestaña «Evaluaciones y cupones».' : 'El curso aún no tiene evaluaciones.'); return; }
-      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-3"><select class="form-select w-auto" data-ev aria-label="Evaluación">${D.evaluaciones.map((e) => `<option value="${e.id}">${esc(e.nombre)} · ${e.peso}%</option>`).join('')}</select>
-        <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}</span></div><div class="dw-card" data-lista></div>`;
       const exStat = new Map(((await api(`/api/cursos/${id}/examenes`).catch(() => ({ rows: [] }))).rows).map((x) => [`${x.inscripcion_id}-${x.evaluacion_id}`, x]));
       const botonEx = (i, e) => {
         const x = exStat.get(`${i.id}-${e.id}`), n = e.examen?.preguntas?.length || 0;
         if (e.tipo === 'multiple') {
           if (!n) return `<span class="text-body-secondary small" title="Primero crea las preguntas en «Evaluaciones y cupones»"><i class="bi bi-card-checklist"></i></span>`;
-          return `<button type="button" class="btn btn-sm ${x?.respondidas ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen title="${x?.respondidas ? 'Ver o corregir las respuestas del examen' : 'Responder el examen de selección múltiple'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi bi-eye"></i></button>`;
+          return `<button type="button" class="btn btn-sm ${x?.respondidas ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen="${e.id}" title="${x?.respondidas ? 'Ver o corregir las respuestas del examen' : 'Responder el examen de selección múltiple'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi bi-eye"></i></button>`;
         }
-        return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
+        return `<button type="button" class="btn btn-sm ${x?.archivos ? 'btn-outline-primary' : 'btn-outline-secondary'}" data-examen="${e.id}" title="${x?.archivos ? `Ver el examen subido (${x.archivos})` : 'Subir la foto o el PDF del examen'}" aria-label="Examen de ${esc(i.nombre)}"><i class="bi ${x?.archivos ? 'bi-file-earmark-check-fill' : 'bi-upload'}"></i></button>`;
       };
-      const draw = () => {
-        const ev = +$('[data-ev]', view).value, act = D.inscritos.filter((i) => i.estado === 'activa'), evObj = D.evaluaciones.find((e) => e.id === ev);
-        $('[data-lista]', view).innerHTML = act.length ? `${act.map((i) => `<div class="d-flex align-items-center gap-2 py-2 border-bottom" data-ins="${i.id}"><label class="flex-grow-1 fw-semibold" for="n${i.id}">${esc(i.nombre)}</label>
-          ${botonEx(i, evObj)}<input class="form-control" style="width:96px" id="n${i.id}" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" value="${i.notas[ev] ?? ''}" ${RO ? 'disabled' : ''}></div>`).join('')}
-          ${RO ? '' : '<div class="mt-3"><button class="btn btn-primary" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button></div>'}` : empty('bi-people', `No hay ${P} activos en el curso.`);
+      const act = activos(), pesoTotal = D.evaluaciones.reduce((a, e) => a + e.peso, 0) || 100;
+      view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}
+          <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}</span></div>
+        ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
+          ${D.evaluaciones.map((e) => `<th class="text-center">${esc(e.nombre)}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
+          <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
+            <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
+            <td class="text-center" data-res></td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
+      const resumen = (tr) => {
+        let suma = 0, pesos = 0;
+        for (const e of D.evaluaciones) { const v = tr.querySelector(`[data-nota="${e.id}"]`).value; if (v !== '' && !Number.isNaN(+v)) { suma += +v * e.peso; pesos += e.peso; } }
+        const prom = pesos ? Math.round(suma / pesos * 100) / 100 : null, ev = Math.round(pesos / pesoTotal * 100);
+        tr.querySelector('[data-res]').innerHTML = `<div class="fw-semibold ${prom !== null && prom < D.config.notaMin ? 'text-danger' : ''}">${prom === null ? '—' : prom.toFixed(1)}</div><div class="small text-body-secondary">${ev}% evaluado</div>${C.meter(ev, 100)}`;
       };
-      draw();
-      $('[data-ev]', view).addEventListener('change', draw);
-      view.addEventListener('click', (e) => {
-        const b = e.target.closest('[data-examen]'); if (!b) return;
-        const ev = D.evaluaciones.find((x) => x.id === +$('[data-ev]', view).value), row = b.closest('[data-ins]'), ins = D.inscritos.find((i) => String(i.id) === row.dataset.ins);
-        AC.examen.abrir({ cursoId: id, ev, ins, ro: RO }, async () => { await cargar(); V.reload(); }).catch((x) => toast(x.message, false));
-      });
+      view.querySelectorAll('tbody tr').forEach(resumen);
+      view.addEventListener('input', (e) => { const tr = e.target.closest('tr[data-ins]'); if (tr && e.target.dataset.nota !== undefined) resumen(tr); });
       view.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-examen]');
+        if (b) {
+          const ev = D.evaluaciones.find((x) => x.id === +b.dataset.examen), ins = D.inscritos.find((i) => String(i.id) === b.closest('[data-ins]').dataset.ins);
+          AC.examen.abrir({ cursoId: id, ev, ins, ro: RO }, async () => { await cargar(); V.reload(); }).catch((x) => toast(x.message, false));
+          return;
+        }
         if (!e.target.closest('[data-guardar]')) return;
-        const notas = [...view.querySelectorAll('[data-ins]')].map((r) => ({ inscripcion_id: +r.dataset.ins, nota: r.querySelector('input').value }));
-        try { await api(`/api/cursos/${id}/notas`, { method: 'POST', body: { evaluacion_id: +$('[data-ev]', view).value, notas } }); await cargar(); toast('Notas guardadas'); } catch (x) { toast(x.message, false); }
+        try {
+          let n = 0;
+          for (const ev of D.evaluaciones) {   // solo las notas que cambiaron, evaluación por evaluación
+            const notas = [...view.querySelectorAll('tbody tr[data-ins]')].map((r) => ({ inscripcion_id: +r.dataset.ins, nota: r.querySelector(`[data-nota="${ev.id}"]`).value }))
+              .filter((x) => String(D.inscritos.find((i) => i.id === x.inscripcion_id).notas[ev.id] ?? '') !== String(x.nota));
+            if (notas.length) { await api(`/api/cursos/${id}/notas`, { method: 'POST', body: { evaluacion_id: ev.id, notas } }); n += notas.length; }
+          }
+          await cargar(); toast(n ? 'Notas guardadas' : 'No había cambios'); V.reload();
+        } catch (x) { toast(x.message, false); }
       });
       return;
     }

@@ -158,6 +158,15 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Inicio: B no ve los datos de A', (await B.app('/api/academia/metricas')).data.tiles.find((t) => t.id === 'estudiantes')?.valor === 0);
   check('Inicio: /api/me marca los módulos propios y los compartidos', (await A.app('/api/me')).data.modules.find((x) => x.id === 'cursos')?.tipo === 'propio' && (await A.app('/api/me')).data.modules.find((x) => x.id === 'finanzas')?.tipo === 'compartido');
 
+  // Notas y asistencia en matriz: el detalle trae la cédula de cada inscrito, y la asistencia se corrige clase por clase
+  const detM = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data;
+  check('Curso: los inscritos traen su cédula (para la matriz de notas y asistencia)', detM.inscritos.find((i) => i.id === m1.data.id)?.documento === '1001' && detM.inscritos.find((i) => i.id === m2.data.id)?.documento === '1002');
+  const cambioAs = await A.app(`/api/cursos/${k.data.id}/asistencia`, { method: 'POST', body: { clase_n: 3, marcas: [{ inscripcion_id: m1.data.id, estado: 'T' }, { inscripcion_id: m2.data.id, estado: 'J' }] } });
+  const detM2 = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data;
+  check('Asistencia: guarda los estados tarde y excusa por clase', cambioAs.status === 200 && detM2.inscritos.find((i) => i.id === m1.data.id).asistencia[3] === 'T' && detM2.inscritos.find((i) => i.id === m2.data.id).asistencia[3] === 'J');
+  await A.app(`/api/cursos/${k.data.id}/asistencia`, { method: 'POST', body: { clase_n: 3, marcas: [{ inscripcion_id: m1.data.id, estado: '' }] } });
+  check('Asistencia: una marca vacía borra el registro', (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.inscritos.find((i) => i.id === m1.data.id).asistencia[3] === undefined);
+
   // Aislamiento
   check('Aislamiento: B no ve cursos ni estudiantes de A', (await B.app('/api/cursos/cursos')).data.rows?.length === 0 && (await B.app('/api/estudiantes/estudiantes')).data.rows?.length === 0);
   check('Aislamiento: B no ve el detalle del curso de A', (await B.app(`/api/cursos/${k.data.id}/detalle`)).status === 404);

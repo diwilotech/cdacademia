@@ -134,5 +134,51 @@ window.AC = (function () {
     return load();
   }
 
-  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana };
+  // Calendario del mes completo (semanas de lunes a domingo). Cada día lista sus clases y reposiciones; con más de 3, «+N más» las abre.
+  function mes(host) {
+    const lunes = (iso) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+    const mas = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+    const mesMas = (ym, n) => { const d = new Date(`${ym}-01T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+    let ym = C.todayCo().slice(0, 7);
+    host.innerHTML = `<div class="d-flex align-items-center gap-2 mb-3"><button class="btn btn-light" data-prev aria-label="Mes anterior"><i class="bi bi-chevron-left"></i></button>
+      <b class="flex-grow-1 text-center text-capitalize" data-rango></b><button class="btn btn-light" data-hoy>Hoy</button><button class="btn btn-light" data-next aria-label="Mes siguiente"><i class="bi bi-chevron-right"></i></button></div><div data-tabla></div>`;
+    const hhmm = (h) => h || '';
+    const load = async () => {
+      const hoy = C.todayCo(), primero = `${ym}-01`, ultimo = mas(`${mesMas(ym, 1)}-01`, -1);
+      const desde = lunes(primero), hasta = mas(lunes(ultimo), 6);
+      $('[data-rango]', host).textContent = new Date(`${primero}T12:00:00Z`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      let d; try { d = await api(`/api/cursos/calendario?desde=${desde}&hasta=${hasta}`); } catch (x) { $('[data-tabla]', host).innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
+      const semanas = Math.round((Date.parse(hasta) - Date.parse(desde)) / 864e5 + 1) / 7;
+      const celda = (f) => {
+        const ev = [...d.clases.filter((x) => x.fecha === f).map((x) => ({ h: x.ini || '', html: `<a class="dw-ev dw-ev--mini" ${/^#[0-9a-f]{3,8}$/i.test(x.color || '') ? `style="--ev:${esc(x.color)}"` : ''} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)} · clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}"><b>${esc(hhmm(x.ini))}</b> ${esc(x.curso)}</a>` })),
+          ...d.espacios.filter((x) => x.fecha === f).map((x) => ({ h: x.ini, html: `<a class="dw-ev dw-ev--mini dw-ev--repo" href="/staff/cursos.html#reposiciones" title="Espacio de reposición · ${x.ocupados} de ${x.cupos} cupos"><b>${esc(hhmm(x.ini))}</b> <i class="bi bi-arrow-repeat"></i> Reposición</a>` }))]
+          .sort((p, q) => p.h.localeCompare(q.h));
+        const fuera = !f.startsWith(ym);
+        return `<td class="${f === hoy ? 'hoy' : ''} ${fuera ? 'fuera' : ''} ${ev.length ? '' : 'vacio'}" data-dia="${AC.DIAS[new Date(`${f}T12:00:00Z`).getUTCDay()]} ${+f.slice(8)}${fuera ? ' ' + new Date(`${f}T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short', timeZone: 'UTC' }) : ''}">
+          <div class="dw-mes-n">${+f.slice(8)}</div>${ev.map((x) => x.html).join('')}${ev.length > 3 ? `<button type="button" class="dw-mas btn btn-link btn-sm p-0" data-mas>+${ev.length - 3} más</button>` : ''}</td>`;
+      };
+      $('[data-tabla]', host).innerHTML = `<table class="dw-semana dw-mes"><thead><tr>${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((x) => `<th>${x}</th>`).join('')}</tr></thead>
+        <tbody>${Array.from({ length: semanas }, (_, w) => `<tr>${Array.from({ length: 7 }, (_, i) => celda(mas(desde, w * 7 + i))).join('')}</tr>`).join('')}</tbody></table>
+        ${!d.clases.length && !d.espacios.length ? '<div class="small text-body-secondary mt-2">No hay clases ni reposiciones este mes.</div>' : ''}`;
+    };
+    host.addEventListener('click', (e) => { const b = e.target.closest('[data-mas]'); if (b) { const td = b.closest('td'); td.classList.toggle('abierto'); b.textContent = td.classList.contains('abierto') ? 'Ver menos' : `+${td.querySelectorAll('.dw-ev').length - 3} más`; } });
+    $('[data-prev]', host).onclick = () => { ym = mesMas(ym, -1); load(); };
+    $('[data-next]', host).onclick = () => { ym = mesMas(ym, 1); load(); };
+    $('[data-hoy]', host).onclick = () => { ym = C.todayCo().slice(0, 7); load(); };
+    return load();
+  }
+
+  // Calendario con selector Mes / Semana (el mes completo por defecto).
+  function calendario(host, vista = 'mes') {
+    host.innerHTML = '<div class="btn-group mb-3" role="group" aria-label="Vista del calendario"><button type="button" class="btn btn-sm btn-outline-primary" data-v="mes">Mes</button><button type="button" class="btn btn-sm btn-outline-primary" data-v="semana">Semana</button></div><div data-cal></div>';
+    const ir = (v) => {
+      host.querySelectorAll('[data-v]').forEach((b) => b.classList.toggle('active', b.dataset.v === v));
+      const sub = document.createElement('div'); host.querySelector('[data-cal]').replaceChildren(sub);
+      return v === 'mes' ? mes(sub) : semana(sub);
+    };
+    host.querySelector('.btn-group').addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) ir(b.dataset.v); });
+    return ir(vista);
+  }
+
+  return { DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana, mes, calendario };
 })();

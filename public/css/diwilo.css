@@ -263,3 +263,27 @@ body.dw-embed .dw-readonly { top: 0; }
 .dw-table th.dw-dt-sort[aria-sort="ascending"]::after { content: "\2191"; opacity: 1; color: var(--dw-p); }
 .dw-table th.dw-dt-sort[aria-sort="descending"]::after { content: "\2193"; opacity: 1; color: var(--dw-p); }
 .dw-table th.dw-dt-sort:focus-visible { outline: 2px solid var(--dw-p); outline-offset: -2px; }
+
+/* ---------- Matriz de notas y asistencia (estudiantes en filas) ---------- */
+.dw-matriz { background: var(--dw-tarjeta); border: 1px solid var(--dw-borde); border-radius: 14px; }
+.dw-matriz table { width: max-content; min-width: 100%; }
+.dw-matriz th, .dw-matriz td { white-space: nowrap; padding: 8px 10px; }
+.dw-matriz .dw-sticky { position: sticky; left: 0; z-index: 2; background: var(--dw-tarjeta); min-width: 190px; box-shadow: 1px 0 0 var(--dw-borde); }
+.dw-matriz thead th { font-size: .85rem; }
+.dw-as { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; border: 0; font-weight: 700; font-size: .82rem; cursor: default; }
+.dw-as--P { background: var(--bs-success-bg-subtle); color: var(--bs-success-text-emphasis); }
+.dw-as--T { background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+.dw-as--J { background: var(--bs-info-bg-subtle); color: var(--bs-info-text-emphasis); }
+.dw-as--A { background: var(--bs-danger-bg-subtle); color: var(--bs-danger-text-emphasis); }
+.dw-as--vacia { background: transparent; color: var(--bs-secondary-color); }
+.dw-matriz--edit .dw-as { cursor: pointer; outline: 1px dashed var(--dw-borde); }
+.dw-matriz--edit .dw-as:hover { outline: 2px solid var(--dw-p); }
+.dw-as--cambio { box-shadow: 0 0 0 2px var(--dw-p); }
+/* Calendario del mes */
+.dw-mes td { height: 116px; padding: 4px; }
+.dw-mes td.fuera { background: rgba(0, 0, 0, .025); } .dw-mes td.fuera .dw-mes-n { opacity: .45; }
+.dw-mes-n { font-size: .78rem; font-weight: 600; margin-bottom: 3px; } .dw-mes td.hoy .dw-mes-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--dw-p); color: #fff; }
+.dw-ev--mini { padding: 2px 5px; margin-bottom: 2px; font-size: .72rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.dw-mes td:not(.abierto) .dw-ev:nth-of-type(n+4) { display: none; }
+.dw-mas { font-size: .72rem; }
+@media (max-width: 767.98px) { .dw-mes td { height: auto; } .dw-mes td.vacio { display: none; } .dw-mes td::before { content: attr(data-dia); display: block; font-weight: 600; font-size: .78rem; } .dw-mes-n { display: none !important; } .dw-ev--mini { white-space: normal; } }

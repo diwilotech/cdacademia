@@ -95,7 +95,7 @@ function validarCupon(row) {
 // Inscritos de un curso con su asistencia, notas y estado académico.
 export async function inscritosCurso(c, cursoId, cfg) {
   const [ins, asis, notas, evs, repos] = await Promise.all([
-    all(c.env, `SELECT i.id, i.estudiante_id, i.estado, e.nombre, e.telefono FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
+    all(c.env, `SELECT i.id, i.estudiante_id, i.estado, e.nombre, e.documento, e.telefono FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       WHERE i.business_id = ? AND i.curso_id = ? AND i.estado <> 'retirada' ORDER BY e.nombre`, c.businessId, cursoId),
     all(c.env, 'SELECT a.inscripcion_id, a.clase_n, a.estado FROM ac_asistencia a JOIN ac_inscripciones i ON i.id = a.inscripcion_id WHERE a.business_id = ? AND i.curso_id = ?', c.businessId, cursoId),
     all(c.env, 'SELECT n.inscripcion_id, n.evaluacion_id, n.nota FROM ac_notas n JOIN ac_inscripciones i ON i.id = n.inscripcion_id WHERE n.business_id = ? AND i.curso_id = ?', c.businessId, cursoId),

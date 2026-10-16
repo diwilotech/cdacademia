@@ -54,15 +54,15 @@ DW.ready.then(async (me) => {
         return [
           r.prof && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-ficha="${r.prof.id}" title="Ficha del profesional"><i class="bi bi-person-badge"></i></button>` : '',
           u && u.role === 'staff' && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-mods="${id}" title="Módulos que puede abrir"><i class="bi bi-grid"></i></button>` : '',
-          !u && r.prof?.email && me.canManage ? `<button class="btn btn-sm btn-outline-primary" data-dar="${r.prof.id}" title="Darle acceso a la app"><i class="bi bi-person-plus"></i></button>` : '',
+          !u && r.prof && me.canManage ? `<button class="btn btn-sm btn-primary" data-dar="${r.prof.id}" title="Invitarlo a la app con su correo"><i class="bi bi-person-plus me-1"></i>Dar acceso</button>` : '',
           u && u.role !== 'owner' && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-link="${id}" data-email="${esc(u.email)}" title="Link para crear o restablecer su contraseña"><i class="bi bi-key"></i></button>
             <button class="btn btn-sm btn-outline-danger" data-del="${id}" data-email="${esc(u.email)}" title="Quitar del equipo"><i class="bi bi-trash"></i></button>` : '',
         ].join(' '); } },
     ], all) : empty('bi-people', 'Aún no hay nadie en el equipo.');
   }
 
-  function invitar(pre = {}) {
-    const { el, m } = modal(`<form class="needs-validation" novalidate><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Invitar a alguien</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+  function invitar(pre = {}, profId = null) {
+    const { el, m } = modal(`<form class="needs-validation" novalidate><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${pre.name ? `Dar acceso a ${esc(pre.name)}` : 'Invitar a alguien'}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body d-grid gap-2"><input class="form-control" type="email" name="email" placeholder="Correo" value="${esc(pre.email || '')}" required>
         <input class="form-control" name="name" placeholder="Nombre (opcional)" maxlength="100" value="${esc(pre.name || '')}">
         <select class="form-select" name="role" aria-label="Rol"><option value="staff">Personal</option><option value="admin">Administrador</option></select>
@@ -72,7 +72,10 @@ DW.ready.then(async (me) => {
     f.role.onchange = () => { box.hidden = f.role.value !== 'staff'; };
     f.onsubmit = async (e) => {
       e.preventDefault(); f.classList.add('was-validated'); if (!f.checkValidity()) return;
-      try { const r = await api('/api/team', { method: 'POST', body: { email: f.email.value, name: f.name.value, role: f.role.value, modulos: picked(el) } }); m.hide(); await load(); showLink(r.invite_url, f.email.value); }
+      try { const r = await api('/api/team', { method: 'POST', body: { email: f.email.value, name: f.name.value, role: f.role.value, modulos: picked(el) } }); m.hide();
+        // El correo queda también en la ficha del profesional para que sigan unidos.
+        if (profId && !pre.email) await api(`/api/profesionales/profesionales/${profId}`, { method: 'PATCH', body: { email: f.email.value } }).catch(() => {});
+        await load(); showLink(r.invite_url, f.email.value); }
       catch (ex) { toast(ex.message, false); }
     };
   }
@@ -87,7 +90,7 @@ DW.ready.then(async (me) => {
     const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), da = e.target.closest('[data-dar]');
     try {
       if (fi) AC.fichaProfesional({ row: profs.find((p) => p.id === +fi.dataset.ficha), areas, changed: load });
-      if (da) { const p = profs.find((x) => x.id === +da.dataset.dar); invitar({ email: p.email, name: p.nombre }); }
+      if (da) { const p = profs.find((x) => x.id === +da.dataset.dar); invitar({ email: p.email, name: p.nombre }, p.id); }
       if (mo) {
         const u = users.find((x) => x.id === mo.dataset.mods);
         const { el, m } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Módulos de ${esc(u.name || u.email)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>

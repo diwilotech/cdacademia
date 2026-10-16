@@ -288,7 +288,7 @@ DW.ready.then(async (me) => {
     if (t === 'inicio') return editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'inicio', host: view, editable: edicion });
     if (t === 'inscritos') {
       view.innerHTML = sub + (D.inscritos.length ? `<div class="dw-card p-0 p-md-2">${table([
-        { label: AC.cap(S), main: true, html: (i) => `<div>${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}</div><div class="text-body-secondary fw-normal" style="font-size:.75rem">${i.documento ? `CC ${esc(i.documento)}` : 'Sin documento'}</div>` },
+        { label: AC.cap(S), main: true, html: (i) => `<div>${esc(i.nombre)}${i.estado !== 'activa' ? ` ${C.chip('free', AC.cap(i.estado))}` : ''}</div><div class="text-body-secondary fw-normal" style="font-size:.75rem">${i.documento ? `CC ${esc(i.documento)}` : 'Sin documento'}</div>${i.en_mora ? ` <div class="mt-1">${C.chip('bad', `En mora${i.mora_dias ? ` · ${i.mora_dias} d` : ''}`)}${i.baja_asistencia ? ` ${C.chip('soon', `Asistencia ${i.asistencia_pct}%`)}` : ''}</div>` : (i.baja_asistencia ? ` <div class="mt-1">${C.chip('soon', `Asistencia ${i.asistencia_pct}%`)}</div>` : '')}` },
         { label: 'Asistencia', html: (i) => `${i.resumen_asistencia.pct == null ? '—' : `${i.resumen_asistencia.pct}%`}${i.resumen_asistencia.por_reponer ? `<div class="small text-body-secondary">${i.resumen_asistencia.por_reponer} por reponer</div>` : ''}` },
         { label: 'Promedio', html: (i) => `${i.resumen_notas.prom ?? '—'}<div class="small text-body-secondary">${i.resumen_notas.evaluado}% evaluado</div>` },
         { label: 'Estado', html: (i) => C.chip(...i.academico) },
@@ -368,7 +368,7 @@ DW.ready.then(async (me) => {
       view.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center mb-2">${RO ? '' : '<button class="btn btn-primary btn-sm" data-guardar><i class="bi bi-check-lg me-1"></i>Guardar notas</button>'}${MANAGE && edicion ? '<button class="btn btn-outline-primary btn-sm" data-nueva-ev><i class="bi bi-plus-lg me-1"></i>Nueva evaluación</button>' : ''}
           <span class="small text-body-secondary">Escala 0 a ${D.config.escala} · aprueba con ${D.config.notaMin}${MANAGE && pesoTotal !== 100 ? ` · <span class="text-warning-emphasis fw-semibold">los pesos suman ${pesoTotal}%</span>` : ''}</span></div>
         ${act.length ? `<div class="table-responsive dw-matriz"><table class="table align-middle mb-0"><thead><tr><th class="dw-sticky">${esc(AC.cap(S))}</th>
-          ${D.evaluaciones.map((e) => `<th class="text-center" ${esHoy(e) ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}>${esc(e.nombre)}${RO || !me.canManage || !edicion ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
+          ${D.evaluaciones.map((e) => `<th class="text-center" ${esHoy(e) ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}>${esc(e.nombre)}${e.tipo === 'multiple' && e.examen?.preguntas?.length ? ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-vee="${e.id}" title="Ver el examen" aria-label="Ver el examen ${esc(e.nombre)}"><i class="bi bi-eye"></i></button>` : ''}${RO || !me.canManage || !edicion ? '' : ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-editev="${e.id}" title="Editar la evaluación o cambiar su tipo" aria-label="Editar ${esc(e.nombre)}"><i class="bi bi-pencil"></i></button>`}<div class="small fw-normal text-body-secondary">${e.peso}%${e.clase_n ? ` · clase ${e.clase_n}` : ''} · ${e.tipo === 'multiple' ? 'selección' : 'examen subido'}</div></th>`).join('')}<th class="text-center">Promedio<div class="small fw-normal text-body-secondary">evaluado</div></th></tr></thead>
           <tbody>${act.map((i) => `<tr data-ins="${i.id}">${celdaNombre(i)}${D.evaluaciones.map((e) => `<td ${esHoy(e) ? 'style="background:var(--bs-warning-bg-subtle)"' : ''}><div class="d-flex gap-1 align-items-center justify-content-center">${botonEx(i, e)}
             <input class="form-control form-control-sm" style="width:74px" type="number" min="0" max="${D.config.escala}" step="0.1" inputmode="decimal" data-nota="${e.id}" value="${i.notas[e.id] ?? ''}" ${RO ? 'disabled' : ''} aria-label="${esc(e.nombre)} de ${esc(i.nombre)}"></div></td>`).join('')}
             <td class="text-center" data-res></td></tr>`).join('')}</tbody></table></div>` : empty('bi-people', `No hay ${P} activos en el curso.`)}`;
@@ -382,12 +382,14 @@ DW.ready.then(async (me) => {
       view.addEventListener('input', (e) => { const tr = e.target.closest('tr[data-ins]'); if (tr && e.target.dataset.nota !== undefined) resumen(tr); });
       view.addEventListener('click', async (e) => {
         if (e.target.closest('[data-nueva-ev]')) return editarEvaluacion(null);
+        const vee = e.target.closest('[data-vee]');
+        if (vee) return AC.examen.vista(D.evaluaciones.find((x) => x.id === +vee.dataset.vee), { conRespuestas: me.canManage });
         const ed = e.target.closest('[data-editev]');
         if (ed) return editarEvaluacion(D.evaluaciones.find((x) => x.id === +ed.dataset.editev));
         const b = e.target.closest('[data-examen]');
         if (b) {
           const ev = D.evaluaciones.find((x) => x.id === +b.dataset.examen), ins = D.inscritos.find((i) => String(i.id) === b.closest('[data-ins]').dataset.ins);
-          AC.examen.abrir({ cursoId: id, ev, ins, ro: RO }, async () => { await cargar(); V.reload(); }).catch((x) => toast(x.message, false));
+          AC.examen.abrir({ cursoId: id, ev, ins, ro: RO, escala: D.config.escala }, async () => { await cargar(); V.reload(); }).catch((x) => toast(x.message, false));
           return;
         }
         if (!e.target.closest('[data-guardar]')) return;
@@ -409,7 +411,7 @@ DW.ready.then(async (me) => {
         { label: 'Clase', main: true, html: (c) => `Clase ${c.n}${c.tema ? `<div class="small fw-normal">${esc(c.tema)}</div>` : ''}` },
         { label: 'Fecha', html: (c) => `${c.fecha ? C.day(c.fecha) : '—'}${c.ini ? ` · ${esc(c.ini)}–${esc(c.fin)}` : ''}${c.movida ? ` ${C.chip('soon', 'Movida')}` : ''}` },
         { label: 'Concepto', html: (c) => `<span class="small">${c.material_id ? esc(c.detalle || 'Según el material') : '<span class="text-body-secondary">Sin material asignado</span>'}</span>${c.virtual ? ` ${C.chip('free', 'Virtual')}` : ''}` },
-        { label: '', cls: 'text-end', html: (c) => (RO || !edicion ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
+        { label: '', cls: 'text-end', html: (c) => (RO ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
         : empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.');
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-clase]'); if (b) editarClase(D.clases.find((c) => c.n === +b.dataset.clase), () => V.reload()); });
       if (MANAGE && edicion) { view.insertAdjacentHTML('afterbegin', '<div data-editar-clases class="mb-3"></div>'); await editarCurso({ ...D.curso }, () => location.reload(), { seccion: 'clases', host: $('[data-editar-clases]', view), editable: true }); }

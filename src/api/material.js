@@ -7,6 +7,7 @@ import { crud, one, all } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { parse } from '../lib/academia.js';
 import { MATERIALES_EJEMPLO } from '../lib/material-ejemplo.js';
+import { limpiarExamen } from '../lib/examen.js';
 
 const MOD = 'material';
 const MAX = 20 * 1024 * 1024;
@@ -74,8 +75,26 @@ export function routes(r) {
     const nuevos = MATERIALES_EJEMPLO.filter((m) => !tengo.has(m.titulo));
     if (nuevos.length) await c.env.DB.batch(nuevos.map((m) => c.env.DB.prepare('INSERT INTO ac_material (business_id, titulo, area_id, nivel, descripcion, bloques, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)')
       .bind(c.businessId, m.titulo, areas.find((a) => a.nombre.toLowerCase() === (m.area || '').toLowerCase())?.id ?? null, m.nivel, m.descripcion, JSON.stringify(m.bloques), t, t)));
-    await audit(c, `Cargó ${nuevos.length} materiales de ejemplo`, { modulo: MOD });
-    return json({ creados: nuevos.length }, 201);
+    // Un examen de ejemplo (selección múltiple, peso 0 para no mover promedios) por cada material, en los cursos activos de su área.
+    const filas = await all(c.env, 'SELECT id, titulo FROM ac_material WHERE business_id = ?', c.businessId);
+    const cursos = await all(c.env, 'SELECT id, area_id FROM ac_cursos WHERE business_id = ? AND activo = 1', c.businessId);
+    const evs = new Set((await all(c.env, 'SELECT curso_id, nombre FROM ac_evaluaciones WHERE business_id = ?', c.businessId)).map((e) => `${e.curso_id}|${e.nombre}`));
+    const stmts = [];
+    for (const m of MATERIALES_EJEMPLO) {
+      const fila = filas.find((f) => f.titulo === m.titulo); if (!fila) continue;
+      const area = areas.find((a) => a.nombre.toLowerCase() === (m.area || '').toLowerCase())?.id;
+      const destino = area ? cursos.filter((k) => k.area_id === area) : cursos.slice(0, 2);
+      const examen = JSON.stringify(limpiarExamen({ instrucciones: 'Examen de ejemplo. Responde con base en el material.', preguntas: m.preguntas }));
+      for (const k of destino) {
+        const nombre = `Examen de ejemplo: ${m.titulo}`.slice(0, 120);
+        if (evs.has(`${k.id}|${nombre}`)) continue;
+        stmts.push(c.env.DB.prepare("INSERT INTO ac_evaluaciones (business_id, curso_id, nombre, peso, tipo, examen, materiales, created_at, updated_at) VALUES (?,?,?,0,'multiple',?,?,?,?)")
+          .bind(c.businessId, k.id, nombre, examen, JSON.stringify([fila.id]), t, t));
+      }
+    }
+    if (stmts.length) await c.env.DB.batch(stmts);
+    await audit(c, `Cargó ${nuevos.length} materiales y ${stmts.length} exámenes de ejemplo`, { modulo: MOD });
+    return json({ creados: nuevos.length, examenes: stmts.length }, 201);
   });
   r.post('/api/material/archivos', `tenant:${MOD}`, async (c) => {
     if (!c.env.FILES) throw new HttpError(501, 'Esta app no tiene almacenamiento de archivos configurado');

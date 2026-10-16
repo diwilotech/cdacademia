@@ -15,7 +15,7 @@ const pesos = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 export async function cartera(c) {
-  const ins = await all(c.env, `SELECT i.id, i.valor, i.descuento, e.nombre AS estudiante, e.telefono, k.nombre AS curso FROM ac_inscripciones i
+  const ins = await all(c.env, `SELECT i.id, i.estudiante_id, i.valor, i.descuento, e.nombre AS estudiante, e.telefono, k.nombre AS curso FROM ac_inscripciones i
     JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
     WHERE i.business_id = ? AND i.estado <> 'retirada'`, c.businessId);
   const [cuotas, pagos] = await Promise.all([
@@ -23,7 +23,7 @@ export async function cartera(c) {
     all(c.env, "SELECT inscripcion_id, SUM(valor) s FROM ac_pagos WHERE business_id = ? AND tipo = 'cuota' AND anulado = 0 GROUP BY inscripcion_id", c.businessId),
   ]);
   return ins.flatMap((i) => estadoCuotas(cuotas.filter((q) => q.inscripcion_id === i.id), pagos.find((p) => p.inscripcion_id === i.id)?.s || 0)
-    .map((q) => ({ ...q, inscripcion_id: i.id, estudiante: i.estudiante, telefono: i.telefono, curso: i.curso })))
+    .map((q) => ({ ...q, inscripcion_id: i.id, estudiante_id: i.estudiante_id, estudiante: i.estudiante, telefono: i.telefono, curso: i.curso })))
     .sort((a, b) => a.vence.localeCompare(b.vence));
 }
 

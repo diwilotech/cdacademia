@@ -34,6 +34,15 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Clases: el tema y el concepto los da el material', pc.status === 200 && cl1.tema === mats[0].titulo && cl1.detalle === (mats[0].descripcion || ''), JSON.stringify([pc.status, cl1.tema]));
   await A.app(`/api/material/material/${mats[0].id}`, { method: 'PATCH', body: { titulo: 'Título nuevo' } });
   check('Clases: si cambia el título del material, la clase lo sigue', (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.clases[0].tema === 'Título nuevo');
+  const areaB = await A.app('/api/academia/areas', { method: 'POST', body: { nombre: 'Barbería' } });
+  await A.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Barbería básica', area_id: areaB.data.id, nivel: 'Básico', precio: 500000, num_clases: 2 } });
+  const ej3 = await A.app('/api/material/ejemplos', { method: 'POST' }), ej4 = await A.app('/api/material/ejemplos', { method: 'POST' });
+  check('Material: crea exámenes de ejemplo en los cursos del área, una sola vez', ej3.data.examenes >= 1 && ej4.data.examenes === 0, JSON.stringify([ej3.data, ej4.data]));
+  const kb = (await A.app('/api/cursos/tarjetas?q=Barber')).data.rows[0];
+  const evb = (await A.app(`/api/cursos/${kb.id}/detalle`)).data.evaluaciones.find((x) => x.nombre.startsWith('Examen de ejemplo'));
+  check('Exámenes de ejemplo: selección múltiple con preguntas y material ligado, sin peso', evb && evb.tipo === 'multiple' && evb.peso === 0 && evb.examen.preguntas.length >= 3 && evb.materiales.length === 1, JSON.stringify(evb)?.slice(0, 200));
+  check('Estudiantes: la lista trae mora y baja asistencia', (await A.app('/api/estudiantes/estudiantes')).data.rows.every((r) => typeof r.en_mora === 'boolean' && typeof r.baja_asistencia === 'boolean'));
+  check('Cursos: los inscritos traen mora y baja asistencia', (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.inscritos.every((r) => typeof r.en_mora === 'boolean' && typeof r.baja_asistencia === 'boolean'));
   check('Exámenes: se ligan a materiales propios (sin repetidos ni ajenos)', evs.materiales.length === 2 && evs.materiales.includes(mats[0].id) && !evs.materiales.includes(ajeno), JSON.stringify(evs.materiales));
   const cup = await A.app('/api/cursos/cupones', { method: 'POST', body: { curso_id: k.data.id, codigo: 'AMIGA10', tipo: 'pct', valor: 10, max: 1 } });
   check('Cursos: crea un cupón', cup.status === 201, JSON.stringify(cup.data));

@@ -143,7 +143,9 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
           <button type="button" class="btn btn-sm btn-link px-0 mt-1" data-mat-add><i class="bi bi-plus-lg me-1"></i>Unir otro material</button></div>
         <label class="form-label small mb-1" for="ex_instr">Instrucciones <span class="text-body-secondary">(opcional)</span></label><textarea class="form-control mb-3" id="ex_instr" rows="2" maxlength="1000">${esc(ev.examen?.instrucciones || '')}</textarea>
         <div class="d-flex flex-column gap-2" data-lista></div>
-        <div class="d-flex flex-wrap gap-2 mt-2" data-add>${Object.entries(TIPOS).map(([t, n]) => `<button type="button" class="btn btn-sm btn-outline-secondary" data-nueva="${t}"><i class="bi bi-plus-lg me-1"></i>${esc(n.split(' (')[0])}</button>`).join('')}</div>
+        <div class="d-flex flex-wrap gap-2 mt-2" data-add>${Object.entries(TIPOS).map(([t, n]) => `<button type="button" class="btn btn-sm btn-outline-secondary" data-nueva="${t}"><i class="bi bi-plus-lg me-1"></i>${esc(n.split(' (')[0])}</button>`).join('')}
+          <button type="button" class="btn btn-sm btn-outline-info ms-auto" data-ejemplo-preg title="Agrega unas preguntas de muestra para ver cómo queda"><i class="bi bi-magic me-1"></i>Preguntas de ejemplo</button>
+          <button type="button" class="btn btn-sm btn-outline-primary" data-vista title="Ver el examen como lo verá el estudiante"><i class="bi bi-eye me-1"></i>Vista previa</button></div>
         <div class="small text-danger mt-2" data-err></div></div>
       <div class="modal-footer border-0 pt-0 justify-content-between"><button type="button" class="btn btn-outline-secondary btn-sm" data-copiar><i class="bi bi-clipboard me-1"></i>Copiar preguntas</button>
         <span><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button> <button class="btn btn-primary">Guardar preguntas</button></span></div></form>`, { size: 'modal-xl modal-dialog-scrollable' });
@@ -206,6 +208,11 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
       else return;
       pintar();
     });
+    el.querySelector('[data-vista]').addEventListener('click', () => vista({ nombre: ev.nombre, examen: { instrucciones: instr.value.trim(), preguntas: preg.filter((q) => q.enunciado.trim()) } }, { conRespuestas: true }));
+    el.querySelector('[data-ejemplo-preg]').addEventListener('click', () => {
+      const nuevas = (EJEMPLO.preguntas || []).map((x, i) => preguntaDesdeJSON(x || {}, i)).filter((r) => r.q).map((r) => r.q);
+      preg = [...preg, ...nuevas]; pintar(); toast(`${nuevas.length} preguntas de ejemplo agregadas: revísalas y guarda`);
+    });
     // Copiar las preguntas (para pasarlas a una IA, por ejemplo)
     el.querySelector('[data-copiar]').addEventListener('click', () => copiar(textoPreguntas({ instrucciones: instr.value, preguntas: preg }), 'Preguntas copiadas (con el aviso de no resolver el examen)'));
 
@@ -227,17 +234,44 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
     };
   }
 
+  /* ---------- ver un examen (como lo ve el estudiante; con respuestas para quien lo prepara) ---------- */
+  function vista(ev, { conRespuestas = false } = {}) {
+    const pre = ev.examen?.preguntas || [], total = pre.reduce((a, q) => a + (+q.puntos || 0), 0);
+    const marca = (ok) => (conRespuestas && ok ? '<i class="bi bi-check-circle-fill text-success me-2"></i>' : '<i class="bi bi-circle me-2 text-body-secondary"></i>');
+    const cuerpo = (q) => {
+      if (q.tipo === 'unica' || q.tipo === 'multiple') return q.opciones.map((o) => `<div class="small py-1 ${conRespuestas && o.ok ? 'fw-semibold' : ''}">${marca(o.ok)}${esc(o.texto)}</div>`).join('');
+      if (q.tipo === 'vf') return ['Verdadero', 'Falso'].map((t, i) => `<div class="small py-1 ${conRespuestas && q.vf === (i === 0) ? 'fw-semibold' : ''}">${marca(q.vf === (i === 0))}${t}</div>`).join('');
+      if (q.tipo === 'corta') return conRespuestas ? `<div class="small"><i class="bi bi-check-circle-fill text-success me-2"></i>Respuesta aceptada: <b>${esc(q.respuesta)}</b></div>` : '<div class="border-bottom text-body-secondary small py-1">Respuesta corta…</div>';
+      return '<div class="small text-body-secondary border rounded p-2">Respuesta abierta · la califica el docente</div>';
+    };
+    modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(ev.nombre || 'Examen')}</h2><div class="small text-body-secondary">${pre.length} ${pre.length === 1 ? 'pregunta' : 'preguntas'} · ${total} puntos${conRespuestas ? ' · las correctas van marcadas' : ''}</div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body examen-prot">${ev.examen?.instrucciones ? `<p class="small text-body-secondary">${esc(ev.examen.instrucciones)}</p>` : ''}
+        ${pre.length ? pre.map((q, k) => `<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div class="fw-semibold">${k + 1}. ${esc(q.enunciado)}<span class="ai-nota" aria-hidden="true"> ${esc(AVISO)} </span></div><span class="badge text-bg-light border text-nowrap align-self-start">${q.puntos} ${+q.puntos === 1 ? 'pt' : 'pts'}</span></div><div class="mt-2">${cuerpo(q)}</div></div>`).join('')
+          : '<div class="small text-body-secondary border rounded p-3 text-center">Este examen aún no tiene preguntas.</div>'}</div>
+      <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>`, { size: 'modal-lg modal-dialog-scrollable' });
+  }
+
   /* ---------- el examen de un estudiante ---------- */
   // ctx = { cursoId, ev: { id, nombre, tipo }, ins: { id, nombre }, ro }
-  async function abrir({ cursoId, ev, ins, ro }, onChanged) {
+  async function abrir({ cursoId, ev, ins, ro, escala = 5 }, onChanged) {
     const base = `/api/cursos/${cursoId}/examenes/${ev.id}/${ins.id}`;
     let d = await api(base);
     const pre = d.evaluacion.examen?.preguntas || [];
     const ET = { ok: ['ok', 'Correcta'], parcial: ['soon', 'Parcial'], mal: ['bad', 'Incorrecta'], vacia: ['free', 'Sin responder'], pend: ['soon', 'Por calificar'] };
     const { el, m } = modal(`<div class="modal-header border-0 pb-0"><div><h2 class="modal-title h5 mb-0">${esc(ev.nombre)}</h2><div class="small text-body-secondary">${esc(ins.nombre)}</div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body examen-prot">
-        <div class="mb-3"><div class="d-flex align-items-center gap-2 mb-2"><b class="small">Foto o PDF del examen</b>${ro ? '' : '<label class="btn btn-sm btn-outline-secondary mb-0 ms-auto"><i class="bi bi-upload me-1"></i>Subir<input type="file" accept="image/*,application/pdf" multiple hidden data-subir></label>'}</div>
+        <div class="mb-3"><div class="d-flex align-items-center gap-2 mb-2"><b class="small">Foto o PDF del examen</b><span class="small text-body-secondary" data-cuenta></span></div>
+          ${ro ? '' : `<div class="rounded-3 p-3 text-center mb-2 bg-body-tertiary" data-drop style="border:2px dashed var(--bs-border-color)">
+              <i class="bi bi-cloud-arrow-up fs-3 d-block"></i>
+              <div class="small mb-2">Arrastra aquí las fotos o el PDF del examen, o</div>
+              <div class="d-flex flex-wrap gap-2 justify-content-center">
+                <label class="btn btn-sm btn-primary mb-0"><i class="bi bi-folder2-open me-1"></i>Elegir archivos<input type="file" accept="image/*,application/pdf" multiple hidden data-subir></label>
+                <label class="btn btn-sm btn-outline-primary mb-0"><i class="bi bi-camera me-1"></i>Tomar foto<input type="file" accept="image/*" capture="environment" hidden data-subir></label></div>
+              <div class="small text-body-secondary mt-2">Fotos o PDF · hasta 20 MB cada uno</div>
+              <div class="text-start mt-2" data-progreso></div></div>`}
           <div class="row row-cols-1 row-cols-md-3 g-2" data-arch></div></div>
+        ${ro || pre.length ? '' : `<div class="border rounded p-3 mb-2"><div class="fw-semibold small mb-1">Nota de este examen</div>
+          <div class="input-group input-group-sm" style="max-width:260px"><input type="number" min="0" max="${escala}" step="0.1" inputmode="decimal" class="form-control" data-nota value="${ins.notas?.[ev.id] ?? ''}" placeholder="0 a ${escala}" aria-label="Nota"><button type="button" class="btn btn-primary" data-guardar-nota>Guardar nota</button></div></div>`}
         <div data-resp></div></div>
       <div class="modal-footer border-0 pt-0 justify-content-between"><span class="small" data-resumen></span><span>${ro ? '' : '<button type="button" class="btn btn-outline-primary" data-aplicar hidden><i class="bi bi-check2-circle me-1"></i>Poner esta nota</button> '}<button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></span></div>`, { size: 'modal-lg modal-dialog-scrollable' });
     const q$ = (s) => el.querySelector(s);
@@ -247,7 +281,8 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
         <div class="d-flex align-items-center gap-1 small"><span class="text-truncate flex-grow-1" title="${esc(a.nombre)}">${esc(a.nombre)}</span>
           <a class="btn btn-sm btn-outline-secondary py-0" href="${urlExamen(a.key, true)}" download aria-label="Descargar"><i class="bi bi-download"></i></a>
           ${ro ? '' : '<button type="button" class="btn btn-sm btn-outline-danger py-0" data-quitar aria-label="Quitar"><i class="bi bi-trash"></i></button>'}</div></div></div>`).join('')
-        || '<div class="col-12"><div class="small text-body-secondary border rounded p-3 text-center">Sin archivos.</div></div>';
+        || '<div class="col-12"><div class="small text-body-secondary border rounded p-3 text-center">Aún no hay archivos del examen.</div></div>';
+      q$('[data-cuenta]').textContent = d.archivos.length ? `${d.archivos.length} ${d.archivos.length === 1 ? 'archivo' : 'archivos'}` : '';
     };
     const campo = (q) => {
       const r = d.resp[q.id], dis = ro ? 'disabled' : '';
@@ -262,7 +297,7 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
       q$('[data-resp]').innerHTML = pre.length ? `${d.evaluacion.examen.instrucciones ? `<p class="small text-body-secondary">${esc(d.evaluacion.examen.instrucciones)}</p>` : ''}${pre.map((q, k) => `<div class="border rounded p-3 mb-2" data-q="${q.id}">
           <div class="d-flex justify-content-between gap-2"><div class="fw-semibold">${k + 1}. ${esc(q.enunciado)}<span class="ai-nota" aria-hidden="true"> ${esc(AVISO)} </span></div><span class="small text-nowrap" data-badge></span></div>
           <div class="mt-2">${campo(q)}</div><span class="ai-nota" aria-hidden="true"> ${esc(AVISO)} </span><div class="small text-body-secondary mt-1" data-pista></div></div>`).join('')}`
-        : (ev.tipo === 'multiple' ? '<div class="small text-body-secondary border rounded p-3">Este examen aún no tiene preguntas. Créalas en la pestaña «Evaluaciones y cupones».</div>' : '');
+        : (ev.tipo === 'multiple' ? '<div class="small text-body-secondary border rounded p-3">Este examen aún no tiene preguntas. Créalas con el lápiz de la evaluación en Notas (Editar).</div>' : '');
       resumen();
     };
     const resumen = () => {
@@ -299,16 +334,47 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
       else if (e.target.value === '') delete d.manual[card.dataset.q]; else d.manual[card.dataset.q] = +e.target.value;
       guardar();
     });
-    q$('[data-subir]')?.addEventListener('change', async (e) => {
-      const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
-      for (const f of files) {
-        if (!/^image\/|^application\/pdf$/.test(f.type)) { toast(`«${f.name}» no es una foto ni un PDF`, false); continue; }
+    // Subida con avance por archivo (arrastrar, elegir o tomar foto).
+    const MAX = 20 * 1024 * 1024;
+    const subirUno = (f, barra) => new Promise((ok, mal) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', `${base}/archivo?nombre=${encodeURIComponent(f.name || 'foto.jpg')}`);
+      x.withCredentials = true; x.setRequestHeader('content-type', f.type); x.setRequestHeader('x-app', '1');
+      x.upload.onprogress = (e) => { if (e.lengthComputable) barra.style.width = `${Math.round(e.loaded / e.total * 100)}%`; };
+      x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch (_) {} x.status < 300 ? ok(j) : mal(new Error(j.error || 'No se pudo subir')); };
+      x.onerror = () => mal(new Error('Sin conexión'));
+      x.send(f);
+    });
+    const subirTodos = async (lista) => {
+      const box = q$('[data-progreso]');
+      for (const f of lista) {
+        const fila = document.createElement('div'); fila.className = 'small mb-1';
+        fila.innerHTML = `<div class="d-flex justify-content-between"><span class="text-truncate">${esc(f.name || 'foto')}</span><span data-est>Subiendo…</span></div><div class="progress" style="height:5px"><div class="progress-bar" style="width:0%"></div></div>`;
+        box.appendChild(fila);
+        const est = fila.querySelector('[data-est]');
+        if (!/^image\/|^application\/pdf$/.test(f.type)) { est.textContent = 'No es foto ni PDF'; est.className = 'text-danger'; continue; }
+        if (f.size > MAX) { est.textContent = 'Pesa más de 20 MB'; est.className = 'text-danger'; continue; }
         try {
-          const r = await fetch(`${base}/archivo?nombre=${encodeURIComponent(f.name)}`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': f.type, 'x-app': '1' }, body: f });
-          const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'No se pudo subir');
+          const j = await subirUno(f, fila.querySelector('.progress-bar'));
           d.archivos = j.archivos; cambios = true; pintarArch();
-        } catch (x) { toast(x.message, false); }
+          est.textContent = 'Listo'; est.className = 'text-success'; fila.querySelector('.progress-bar').classList.add('bg-success');
+          setTimeout(() => fila.remove(), 2500);
+        } catch (x) { est.textContent = x.message; est.className = 'text-danger'; }
       }
+    };
+    el.querySelectorAll('[data-subir]').forEach((inp) => inp.addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; if (l.length) subirTodos(l); }));
+    const zona = q$('[data-drop]');
+    if (zona) {
+      ['dragenter', 'dragover'].forEach((n) => zona.addEventListener(n, (e) => { e.preventDefault(); zona.classList.add('border-primary'); }));
+      ['dragleave', 'drop'].forEach((n) => zona.addEventListener(n, (e) => { e.preventDefault(); zona.classList.remove('border-primary'); }));
+      zona.addEventListener('drop', (e) => { const l = [...e.dataTransfer.files]; if (l.length) subirTodos(l); });
+    }
+    q$('[data-guardar-nota]')?.addEventListener('click', async () => {
+      const v = q$('[data-nota]').value;
+      try {
+        await api(`/api/cursos/${cursoId}/notas`, { method: 'POST', body: { evaluacion_id: ev.id, notas: [{ inscripcion_id: ins.id, nota: v }] } });
+        ins.notas = { ...(ins.notas || {}), [ev.id]: v === '' ? undefined : +v }; cambios = true; toast(v === '' ? 'Nota borrada' : `Nota ${(+v).toFixed(1)} guardada`);
+      } catch (x) { toast(x.message, false); }
     });
     q$('[data-arch]').addEventListener('click', async (e) => {
       const card = e.target.closest('[data-k]'); if (!card) return; const a = d.archivos[+card.dataset.k];
@@ -324,5 +390,5 @@ ${JSON.stringify({ instrucciones: EJEMPLO.instrucciones, preguntas: [
     el.addEventListener('hidden.bs.modal', () => { if (cambios) onChanged?.(); });
   }
 
-  return { editarPreguntas, abrir, EJEMPLO };
+  return { editarPreguntas, abrir, vista, EJEMPLO };
 })();

@@ -2,6 +2,8 @@
 //   CRUD /api/estudiantes/estudiantes   ·   GET /api/estudiantes/:id/ficha   ·   GET /api/estudiantes/resumen (widget)
 import { json, HttpError } from '../lib/http.js';
 import { crud, all, one } from '../lib/crud.js';
+import { cartera } from './cuotas.js';
+import { moraDe } from './cursos.js';
 import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas } from '../lib/academia.js';
 
 const MOD = 'estudiantes';
@@ -10,6 +12,19 @@ export const ENTITIES = {
     fields: { nombre: 'text!', documento: 'text', telefono: 'text', email: 'email', origen: 'text', notas: 'long', activo: 'bool+' },
     async beforeCreate(c, row) {
       if (row.documento && await one(c.env, 'SELECT 1 FROM ac_estudiantes WHERE business_id = ? AND documento = ?', c.businessId, row.documento)) throw new HttpError(409, 'Ya hay alguien con ese documento');
+    },
+    // En la lista: si está en mora (cuota vencida) o con baja asistencia.
+    async decorate(c, rows) {
+      if (!rows.length) return rows;
+      const manager = ['owner', 'admin'].includes(c.role);
+      const [car, cfg, marcas] = await Promise.all([cartera(c), getConfig(c.env, c.businessId),
+        all(c.env, `SELECT i.estudiante_id, a.clase_n, a.estado FROM ac_asistencia a JOIN ac_inscripciones i ON i.id = a.inscripcion_id AND i.business_id = a.business_id
+          WHERE a.business_id = ? AND i.estado <> 'retirada' AND i.estudiante_id IN (${rows.map(() => '?').join(',')})`, c.businessId, ...rows.map((r) => r.id))]);
+      const venc = car.filter((q) => q.estado === 'vencida');
+      return rows.map((r) => {
+        const ra = resumenAsis(marcas.filter((m) => m.estudiante_id === r.id));
+        return { ...r, ...moraDe(venc.filter((q) => q.estudiante_id === r.id), manager), asistencia_pct: ra.pct, baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
+      });
     },
     async afterDelete(c, before) {
       // Sus matrículas, cuotas, asistencia y notas se van con él (los pagos registrados se conservan en la bitácora).

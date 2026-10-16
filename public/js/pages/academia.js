@@ -2,7 +2,7 @@
 // datos y formato del recibo, consecutivo) y áreas.
 DW.ready.then(async (me) => {
   if (!me.pageAllowed) return;
-  const { api, esc, toast } = window.App;
+  const { api, esc, toast, confirm } = window.App;
   const C = window.App.Crud;
   const RO = me.business.readOnly;
 
@@ -38,7 +38,27 @@ DW.ready.then(async (me) => {
       ${campo('c_pie', 'Mensaje al pie del recibo', inp('pie'), 'col-12')}
       ${RO || !me.canManage ? '' : '<div class="col-12"><button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar</button></div>'}
     </div></form>`;
-    const f = view.querySelector('form');
+    // Áreas a mano, sin salir de aquí: agregar con Enter y quitar con la x (el color se cambia en la pestaña Áreas).
+    view.insertAdjacentHTML('afterbegin', `<div class="dw-card mb-3" data-areas><h2 class="h6">Áreas que enseñas</h2>
+      <div class="d-flex flex-wrap gap-2 mb-2" data-chips></div>
+      ${RO || !me.canManage ? '' : '<form class="d-flex gap-2" data-nueva-area style="max-width:420px"><input class="form-control" name="nombre" maxlength="80" placeholder="Nueva área: Maquillaje, Barbería…" aria-label="Nombre de la nueva área" required><button class="btn btn-primary text-nowrap"><i class="bi bi-plus-lg me-1"></i>Agregar</button></form>'}</div>`);
+    const chips = view.querySelector('[data-chips]');
+    const cargarAreas = async () => {
+      const { areas } = await api('/api/academia/areas-lista');
+      chips.innerHTML = areas.length ? areas.map((a) => `<span class="badge text-bg-${esc(a.color || 'light')} border d-inline-flex align-items-center gap-2 fs-6 fw-normal">${esc(a.nombre)}${RO || !me.canManage ? '' : `<button type="button" class="btn-close btn-close-sm" style="font-size:.6rem" data-quitar-area="${a.id}" aria-label="Quitar ${esc(a.nombre)}"></button>`}</span>`).join('')
+        : '<span class="small text-body-secondary">Aún no hay áreas. Agrega la primera aquí abajo.</span>';
+    };
+    await cargarAreas();
+    view.querySelector('[data-nueva-area]')?.addEventListener('submit', async (e) => {
+      e.preventDefault(); const inp = e.target.nombre;
+      try { await api('/api/academia/areas', { method: 'POST', body: { nombre: inp.value.trim() } }); inp.value = ''; toast('Área agregada'); await cargarAreas(); } catch (x) { toast(x.message, false); }
+    });
+    chips.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-quitar-area]'); if (!b) return;
+      if (!(await confirm({ title: '¿Quitar esta área?', text: 'Desaparece de la lista; los cursos, profesionales y materiales que la usaban pueden quedar sin área.', ok: 'Quitar' }))) return;
+      try { await api(`/api/academia/areas/${b.dataset.quitarArea}`, { method: 'DELETE' }); toast('Área quitada'); await cargarAreas(); } catch (x) { toast(x.message, false); }
+    });
+    const f = view.querySelector('form:not([data-nueva-area])');
     f.rubro.addEventListener('change', () => { const r = c.rubros[f.rubro.value]; f.termS.value = r.s; f.termP.value = r.p; });
     f.onsubmit = async (e) => {
       e.preventDefault();

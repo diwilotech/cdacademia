@@ -15,6 +15,7 @@ import { json, readJson, HttpError } from '../lib/http.js';
 import { crud, all, one, now, today, cast, addDays, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { limpiarExamen, calificar, limpiarRespuestas } from '../lib/examen.js';
+import { cartera } from './cuotas.js';
 import { sesiones, getConfig, resumenAsis, resumenNotas, estadoAcad, NIVELES, METODOS, parse } from '../lib/academia.js';
 
 const MOD = 'cursos';
@@ -98,7 +99,11 @@ function validarCupon(row) {
 }
 
 // Inscritos de un curso con su asistencia, notas y estado académico.
+// Alerta de mora: si está vencida y cuántos días; el valor solo lo ve quien administra.
+export const moraDe = (vencidas, manager) => ({ en_mora: vencidas.length > 0, mora_cuotas: vencidas.length, mora_dias: vencidas.reduce((m, q) => Math.max(m, q.dias_mora || 0), 0), mora_valor: manager ? vencidas.reduce((s, q) => s + q.falta, 0) : null });
 export async function inscritosCurso(c, cursoId, cfg) {
+  const manager = ['owner', 'admin'].includes(c.role);
+  const car = (await cartera(c)).filter((q) => q.estado === 'vencida');
   const [ins, asis, notas, evs, repos] = await Promise.all([
     all(c.env, `SELECT i.id, i.estudiante_id, i.estado, e.nombre, e.documento, e.telefono FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       WHERE i.business_id = ? AND i.curso_id = ? AND i.estado <> 'retirada' ORDER BY e.nombre`, c.businessId, cursoId),
@@ -111,7 +116,8 @@ export async function inscritosCurso(c, cursoId, cfg) {
     const a = asis.filter((x) => x.inscripcion_id === i.id), n = notas.filter((x) => x.inscripcion_id === i.id);
     const ra = resumenAsis(a, new Set(repos.filter((x) => x.inscripcion_id === i.id).map((x) => x.clase_n))), rn = resumenNotas(n, evs);
     return { ...i, asistencia: Object.fromEntries(a.map((x) => [x.clase_n, x.estado])), notas: Object.fromEntries(n.map((x) => [x.evaluacion_id, x.nota])),
-      resumen_asistencia: ra, resumen_notas: rn, academico: estadoAcad(ra, rn, cfg) };
+      resumen_asistencia: ra, resumen_notas: rn, academico: estadoAcad(ra, rn, cfg),
+      ...moraDe(car.filter((q) => q.inscripcion_id === i.id), manager), baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
   });
 }
 

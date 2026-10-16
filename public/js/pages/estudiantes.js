@@ -13,7 +13,7 @@ DW.ready.then(async (me) => {
       { k: 'email', label: 'Correo', type: 'email' }, { k: 'origen', label: '¿Cómo nos conoció?', placeholder: 'Instagram, referido…' }, { k: 'notas', label: 'Notas', type: 'long' },
       { k: 'activo', label: 'Estado', type: 'bool', check: 'Activo', default: true }],
     columns: [
-      { label: 'Nombre', main: true, html: (r) => `${esc(r.nombre)}${r.documento ? `<div class="text-body-secondary fw-normal" style="font-size:.75rem">CC ${esc(r.documento)}</div>` : ''}` },
+      { label: 'Nombre', main: true, html: (r) => `${esc(r.nombre)}${r.documento ? `<div class="text-body-secondary fw-normal" style="font-size:.75rem">CC ${esc(r.documento)}</div>` : ''}${r.en_mora ? ` <div class="mt-1">${C.chip('bad', `En mora${r.mora_dias ? ` · ${r.mora_dias} d` : ''}`)}${r.baja_asistencia ? ` ${C.chip('soon', `Asistencia ${r.asistencia_pct}%`)}` : ''}</div>` : (r.baja_asistencia ? ` <div class="mt-1">${C.chip('soon', `Asistencia ${r.asistencia_pct}%`)}</div>` : '')}` },
       { label: 'Teléfono', html: (r) => (r.telefono ? `<a href="https://wa.me/57${esc(String(r.telefono).replace(/\D/g, '').slice(-10))}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono)}</a>` : '—') },
       { label: 'Origen', html: (r) => esc(r.origen || '—') },
       { label: 'Estado', html: (r) => (r.activo ? C.chip('ok', 'Activo') : C.chip('free', 'Inactivo')) }],

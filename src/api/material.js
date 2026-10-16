@@ -43,6 +43,12 @@ export const ENTITIES = {
     fields: { titulo: 'text!', area_id: 'int', nivel: 'text', descripcion: 'long', bloques: 'json' },
     refs: { area_id: 'ac_areas' },
     beforeCreate: bloques, beforeUpdate: bloques,
+    // Si cambia el título o la descripción, las clases que usan este material siguen mostrando su tema y concepto.
+    async afterUpdate(c, id, row) {
+      if (!('titulo' in row) && !('descripcion' in row)) return;
+      const m = await one(c.env, 'SELECT titulo, descripcion FROM ac_material WHERE id = ? AND business_id = ?', id, c.businessId);
+      if (m) await c.env.DB.prepare('UPDATE ac_clases SET tema = ?, detalle = ? WHERE business_id = ? AND material_id = ?').bind(m.titulo, m.descripcion || '', c.businessId, id).run();
+    },
     async afterDelete(c, before) {
       for (const b of parse(before.bloques, [])) {
         if (b.tipo !== 'archivo' || !b.key?.startsWith(`${c.businessId}/`) || !c.env.FILES) continue;

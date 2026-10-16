@@ -29,6 +29,11 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const ajeno = (await B.app('/api/material/material?limit=50')).data.rows[0].id;
   await A.app(`/api/cursos/evaluaciones/${ev.data.id}`, { method: 'PATCH', body: { tipo: 'multiple', materiales: [mats[0].id, mats[1].id, ajeno, mats[0].id] } });
   const evs = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.evaluaciones.find((x) => x.id === ev.data.id);
+  const pc = await A.app(`/api/cursos/${k.data.id}/clases/1`, { method: 'PATCH', body: { material_id: mats[0].id } });
+  const cl1 = (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.clases[0];
+  check('Clases: el tema y el concepto los da el material', pc.status === 200 && cl1.tema === mats[0].titulo && cl1.detalle === (mats[0].descripcion || ''), JSON.stringify([pc.status, cl1.tema]));
+  await A.app(`/api/material/material/${mats[0].id}`, { method: 'PATCH', body: { titulo: 'Título nuevo' } });
+  check('Clases: si cambia el título del material, la clase lo sigue', (await A.app(`/api/cursos/${k.data.id}/detalle`)).data.clases[0].tema === 'Título nuevo');
   check('Exámenes: se ligan a materiales propios (sin repetidos ni ajenos)', evs.materiales.length === 2 && evs.materiales.includes(mats[0].id) && !evs.materiales.includes(ajeno), JSON.stringify(evs.materiales));
   const cup = await A.app('/api/cursos/cupones', { method: 'POST', body: { curso_id: k.data.id, codigo: 'AMIGA10', tipo: 'pct', valor: 10, max: 1 } });
   check('Cursos: crea un cupón', cup.status === 201, JSON.stringify(cup.data));

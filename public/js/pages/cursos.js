@@ -384,7 +384,7 @@ DW.ready.then(async (me) => {
       view.innerHTML = D.clases.length ? `<div class="dw-card p-0 p-md-2">${table([
         { label: 'Clase', main: true, html: (c) => `Clase ${c.n}${c.tema ? `<div class="small fw-normal">${esc(c.tema)}</div>` : ''}` },
         { label: 'Fecha', html: (c) => `${c.fecha ? C.day(c.fecha) : '—'}${c.ini ? ` · ${esc(c.ini)}–${esc(c.fin)}` : ''}${c.movida ? ` ${C.chip('soon', 'Movida')}` : ''}` },
-        { label: 'Métodos', html: (c) => `<span class="small">${c.metodos.map(esc).join(', ') || '—'}</span>${c.virtual ? ` ${C.chip('free', 'Virtual')}` : ''}` },
+        { label: 'Concepto', html: (c) => `<span class="small">${c.material_id ? esc(c.detalle || 'Según el material') : '<span class="text-body-secondary">Sin material asignado</span>'}</span>${c.virtual ? ` ${C.chip('free', 'Virtual')}` : ''}` },
         { label: '', cls: 'text-end', html: (c) => (RO ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
         : empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.');
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-clase]'); if (b) editarClase(D.clases.find((c) => c.n === +b.dataset.clase), () => V.reload()); });
@@ -450,12 +450,9 @@ DW.ready.then(async (me) => {
     const mats = await api('/api/material/material?limit=500').then((d) => d.rows).catch(() => []);
     const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Clase ${c.n}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body"><div class="row g-2">
-        <div class="col-12"><label class="form-label small mb-1" for="c_tema">Tema</label><input class="form-control" id="c_tema" name="tema" value="${esc(c.tema || '')}"></div>
-        <div class="col-12"><label class="form-label small mb-1" for="c_detalle">Contenido</label><textarea class="form-control" id="c_detalle" name="detalle" rows="3">${esc(c.detalle || '')}</textarea></div>
-        <div class="col-12"><div class="form-label small mb-1">Métodos</div><div class="d-flex flex-wrap gap-3 small">${METODOS.map((x, i) => `<label><input type="checkbox" class="form-check-input me-1" name="metodos" value="${esc(x)}" ${c.metodos.includes(x) ? 'checked' : ''}>${esc(x)}</label>`).join('')}</div></div>
-        <div class="col-12"><label class="form-label small mb-1" for="c_materiales">Materiales que deben traer</label><input class="form-control" id="c_materiales" name="materiales" value="${esc(c.materiales || '')}"></div>
-        <div class="col-sm-8"><label class="form-label small mb-1" for="c_material">Material de estudio</label><select class="form-select" id="c_material" name="material_id">${AC.opts(mats, 'Ninguno', 'titulo').map(([v, l]) => `<option value="${v}" ${String(v) === String(c.material_id ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="col-sm-8"><label class="form-label small mb-1" for="c_material">Material de la clase</label><select class="form-select" id="c_material" name="material_id">${AC.opts(mats, 'Ninguno', 'titulo').map(([v, l]) => `<option value="${v}" ${String(v) === String(c.material_id ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="col-sm-4 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c_virtual" name="virtual" ${c.virtual ? 'checked' : ''}><label class="form-check-label" for="c_virtual">Virtual</label></div></div>
+        <div class="col-12 small text-body-secondary" data-concepto></div>
         ${me.canManage ? `<div class="col-12"><h3 class="h6 mt-2 mb-0">Mover la clase</h3></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_fecha">Fecha</label><input class="form-control" id="c_fecha" name="fecha" type="date" value="${esc(c.fecha || '')}"></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_ini">Desde</label><input class="form-control" id="c_ini" name="ini" type="time" value="${esc(c.ini || '')}"></div>
@@ -463,10 +460,11 @@ DW.ready.then(async (me) => {
       </div><div class="small text-danger mt-2" data-err></div></div>
       <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar</button></div></form>`, { size: 'modal-lg' });
     const f = $('form', el);
+    const concepto = () => { const x = mats.find((y) => String(y.id) === f.material_id.value); $('[data-concepto]', el).innerHTML = x ? `El tema es <b>${esc(x.titulo)}</b>${x.descripcion ? ` · ${esc(x.descripcion)}` : ''}. Lo da el material.` : 'Elige el material: él define el tema y el concepto de la clase.'; };
+    f.material_id.onchange = concepto; concepto();
     f.onsubmit = async (e) => {
       e.preventDefault();
-      const body = { tema: f.tema.value, detalle: f.detalle.value, materiales: f.materiales.value, virtual: f.virtual.checked, material_id: f.material_id.value,
-        metodos: [...f.querySelectorAll('[name=metodos]:checked')].map((x) => x.value) };
+      const body = { virtual: f.virtual.checked, material_id: f.material_id.value };
       if (me.canManage && (f.fecha.value !== (c.fecha || '') || f.ini.value !== (c.ini || '') || f.fin.value !== (c.fin || ''))) Object.assign(body, { fecha: f.fecha.value, ini: f.ini.value, fin: f.fin.value });
       try { await api(`/api/cursos/${id}/clases/${c.n}`, { method: 'PATCH', body }); m.hide(); toast('Clase guardada'); done(); } catch (x) { $('[data-err]', el).textContent = x.message; }
     };

@@ -202,8 +202,11 @@ export function routes(r) {
     if ('virtual' in b) set.virtual = b.virtual ? 1 : 0;
     if ('material_id' in b) {
       const mid = cast('material', 'int', b.material_id);
-      if (mid && !(await one(c.env, 'SELECT 1 FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId))) throw new HttpError(400, 'Material no válido');
+      const mat = mid && await one(c.env, 'SELECT titulo, descripcion FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId);
+      if (mid && !mat) throw new HttpError(400, 'Material no válido');
       set.material_id = mid;
+      // El tema y el concepto de la clase los da el material.
+      Object.assign(set, { tema: mat ? mat.titulo : '', detalle: mat ? (mat.descripcion || '') : '' });
     }
     if (['fecha', 'ini', 'fin'].some((x) => x in b)) {
       if (!['owner', 'admin'].includes(c.role)) throw new HttpError(403, 'Solo el propietario o un administrador mueve una clase');

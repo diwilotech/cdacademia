@@ -9,6 +9,7 @@ import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { getConfig, estadoCuotas } from '../lib/academia.js';
 import { movimientoFinanzas } from '../lib/central.js';
+import { cuentaDeMatricula } from './matriculas.js';
 
 const MOD = 'cuotas';
 const METODOS = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Bre-B', 'Otro'];
@@ -48,7 +49,8 @@ export async function registrarPago(c, b) {
   const res = await c.env.DB.prepare('INSERT INTO ac_pagos (business_id, num, inscripcion_id, valor, metodo, concepto, fecha, tipo, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(c.businessId, num, ins.id, valor, metodo, cast('concepto', 'text', b.concepto) || (tipo === 'reposicion' ? 'Reposición de clase' : 'Abono a cuotas'), fecha, tipo, c.session.user_id, t, t).run();
   await audit(c, `Registró el pago N.º ${num} de ${ins.nombre} por ${pesos(valor)} (${ins.curso})`, { modulo: MOD });
-  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso });
+  if (tipo === 'cuota') await cuentaDeMatricula(c, ins.id);   // asegura la cuenta de cobro a la que se abona
+  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso, inscripcion_id: ins.id });
   return { id: res.meta.last_row_id, num, finanzas: fin.enviado };
 }
 
@@ -95,7 +97,7 @@ export function routes(r) {
   r.post('/api/cuotas/pagos', `tenant:${MOD}`, async (c) => json(await registrarPago(c, await readJson(c.req)), 201));
 
   r.post('/api/cuotas/pagos/:id/anular', `manager:${MOD}`, async (c) => {
-    const p = await one(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
+    const p = await one(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, p.inscripcion_id, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
       JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE p.id = ? AND p.business_id = ? AND p.anulado = 0`, Number(c.params.id), c.businessId);
     if (!p) throw new HttpError(404, 'Pago no encontrado o ya anulado');
@@ -108,7 +110,10 @@ export function routes(r) {
 
   // Manda a Finanzas los pagos de antes (no duplica los que ya están). Hasta 500 por vez.
   r.post('/api/cuotas/sync-finanzas', `manager:${MOD}`, async (c) => {
-    const pagos = await all(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
+    // Primero las cuentas de cobro de las matrículas que tienen pagos; luego los pagos ligados a ellas.
+    const conPagos = await all(c.env, "SELECT DISTINCT inscripcion_id AS id FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND tipo = 'cuota' LIMIT 500", c.businessId);
+    for (const m of conPagos) await cuentaDeMatricula(c, m.id);
+    const pagos = await all(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, p.inscripcion_id, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
       JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE p.business_id = ? AND p.anulado = 0 ORDER BY p.num LIMIT 500`, c.businessId);
     let nuevos = 0, enviados = 0;

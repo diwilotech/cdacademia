@@ -36,11 +36,35 @@ export async function movimientoFinanzas(c, p) {
       category: anulado ? 'Anulación de recibos' : p.tipo === 'reposicion' ? 'Reposiciones' : 'Matrículas y cuotas',
       description: `${anulado ? 'Anulación del recibo' : 'Recibo'} N.º ${p.num} · ${p.estudiante || ''} · ${p.curso || ''}${p.metodo ? ` (${p.metodo})` : ''}`.slice(0, 300),
       counterparty: p.estudiante || null, centro_costo: p.curso || null,
+      ...(p.inscripcion_id && p.tipo !== 'reposicion' ? (anulado ? { anula_ref: `academia:pago:${p.num}` } : { invoice_ref: `academia:matricula:${p.inscripcion_id}` }) : {}),
     };
     const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/movements/externo', body: JSON.stringify(body) });
     await saveAudit(c, r.audit);
     return { enviado: r.status < 300, nuevo: r.status === 201 };
   } catch (x) { console.error('ingreso en Finanzas', x.message); return { enviado: false }; }
+}
+
+// Cuenta de cobro de una matrícula en Finanzas (una por matrícula; si cambia el valor o el plan, se actualiza). ins = { id, estudiante, documento, email, curso, total, fecha, vence }
+export async function cuentaDeCobro(c, ins) {
+  try {
+    if (!CENTRALES.includes('finanzas') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas') || !(ins.total > 0)) return null;
+    const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+    const body = { ref: `academia:matricula:${ins.id}`, counterparty: ins.estudiante, tax_id: ins.documento || null, client_email: ins.email || null, issue_date: ins.fecha, due_date: ins.vence || null,
+      concept: `Matrícula · ${ins.curso}`, detail: ins.estudiante, total: ins.total, category: 'Matrículas y cuotas', centro_costo: ins.curso };
+    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/invoices/externo', body: JSON.stringify(body) });
+    await saveAudit(c, r.audit);
+    return r.status < 300 ? JSON.parse(r.body) : null;
+  } catch (x) { console.error('cuenta de cobro en Finanzas', x.message); return null; }
+}
+
+// Página (HTML) de Finanzas, p. ej. la cuenta de cobro lista para imprimir.
+export async function finanzasPagina(c, path) {
+  if (!CENTRALES.includes('finanzas') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas')) throw new HttpError(409, 'Finanzas no está activo para este negocio');
+  const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+  const [p, q = ''] = path.split('?');
+  const r = await c.env.MODULOS.call(ctx, { method: 'GET', path: p, query: q ? `?${q}` : '' });
+  if (r.status >= 300) throw new HttpError(502, 'Finanzas no respondió');
+  return new Response(r.body, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
 }
 
 // Lee de Finanzas (GET) con permisos de titular. Devuelve el JSON, o lanza 409 si Finanzas no está activo para el negocio.

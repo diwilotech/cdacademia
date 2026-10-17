@@ -9,7 +9,7 @@ import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { generarCuotas, estadoCuotas, parse, getConfig } from '../lib/academia.js';
-import { finanzasLeer } from '../lib/central.js';
+import { finanzasLeer, finanzasPagina, cuentaDeCobro } from '../lib/central.js';
 import { recibo } from './cuotas.js';
 
 const MOD = 'matriculas';
@@ -60,7 +60,24 @@ async function pagosDeFinanzas(c, id) {
   return { ins, pagos, faltan: pagos.filter((p) => !p.en_finanzas && !p.anulado).length };
 }
 
+// Crea o actualiza la cuenta de cobro de la matrícula en Finanzas (vence con la última cuota). Devuelve {id, number} o null.
+export async function cuentaDeMatricula(c, id) {
+  const ins = await one(c.env, `SELECT i.id, i.fecha, i.valor, i.descuento, e.nombre AS estudiante, e.documento, e.email, k.nombre AS curso FROM ac_inscripciones i
+    JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
+    WHERE i.id = ? AND i.business_id = ?`, id, c.businessId);
+  if (!ins) return null;
+  const vence = (await one(c.env, 'SELECT MAX(vence) v FROM ac_cuotas WHERE business_id = ? AND inscripcion_id = ?', c.businessId, id))?.v || null;
+  return cuentaDeCobro(c, { ...ins, total: ins.valor - ins.descuento, vence });
+}
+
 export function routes(r) {
+  // La cuenta de cobro de la matrícula (la crea en Finanzas si todavía no existe) lista para imprimir.
+  r.get('/api/matriculas/:id/cuenta-de-cobro', 'tenant:cuotas', async (c) => {
+    const cuenta = await cuentaDeMatricula(c, Number(c.params.id));
+    if (!cuenta) throw new HttpError(409, 'No se pudo preparar la cuenta de cobro: revisa que Finanzas esté activo y que la matrícula tenga valor.');
+    return finanzasPagina(c, `/api/finanzas/invoices/${cuenta.id}/pdf`);
+  });
+
   r.get('/api/matriculas/:id/pagos', 'tenant:cuotas', async (c) => {
     const { ins, pagos, faltan } = await pagosDeFinanzas(c, Number(c.params.id));
     return json({ estudiante: ins.estudiante, curso: ins.curso, pagos, faltan, total: pagos.filter((p) => !p.anulado).reduce((s, p) => s + p.valor, 0) });
@@ -116,7 +133,8 @@ export function routes(r) {
     const cuotas = await guardarCuotas(c, ins, plan);
     if (cupon) await c.env.DB.prepare('UPDATE ac_cupones SET usos = usos + 1, updated_at = ? WHERE id = ? AND business_id = ?').bind(t, cupon.id, c.businessId).run();
     await audit(c, `Matriculó a ${est.nombre} en «${k.nombre}» por $${(valor - descuento).toLocaleString('es-CO')}${cupon ? ` (cupón ${cupon.codigo})` : ''}`, { modulo: MOD });
-    return json({ id: ins.id, total: valor - descuento, cuotas }, 201);
+    const cuenta = await cuentaDeMatricula(c, ins.id);   // cuenta de cobro automática en Finanzas
+    return json({ id: ins.id, total: valor - descuento, cuotas, cuenta_de_cobro: cuenta?.number || null }, 201);
   });
 
   r.patch('/api/matriculas/:id', `manager:${MOD}`, async (c) => {
@@ -131,6 +149,7 @@ export function routes(r) {
     if (cols.length) await c.env.DB.prepare(`UPDATE ac_inscripciones SET ${cols.map((x) => `${x} = ?`).join(', ')}, updated_at = ? WHERE id = ? AND business_id = ?`).bind(...cols.map((x) => set[x]), now(), ins.id, c.businessId).run();
     if (plan) await guardarCuotas(c, { ...ins, ...set }, plan);
     await audit(c, `Editó una matrícula${set.estado ? ` (${set.estado})` : ''}${plan ? ' y rehízo sus cuotas' : ''}`, { modulo: MOD });
+    if (plan) await cuentaDeMatricula(c, ins.id);   // el nuevo valor o vencimiento llega a la cuenta de cobro
     return json({ ok: true });
   });
 

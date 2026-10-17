@@ -95,9 +95,9 @@ DW.ready.then(async (me) => {
       try {
         let est = buscar();
         if (!est) est = await api('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: inpE.value.trim(), telefono: f.tel.value } });
-        await api('/api/matriculas', { method: 'POST', body: { estudiante_id: est.id, curso_id: f.curso_id.value, fecha: f.fecha.value, valor: f.valor.value, cupon: f.cupon.value, descuento: f.descuento.value,
+        const r = await api('/api/matriculas', { method: 'POST', body: { estudiante_id: est.id, curso_id: f.curso_id.value, fecha: f.fecha.value, valor: f.valor.value, cupon: f.cupon.value, descuento: f.descuento.value,
           plan: { inicial: f.inicial.value, n: f.n.value, frecuencia: f.frecuencia.value, primera: f.primera.value } } });
-        m.hide(); toast('Matrícula creada'); load();
+        m.hide(); toast(r.cuenta_de_cobro ? `Matrícula creada · cuenta de cobro ${r.cuenta_de_cobro}` : 'Matrícula creada'); load();
       } catch (x) { err.textContent = x.message; }
     };
   }
@@ -151,6 +151,13 @@ DW.ready.then(async (me) => {
   view.querySelector('[data-curso]').addEventListener('change', (e) => { st.curso_id = e.target.value; load(); });
   view.querySelector('[data-estado]').addEventListener('change', (e) => { st.estado = e.target.value; load(); });
   load().catch((x) => toast(x.message, false));
+  // Una vez por sesión, quien administra manda a Finanzas lo que falte (pagos y cuentas de cobro de antes); no duplica.
+  try {
+    if (me.canManage && !RO && me.modules.some((m) => m.id === 'finanzas') && !sessionStorage.getItem('dw_sync_fin')) {
+      sessionStorage.setItem('dw_sync_fin', '1');
+      api('/api/cuotas/sync-finanzas', { method: 'POST' }).then((r) => { if (r.nuevos) toast(`${r.nuevos} pagos nuevos enviados a Finanzas`); }).catch(() => {});
+    }
+  } catch (_) {}
   };
 
   // Cartera y Pagos ya no son pestañas: la cartera se filtra aquí (Cobro) y los pagos y recibos se ven por matrícula, desde Finanzas.

@@ -70,6 +70,11 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const rc = await A.app(`/api/matriculas/${m1.data.id}/pagos/${p1.data.num}/recibo`);
   check('Matrículas: el recibo sale del ingreso en Finanzas', rc.status === 200 && String(rc.raw ?? rc.text ?? JSON.stringify(rc.data)).includes('Recibo'), String(rc.status));
   check('Matrículas: B no ve los pagos de A', (await B.app(`/api/matriculas/${m1.data.id}/pagos`)).status === 404);
+  const invs = (await A.app('/api/finanzas/invoices?limit=200')).data.rows || [];
+  const cuenta = invs.find((x) => x.ref === `academia:matricula:${m1.data.id}`);
+  check('Finanzas: la matrícula tiene su cuenta de cobro, con lo pagado', cuenta && cuenta.kind === 'emitida' && cuenta.total === m1.data.total && cuenta.paid === 300000 && cuenta.number, JSON.stringify(cuenta)?.slice(0, 220));
+  const cdc = await A.app(`/api/matriculas/${m1.data.id}/cuenta-de-cobro`);
+  check('Matrículas: abre la cuenta de cobro (la de Finanzas)', cdc.status === 200 && JSON.stringify(cdc.data).includes(cuenta?.number || 'x'), String(cdc.status));
   check('Cuotas: registra un pago con consecutivo desde 100', p1.status === 201 && p1.data.num === 100, JSON.stringify(p1.data));
   const cu = (await A.app(`/api/matriculas/${m1.data.id}/cuotas`)).data;
   check('Cuotas: el pago cubre la inicial y abona a la cuota 1', cu.cuotas?.[0].estado === 'pagada' && cu.cuotas[1].abonado === 100000, JSON.stringify(cu.cuotas));
@@ -214,6 +219,7 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const mov2 = (await A.app('/api/finanzas/movements?limit=200')).data.rows || [];
   check('Finanzas: anular el pago registra el egreso que lo revierte', mov2.some((x) => x.kind === 'gasto' && x.amount === 300000 && String(x.description).includes('Anulación')), JSON.stringify(mov2.length));
   check('Matrículas: el pago anulado se ve anulado', (await A.app(`/api/matriculas/${m1.data.id}/pagos`)).data.pagos[0]?.anulado === true);
+  check('Finanzas: al anular el pago, la cuenta de cobro vuelve a deber todo', ((await A.app('/api/finanzas/invoices?limit=200')).data.rows || []).find((x) => x.ref === `academia:matricula:${m1.data.id}`)?.paid === 0);
   const sy = await A.app('/api/cuotas/sync-finanzas', { method: 'POST' });
   check('Finanzas: enviar los pagos de antes no duplica', sy.status === 200 && (await A.app('/api/finanzas/movements?limit=200')).data.rows.filter((x) => String(x.description).includes(`N.º ${p1.data.num}`) && x.kind === 'ingreso').length === 1, JSON.stringify(sy.data));
 

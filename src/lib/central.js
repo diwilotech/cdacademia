@@ -24,24 +24,25 @@ async function ctxOf(c) {
   };
 }
 
-// Cada pago de la academia se vuelve un ingreso en Finanzas (y la anulación, un egreso que lo revierte), sin duplicarse (ref).
-// Es un efecto automático: se hace con permisos de titular y nunca hace fallar el pago si Finanzas no responde o no está activo.
+// Cada pago de la academia es un recibo de caja en Finanzas (con su consecutivo RC-…); si la matrícula tiene cuenta de cobro, el recibo la abona.
+// Anular el pago anula el recibo. No se duplica (ref) y nunca hace fallar el pago si Finanzas no responde o no está activo.
+// Es un efecto automático: se hace con permisos de titular.
 export async function movimientoFinanzas(c, p) {
   try {
     if (!CENTRALES.includes('finanzas') || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas') || !c.env.MODULOS) return { enviado: false };
     const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+    const ref = `academia:pago:${p.num}`;
     const anulado = !!p.anulado;
-    const body = {
-      ref: `academia:pago:${p.num}${anulado ? ':anulado' : ''}`, kind: anulado ? 'gasto' : 'ingreso', date: anulado ? (p.hoy || p.fecha) : p.fecha, amount: p.valor,
-      category: anulado ? 'Anulación de recibos' : p.tipo === 'reposicion' ? 'Reposiciones' : 'Matrículas y cuotas',
-      description: `${anulado ? 'Anulación del recibo' : 'Recibo'} N.º ${p.num} · ${p.estudiante || ''} · ${p.curso || ''}${p.metodo ? ` (${p.metodo})` : ''}`.slice(0, 300),
-      counterparty: p.estudiante || null, centro_costo: p.curso || null,
-      ...(p.inscripcion_id && p.tipo !== 'reposicion' ? (anulado ? { anula_ref: `academia:pago:${p.num}` } : { invoice_ref: `academia:matricula:${p.inscripcion_id}` }) : {}),
+    const body = anulado ? { ref } : {
+      ref, date: p.fecha, amount: p.valor, method: p.metodo || null, counterparty: p.estudiante || null, centro_costo: p.curso || null,
+      concept: p.tipo === 'reposicion' ? `Reposición de clase · ${p.curso || ''}` : `Abono a la matrícula · ${p.curso || ''}`,
+      notes: `Pago N.º ${p.num} de la academia`, ...(p.inscripcion_id && p.tipo !== 'reposicion' ? { invoice_ref: `academia:matricula:${p.inscripcion_id}` } : {}),
     };
-    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/movements/externo', body: JSON.stringify(body) });
+    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: `/api/finanzas/receipts/externo${anulado ? '/void' : ''}`, body: JSON.stringify(body) });
     await saveAudit(c, r.audit);
-    return { enviado: r.status < 300, nuevo: r.status === 201 };
-  } catch (x) { console.error('ingreso en Finanzas', x.message); return { enviado: false }; }
+    let j = {}; try { j = JSON.parse(r.body); } catch (_) {}
+    return { enviado: r.status < 300, nuevo: r.status === 201, recibo: j.number || null };
+  } catch (x) { console.error('recibo de caja en Finanzas', x.message); return { enviado: false }; }
 }
 
 // Cuenta de cobro de una matrícula en Finanzas (una por matrícula; si cambia el valor o el plan, se actualiza). ins = { id, estudiante, documento, email, curso, total, fecha, vence }

@@ -8,9 +8,8 @@
 import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
-import { generarCuotas, estadoCuotas, parse, getConfig } from '../lib/academia.js';
+import { generarCuotas, estadoCuotas, parse } from '../lib/academia.js';
 import { finanzasLeer, finanzasPagina, cuentaDeCobro } from '../lib/central.js';
-import { recibo } from './cuotas.js';
 
 const MOD = 'matriculas';
 const FREQ = ['mensual', 'quincenal', 'semanal'];
@@ -42,20 +41,20 @@ async function aplicarCupon(c, cursoId, codigo, precio) {
   return { descuento: Math.min(precio, q.tipo === 'pct' ? Math.round(precio * q.valor / 100) : q.valor), cupon: q };
 }
 
-// Los pagos de una matrícula tal como están en Finanzas (ingresos «academia:pago:<N.º>» y su anulación). El libro es Finanzas; lo local solo dice
-// qué números de recibo son de esta matrícula. `faltan` = pagos que aún no se enviaron a Finanzas.
+// Los pagos de una matrícula tal como están en Finanzas: un recibo de caja por pago («academia:pago:<N.º>»). El libro es Finanzas; lo local solo dice
+// qué números de pago son de esta matrícula. `faltan` = pagos que aún no se enviaron a Finanzas.
 async function pagosDeFinanzas(c, id) {
   const ins = await one(c.env, `SELECT i.id, i.valor, i.descuento, e.nombre AS estudiante, e.documento, k.nombre AS curso FROM ac_inscripciones i
     JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
     WHERE i.id = ? AND i.business_id = ?`, id, c.businessId);
   if (!ins) throw new HttpError(404, 'Matrícula no encontrada');
-  const locales = await all(c.env, 'SELECT num, valor, fecha, tipo, metodo, concepto FROM ac_pagos WHERE business_id = ? AND inscripcion_id = ? ORDER BY num DESC', c.businessId, id);
-  const { rows = [] } = locales.length ? await finanzasLeer(c, `/api/finanzas/movements?q=${encodeURIComponent(ins.estudiante)}&limit=1000`) : {};
+  const locales = await all(c.env, 'SELECT num, valor, fecha, tipo, metodo, concepto, anulado FROM ac_pagos WHERE business_id = ? AND inscripcion_id = ? ORDER BY num DESC', c.businessId, id);
+  const { rows = [] } = locales.length ? await finanzasLeer(c, `/api/finanzas/receipts?q=${encodeURIComponent(ins.estudiante)}&limit=1000`) : {};
   const porRef = new Map(rows.filter((m) => m.ref).map((m) => [m.ref, m]));
   const pagos = locales.map((p) => {
-    const mov = porRef.get(`academia:pago:${p.num}`), anul = porRef.get(`academia:pago:${p.num}:anulado`);
-    return { num: p.num, fecha: mov?.date || p.fecha, valor: mov?.amount ?? p.valor, tipo: p.tipo, metodo: p.metodo, concepto: p.concepto, categoria: mov?.category || null,
-      anulado: !!anul, en_finanzas: !!mov, movimiento_id: mov?.id || null };
+    const rc = porRef.get(`academia:pago:${p.num}`);
+    return { num: p.num, fecha: rc?.date || p.fecha, valor: rc?.amount ?? p.valor, tipo: p.tipo, metodo: rc?.method || p.metodo, concepto: rc?.concept || p.concepto,
+      recibo: rc?.number || null, recibo_id: rc?.id || null, anulado: !!rc?.voided || !!p.anulado, en_finanzas: !!rc };
   });
   return { ins, pagos, faltan: pagos.filter((p) => !p.en_finanzas && !p.anulado).length };
 }
@@ -83,17 +82,13 @@ export function routes(r) {
     return json({ estudiante: ins.estudiante, curso: ins.curso, pagos, faltan, total: pagos.filter((p) => !p.anulado).reduce((s, p) => s + p.valor, 0) });
   });
 
-  // Recibo armado con los datos del ingreso en Finanzas.
+  // El recibo de caja de un pago: es el de Finanzas.
   r.get('/api/matriculas/:id/pagos/:num/recibo', 'tenant:cuotas', async (c) => {
-    const { ins, pagos } = await pagosDeFinanzas(c, Number(c.params.id));
+    const { pagos } = await pagosDeFinanzas(c, Number(c.params.id));
     const p = pagos.find((x) => x.num === Number(c.params.num));
     if (!p) throw new HttpError(404, 'Pago no encontrado');
     if (!p.en_finanzas) throw new HttpError(409, 'Este pago aún no está en Finanzas: pulsa «Enviar pagos a Finanzas» en Matrículas.');
-    const hasta = (await one(c.env, "SELECT COALESCE(SUM(valor), 0) s FROM ac_pagos WHERE business_id = ? AND inscripcion_id = ? AND tipo = 'cuota' AND anulado = 0 AND num <= ?", c.businessId, ins.id, p.num)).s;
-    const negocio = (await one(c.env, 'SELECT name FROM businesses WHERE id = ?', c.businessId)).name;
-    const html = recibo({ num: p.num, fecha: p.fecha, estudiante: ins.estudiante, documento: ins.documento, valor: p.valor, concepto: p.concepto || p.categoria || 'Pago', curso: ins.curso,
-      metodo: p.metodo || 'Otro', saldo: p.tipo === 'cuota' ? Math.max(0, ins.valor - ins.descuento - hasta) : null, anulado: p.anulado }, await getConfig(c.env, c.businessId), negocio);
-    return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+    return finanzasPagina(c, `/api/finanzas/receipts/${p.recibo_id}/pdf`);
   });
 
   r.get('/api/matriculas', `tenant:${MOD}`, async (c) => {

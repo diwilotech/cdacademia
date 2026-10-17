@@ -63,12 +63,13 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
 
   // Pagos y recibo
   const p1 = await A.app('/api/cuotas/pagos', { method: 'POST', body: { inscripcion_id: m1.data.id, valor: 300000, metodo: 'Nequi' } });
+  const rc1 = ((await A.app('/api/finanzas/receipts?limit=200')).data.rows || []).find((x) => x.ref === `academia:pago:${p1.data.num}`);
   const mov1 = (await A.app('/api/finanzas/movements?limit=200')).data.rows || [];
-  check('Finanzas: cada pago crea su ingreso automático', p1.data.finanzas === true && mov1.some((x) => x.kind === 'ingreso' && x.amount === 300000 && String(x.description).includes(`N.º ${p1.data.num}`)), JSON.stringify([p1.data, mov1.length]));
+  check('Finanzas: cada pago crea su recibo de caja y su ingreso', p1.data.finanzas === true && rc1 && /^RC-\d+$/.test(rc1.number) && rc1.amount === 300000 && !rc1.voided && mov1.some((x) => x.kind === 'ingreso' && x.amount === 300000 && String(x.description).includes(rc1.number)), JSON.stringify([p1.data, rc1]));
   const pagF = await A.app(`/api/matriculas/${m1.data.id}/pagos`);
-  check("Matrículas: los pagos de la matrícula se leen de Finanzas", pagF.status === 200 && pagF.data.pagos.length === 1 && pagF.data.pagos[0].en_finanzas && pagF.data.pagos[0].valor === 300000 && pagF.data.faltan === 0, JSON.stringify(pagF.data));
+  check("Matrículas: los pagos de la matrícula se leen de Finanzas", pagF.status === 200 && pagF.data.pagos.length === 1 && pagF.data.pagos[0].en_finanzas && pagF.data.pagos[0].recibo === rc1.number && pagF.data.pagos[0].valor === 300000 && pagF.data.faltan === 0, JSON.stringify(pagF.data));
   const rc = await A.app(`/api/matriculas/${m1.data.id}/pagos/${p1.data.num}/recibo`);
-  check('Matrículas: el recibo sale del ingreso en Finanzas', rc.status === 200 && String(rc.raw ?? rc.text ?? JSON.stringify(rc.data)).includes('Recibo'), String(rc.status));
+  check('Matrículas: el recibo es el recibo de caja de Finanzas', rc.status === 200 && JSON.stringify(rc.data).includes(rc1.number), String(rc.status));
   check('Matrículas: B no ve los pagos de A', (await B.app(`/api/matriculas/${m1.data.id}/pagos`)).status === 404);
   const invs = (await A.app('/api/finanzas/invoices?limit=200')).data.rows || [];
   const cuenta = invs.find((x) => x.ref === `academia:matricula:${m1.data.id}`);
@@ -216,12 +217,13 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Cuotas inactivo: su API responde 403', (await A.app('/api/cuotas/cartera')).status === 403);
   await diwilo('PUT', `/businesses/${A.id}/modules`, { modules: [] });
   check('Cuotas: anula un pago', (await A.app(`/api/cuotas/pagos/${p1.data.id}/anular`, { method: 'POST' })).status === 200 && (await A.app(`/api/matriculas/${m1.data.id}/cuotas`)).data.pagado === 0);
+  const rc2 = ((await A.app('/api/finanzas/receipts?limit=200')).data.rows || []).find((x) => x.ref === `academia:pago:${p1.data.num}`);
   const mov2 = (await A.app('/api/finanzas/movements?limit=200')).data.rows || [];
-  check('Finanzas: anular el pago registra el egreso que lo revierte', mov2.some((x) => x.kind === 'gasto' && x.amount === 300000 && String(x.description).includes('Anulación')), JSON.stringify(mov2.length));
+  check('Finanzas: anular el pago anula su recibo de caja y quita el ingreso', rc2?.voided === 1 && !mov2.some((x) => String(x.description).includes(rc1.number)), JSON.stringify([rc2, mov2.length]));
   check('Matrículas: el pago anulado se ve anulado', (await A.app(`/api/matriculas/${m1.data.id}/pagos`)).data.pagos[0]?.anulado === true);
   check('Finanzas: al anular el pago, la cuenta de cobro vuelve a deber todo', ((await A.app('/api/finanzas/invoices?limit=200')).data.rows || []).find((x) => x.ref === `academia:matricula:${m1.data.id}`)?.paid === 0);
   const sy = await A.app('/api/cuotas/sync-finanzas', { method: 'POST' });
-  check('Finanzas: enviar los pagos de antes no duplica', sy.status === 200 && (await A.app('/api/finanzas/movements?limit=200')).data.rows.filter((x) => String(x.description).includes(`N.º ${p1.data.num}`) && x.kind === 'ingreso').length === 1, JSON.stringify(sy.data));
+  check('Finanzas: enviar los pagos de antes no duplica', sy.status === 200 && ((await A.app('/api/finanzas/receipts?limit=500')).data.rows || []).filter((x) => x.ref === `academia:pago:${p1.data.num}`).length === 1, JSON.stringify(sy.data));
 
   // Módulos centrales (Diwilo Modulos): Finanzas y Marketing por RPC, con su página en el shell de la app
   check('Centrales: Finanzas responde desde Diwilo Modulos', (await A.app('/api/finanzas/summary')).status === 200);

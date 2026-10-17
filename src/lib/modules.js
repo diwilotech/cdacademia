@@ -4,13 +4,15 @@
 //     sus datos, su lógica y el código de sus páginas viven allá; la app los llama por RPC (src/lib/central.js).
 //   - business_modules: copia local de los módulos efectivos que asigna Diwilo (plan + excepciones).
 //     Un negocio que Diwilo aún no gestiona (sin fila en business_modules_sync) tiene todos los módulos activos.
-// Los módulos base (dashboard, equipo, configuración) siempre están activos y no se listan aquí.
+// Los módulos base (dashboard, equipo) siempre están activos y no se listan aquí. «marca» (Marca e IA: apariencia, logo, IA, conexiones y bitácora)
+// reemplaza a la antigua Configuración: es un módulo central BASE, siempre activo y visible para todo el equipo sin depender del plan.
 import appManifest from '../../modulos.app.json';
 import { HttpError } from './http.js';
 import { todayBogota } from './auth.js';
 
 export const APP = { id: appManifest.app, nombre: appManifest.nombre, tema: appManifest.tema || 'violeta' };
 export const CENTRALES = appManifest.centrales || [];
+export const BASE_CENTRALES = CENTRALES.filter((id) => id === 'marca');
 const OWN = (appManifest.modulos || []).map((m) => ({ ...m, tipo: 'propio' }));
 const byOrder = (a, b) => (a.menu?.orden ?? 99) - (b.menu?.orden ?? 99);
 
@@ -46,7 +48,7 @@ export async function activeModuleIds(env, businessId) {
   if (!rows.length && !(await env.DB.prepare('SELECT 1 FROM business_modules_sync WHERE business_id = ?').bind(businessId).first())) return all.map((m) => m.id);
   const today = todayBogota();
   const on = new Set(rows.filter((r) => r.activo && (!r.desde || r.desde <= today) && (!r.hasta || r.hasta >= today)).map((r) => r.modulo));
-  return all.filter((m) => on.has(m.id)).map((m) => m.id);
+  return all.filter((m) => on.has(m.id) || BASE_CENTRALES.includes(m.id)).map((m) => m.id);
 }
 
 // Lo que el personal NO ve mientras no se le asigne (propietario y administradores ven todo).
@@ -54,10 +56,10 @@ export const STAFF_SIN_ACCESO = ['matriculas', 'cuotas', 'finanzas', 'marketing'
 export const parseModulos = (raw) => { try { const a = JSON.parse(raw); return Array.isArray(a) ? a : null; } catch { return null; } };
 // ¿Esta persona puede abrir el módulo? `modulos` = lista elegida para ella (null = la de su rol).
 // «profesionales» ya vive dentro de Equipo (y los cursos lo usan para elegir docente): siempre permitido.
-export const moduleAllowed = (role, modulos, id) => role !== 'staff' || id === 'profesionales' || (modulos ? modulos.includes(id) : !STAFF_SIN_ACCESO.includes(id));
+export const moduleAllowed = (role, modulos, id) => role !== 'staff' || id === 'profesionales' || BASE_CENTRALES.includes(id) || (modulos ? modulos.includes(id) : !STAFF_SIN_ACCESO.includes(id));
 // Módulos que se le pueden dar o quitar al personal (los que el personal puede ver por su rol).
 export async function assignableModules(env) {
-  return (await allModules(env)).filter((m) => (m.permisos?.ver || 'staff') === 'staff' && m.id !== 'profesionales');
+  return (await allModules(env)).filter((m) => (m.permisos?.ver || 'staff') === 'staff' && m.id !== 'profesionales' && !BASE_CENTRALES.includes(m.id));
 }
 
 // Módulos que ve un usuario: activos para el negocio, permitidos para su rol y asignados a él.

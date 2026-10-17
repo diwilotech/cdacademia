@@ -14,11 +14,11 @@ const need = (env) => { if (!env.MODULOS) throw new HttpError(503, 'Falta la con
 
 async function ctxOf(c) {
   const name = c.session?.business_name ?? (await c.env.DB.prepare('SELECT name FROM businesses WHERE id = ?').bind(c.businessId).first())?.name;
-  const st = await c.env.DB.prepare('SELECT logo_key, tema FROM business_settings WHERE business_id = ?').bind(c.businessId).first();
-  const logo = st?.logo_key ? '/api/settings/logo' : null, tema = st?.tema || APP.tema;
+  const st = await c.env.DB.prepare('SELECT logo_key, tema, modo FROM business_settings WHERE business_id = ?').bind(c.businessId).first();
+  const logo = st?.logo_key ? '/api/settings/logo' : null, tema = st?.tema || APP.tema, modo = st?.modo === 'dark' ? 'dark' : 'light';
   const activos = new Set(await activeModuleIds(c.env, c.businessId));
   return {
-    app: APP.id, business: { id: c.businessId, name: name || null, logo, tema }, role: c.role, readOnly: !!c.readOnly,
+    app: APP.id, business: { id: c.businessId, name: name || null, logo, tema, modo }, role: c.role, readOnly: !!c.readOnly,
     user: { id: c.session?.user_id || null, email: c.session?.email || null, name: c.session?.name || null },
     origin: c.url?.origin || null, via: c.origin === 'mcp' ? 'mcp' : 'app', modulos: CENTRALES.filter((id) => activos.has(id)),
   };

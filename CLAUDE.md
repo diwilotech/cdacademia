@@ -12,7 +12,7 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 - `src/lib/central.js` = puente a Diwilo Modulos (binding `MODULOS`): `/api/finanzas|marketing/*`, `/staff/<modulo>.html`, `/m/*`, `/l/*`, `/validar/*`, `/c/*` (tarjetas), herramientas IA.
 - Pagos → Finanzas: `registrarPago`/anular llaman `movimientoFinanzas` (central.js) → `POST /api/finanzas/movements/externo` con `ref academia:pago:<N.º>` (no duplica); la anulación crea un egreso `…:anulado`. Botón «Enviar pagos a Finanzas» en Pagos para los de antes.
 - Pagos y recibos en pantalla salen de Finanzas (`GET /api/matriculas/:id/pagos` y `/pagos/:num/recibo`, vía `finanzasLeer`); `ac_pagos` queda solo como índice interno para saldo/cartera. Matrículas ya no tiene pestañas Cartera/Pagos: filtro «Cobro».
-- `modulos.app.json` (`"centrales": ["finanzas","marketing","marca"]`). Marca e IA: color de la marca (por defecto el de Apariencia), tipografía, tono y plantillas de IA; las tarjetas leen de ahí. Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.
+- `modulos.app.json` (`"centrales": ["finanzas","marketing","marca"]`). Marca e IA es un módulo BASE (siempre activo) que reemplaza a Configuración: color y modo de la app, logo, fondo, tipografía, tono, plantillas de IA, conexiones MCP y bitácora (usa `/api/settings/*` y `/api/ia/tokens` de la app); aparece abajo en el menú, junto a Equipo. Ya no existe `/staff/configuracion.html`. Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.
 - Turnstile: `TURNSTILE_SITE_KEY` en wrangler, secreto `TURNSTILE_SECRET_KEY`.
 
 ## Comandos

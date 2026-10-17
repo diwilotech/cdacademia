@@ -21,7 +21,6 @@
   const BASE_START = [{ id: 'inicio', nombre: 'Inicio', icono: 'bi-house', ruta: '/staff/' }];
   const BASE_END = [
     { id: 'equipo', nombre: 'Equipo', icono: 'bi-people', ruta: '/staff/equipo.html' },
-    { id: 'configuracion', nombre: 'Configuración', icono: 'bi-gear', ruta: '/staff/configuracion.html' },
   ];
 
   function applyTheme(s) {
@@ -46,7 +45,10 @@
   const link = (m) => `<li class="${inBottom.has(m.id) ? 'dw-in-bottom' : ''}"><a data-mod="${esc(m.id)}" href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}" ${isActive(m) ? 'aria-current="page"' : ''} title="${esc(m.nombre)}"><i class="bi ${esc(m.icono || 'bi-grid')}"></i><span>${esc(m.nombre)}</span></a></li>`;
 
   function render(me) {
-    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto).sort((a, b) => a.orden - b.orden), ...BASE_END];
+    // «Marca e IA» (reemplaza a Configuración) va abajo, junto a Equipo
+    const marcaMod = me.modules.find((m) => m.id === 'marca');
+    const FOOT = [...BASE_END, ...(marcaMod ? [marcaMod] : [])];
+    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && m.id !== 'marca').sort((a, b) => a.orden - b.orden), ...FOOT];
     const initials = (me.user.name || me.user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const logo = me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : esc(me.business.name.trim()[0] || 'D').toUpperCase();
     const canManage = RANK[me.role] >= RANK.admin;
@@ -74,7 +76,7 @@
             <li class="px-3 py-2"><div class="fw-semibold">${esc(me.user.name || me.user.email)}</div><div class="small text-body-secondary">${esc(me.user.email)} · ${ROLE[me.role] || esc(me.role)}</div></li>
             <li><hr class="dropdown-divider"></li>
             ${me.businesses.length > 1 ? `<li><h6 class="dropdown-header">Cambiar de negocio</h6></li>${me.businesses.map((b) => `<li><button class="dropdown-item ${b.id === me.business.id ? 'active' : ''}" data-biz="${esc(b.id)}"><i class="bi bi-shop me-2"></i>${esc(b.name)}</button></li>`).join('')}<li><hr class="dropdown-divider"></li>` : ''}
-            ${canManage ? '<li><a class="dropdown-item" data-mod="configuracion" href="/staff/configuracion.html#apariencia"><i class="bi bi-palette me-2"></i>Apariencia</a></li>' : ''}
+            ${canManage ? '<li><a class="dropdown-item" data-mod="marca" href="/staff/marca.html"><i class="bi bi-palette me-2"></i>Marca e IA</a></li>' : ''}
             <li><button class="dropdown-item" data-pass><i class="bi bi-key me-2"></i>Cambiar contraseña</button></li>
             <li><a class="dropdown-item" href="/privacidad" target="_blank" rel="noopener"><i class="bi bi-shield-check me-2"></i>Política de datos</a></li>
             <li><hr class="dropdown-divider"></li>
@@ -84,8 +86,8 @@
       </header>
       <aside class="offcanvas-lg offcanvas-start dw-side" tabindex="-1" id="dwSide" aria-label="Menú">
         <div class="offcanvas-header border-bottom"><span class="fw-bold">${esc(me.app.nombre)}</span><button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#dwSide" aria-label="Cerrar"></button></div>
-        <div class="offcanvas-body"><nav><ul class="dw-nav">${mods.slice(0, -BASE_END.length).map(link).join('')}</ul></nav></div>
-        <div class="dw-side__foot"><ul class="dw-nav dw-nav--foot">${BASE_END.map(link).join('')}</ul><button class="dw-iconbtn w-100 dw-collapse" data-mini title="Contraer o expandir el menú" aria-label="Contraer o expandir el menú"><i class="bi bi-chevron-double-left"></i></button></div>
+        <div class="offcanvas-body"><nav><ul class="dw-nav">${mods.slice(0, -FOOT.length).map(link).join('')}</ul></nav></div>
+        <div class="dw-side__foot"><ul class="dw-nav dw-nav--foot">${FOOT.map(link).join('')}</ul><button class="dw-iconbtn w-100 dw-collapse" data-mini title="Contraer o expandir el menú" aria-label="Contraer o expandir el menú"><i class="bi bi-chevron-double-left"></i></button></div>
       </aside>
       <nav class="dw-bottom" aria-label="Menú principal">
         ${bottom.map((m) => `<a data-mod="${esc(m.id)}" href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}"><i class="bi ${esc(m.icono)}"></i><span>${esc(m.nombre)}</span></a>`).join('')}
@@ -112,7 +114,7 @@
     }
 
     // Página de un módulo inactivo o sin permiso: no se muestra su contenido.
-    if (page.modulo && !['inicio', 'equipo', 'configuracion'].includes(page.modulo) && !me.modules.some((m) => m.id === page.modulo) && main) {
+    if (page.modulo && !['inicio', 'equipo'].includes(page.modulo) && !me.modules.some((m) => m.id === page.modulo) && main) {
       main.innerHTML = `<div class="dw-card">${window.App.empty('bi-slash-circle', 'Este módulo no está activo para tu negocio o tu rol no tiene acceso.', '<a class="btn btn-primary" href="/staff/">Ir al inicio</a>')}</div>`;
       if (EMBED) notificar();
       return false;

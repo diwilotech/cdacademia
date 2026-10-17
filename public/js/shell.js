@@ -29,6 +29,8 @@
     root.dataset.dwTema = s.tema;
     root.setAttribute('data-bs-theme', s.modo);
     try { localStorage.setItem('dw_tema', JSON.stringify({ tema: s.tema, modo: s.modo })); } catch (_) {}
+    // Dentro del panel (marco), avisa al panel para que el encabezado y el menú cambien al mismo tiempo.
+    if (EMBED) try { window.parent.postMessage({ dw: 'tema', tema: s.tema, modo: s.modo }, location.origin); } catch (_) {}
     const color = getComputedStyle(root).getPropertyValue('--dw-p').trim();
     let meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
@@ -142,6 +144,7 @@
       if (mas) mas.classList.toggle('active', ![...document.querySelectorAll('.dw-bottom a[data-mod]')].some((a) => a.dataset.mod === panel.modulo));
     };
     window.addEventListener('message', (e) => {
+      if (e.origin === location.origin && e.source === frame.contentWindow && e.data?.dw === 'tema') { applyTheme(e.data); return; }
       if (e.origin !== location.origin || e.source !== frame.contentWindow || e.data?.dw !== 'page') return;
       panel.modulo = e.data.modulo; panel.titulo = e.data.titulo || '';
       const t = document.querySelector('[data-top-title]'); if (t) t.textContent = panel.titulo;

@@ -22,6 +22,7 @@ export const CONFIG_DEFAULT = {
   recibo: 'ticket', pie: 'Gracias por formarte con nosotros.',
   nit: '', tel: '', dir: '', ig: '', web: '',
   consecutivo: 1,
+  cuentaCobro: true,   // al matricular, crear la cuenta por cobrar en Finanzas (los pagos la abonan); apagado = solo recibos de caja sueltos
 };
 export async function getConfig(env, businessId) {
   const row = await one(env, 'SELECT data FROM ac_config WHERE business_id = ?', businessId);

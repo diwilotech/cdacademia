@@ -73,6 +73,7 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Matrículas: B no ve los pagos de A', (await B.app(`/api/matriculas/${m1.data.id}/pagos`)).status === 404);
   const invs = (await A.app('/api/finanzas/invoices?limit=200')).data.rows || [];
   const cuenta = invs.find((x) => x.ref === `academia:matricula:${m1.data.id}`);
+  check('Config: la cuenta de cobro por matrícula viene activada', (await A.app('/api/academia/config')).data.cuentaCobro === true);
   check('Finanzas: la matrícula tiene su cuenta de cobro, con lo pagado', cuenta && cuenta.kind === 'emitida' && cuenta.total === m1.data.total && cuenta.paid === 300000 && cuenta.number, JSON.stringify(cuenta)?.slice(0, 220));
   const cdc = await A.app(`/api/matriculas/${m1.data.id}/cuenta-de-cobro`);
   check('Matrículas: abre la cuenta de cobro (la de Finanzas)', cdc.status === 200 && JSON.stringify(cdc.data).includes(cuenta?.number || 'x'), String(cdc.status));
@@ -244,4 +245,17 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('IA: registra un pago con recibo', !pg.data.result?.isError && JSON.parse(pg.data.result.content[0].text).recibo === 102, JSON.stringify(pg.data).slice(0, 300));
   const fi = await call('estudiantes_ficha', { estudiante_id: e1.data.id });
   check('IA: ficha del estudiante', JSON.parse(fi.data.result?.content?.[0]?.text || '{}').matriculas?.[0]?.pagado === 200000);
+
+  // Un negocio que no quiere cuentas de cobro: solo recibos de caja, sin cuenta cruzada
+  const D = await newBusiness('Academia sin cuentas', { login: true });
+  await D.app('/api/academia/config', { method: 'PUT', body: { cuentaCobro: false } });
+  const aD = await D.app('/api/academia/areas', { method: 'POST', body: { nombre: 'Uñas' } });
+  const kD = await D.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Uñas básico', area_id: aD.data.id, precio: 600000, num_clases: 2 } });
+  const eD = await D.app('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: 'Diana Sin Cuenta' } });
+  const mD = await D.app('/api/matriculas', { method: 'POST', body: { estudiante_id: eD.data.id, curso_id: kD.data.id, plan: { n: 2, frecuencia: 'mensual' } } });
+  check('Sin cuenta de cobro: matricular no crea cuenta en Finanzas', mD.status === 201 && mD.data.cuenta_de_cobro === null && !((await D.app('/api/finanzas/invoices?limit=50')).data.rows || []).length);
+  const pD = await D.app('/api/cuotas/pagos', { method: 'POST', body: { inscripcion_id: mD.data.id, valor: 200000, metodo: 'Efectivo' } });
+  const rD = ((await D.app('/api/finanzas/receipts?limit=50')).data.rows || [])[0];
+  check('Sin cuenta de cobro: el pago es un recibo de caja suelto (ingreso sin cuenta)', pD.status === 201 && rD && rD.invoice_id === null && rD.amount === 200000 && /^RC-/.test(rD.number), JSON.stringify(rD));
+  check('Sin cuenta de cobro: los pagos y el recibo siguen saliendo de Finanzas', (await D.app(`/api/matriculas/${mD.data.id}/pagos`)).data.pagos[0]?.recibo === rD?.number && (await D.app(`/api/matriculas/${mD.data.id}/pagos`)).data.cuenta_cobro === false);
 }

@@ -84,6 +84,7 @@ export function routes(r) {
     if (b.rubro !== undefined) { if (!RUBROS[b.rubro]) throw new HttpError(400, 'Rubro no válido'); out.rubro = b.rubro; }
     for (const k of ['termS', 'termP', 'recibo', 'pie', 'nit', 'tel', 'dir', 'ig', 'web']) if (b[k] !== undefined) out[k] = String(b[k] ?? '').trim().slice(0, k === 'pie' ? 300 : 80);
     if (out.recibo && !['ticket', 'carta'].includes(out.recibo)) out.recibo = 'ticket';
+    if (b.cuentaCobro !== undefined) out.cuentaCobro = b.cuentaCobro === true || b.cuentaCobro === 'true' || b.cuentaCobro === 1 || b.cuentaCobro === '1' || b.cuentaCobro === 'on';
     numIn('escala', 5, 10); numIn('notaMin', 0, 10); numIn('asisMin', 0, 100); numIn('valorRepo', 0, 1e9); numIn('valorRepoVirtual', 0, 1e9); numIn('horasVirtual', 1, 720); numIn('consecutivo', 1, 1e9);
     if (!out.termS) out.termS = CONFIG_DEFAULT.termS; if (!out.termP) out.termP = CONFIG_DEFAULT.termP;
     if (out.notaMin > out.escala) throw new HttpError(400, 'La nota mínima no puede ser mayor que la escala');

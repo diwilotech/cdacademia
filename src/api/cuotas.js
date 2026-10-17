@@ -50,7 +50,7 @@ export async function registrarPago(c, b) {
     .bind(c.businessId, num, ins.id, valor, metodo, cast('concepto', 'text', b.concepto) || (tipo === 'reposicion' ? 'Reposición de clase' : 'Abono a cuotas'), fecha, tipo, c.session.user_id, t, t).run();
   await audit(c, `Registró el pago N.º ${num} de ${ins.nombre} por ${pesos(valor)} (${ins.curso})`, { modulo: MOD });
   if (tipo === 'cuota') await cuentaDeMatricula(c, ins.id);   // asegura la cuenta de cobro a la que se abona
-  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso, inscripcion_id: ins.id });
+  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso, inscripcion_id: cfg.cuentaCobro ? ins.id : null });
   return { id: res.meta.last_row_id, num, finanzas: fin.enviado };
 }
 
@@ -111,13 +111,14 @@ export function routes(r) {
   // Manda a Finanzas los pagos de antes (no duplica los que ya están). Hasta 500 por vez.
   r.post('/api/cuotas/sync-finanzas', `manager:${MOD}`, async (c) => {
     // Primero las cuentas de cobro de las matrículas que tienen pagos; luego los pagos ligados a ellas.
-    const conPagos = await all(c.env, "SELECT DISTINCT inscripcion_id AS id FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND tipo = 'cuota' LIMIT 500", c.businessId);
+    const cfgSync = await getConfig(c.env, c.businessId);
+    const conPagos = !cfgSync.cuentaCobro ? [] : await all(c.env, "SELECT DISTINCT inscripcion_id AS id FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND tipo = 'cuota' LIMIT 500", c.businessId);
     for (const m of conPagos) await cuentaDeMatricula(c, m.id);
     const pagos = await all(c.env, `SELECT p.num, p.valor, p.fecha, p.tipo, p.metodo, p.inscripcion_id, e.nombre AS estudiante, k.nombre AS curso FROM ac_pagos p
       JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE p.business_id = ? AND p.anulado = 0 ORDER BY p.num LIMIT 500`, c.businessId);
     let nuevos = 0, enviados = 0;
-    for (const p of pagos) { const r = await movimientoFinanzas(c, p); if (r.enviado) enviados++; if (r.nuevo) nuevos++; }
+    for (const p of pagos) { const r = await movimientoFinanzas(c, cfgSync.cuentaCobro ? p : { ...p, inscripcion_id: null }); if (r.enviado) enviados++; if (r.nuevo) nuevos++; }
     if (pagos.length && !enviados) throw new HttpError(409, 'Finanzas no está activo para este negocio o no respondió');
     await audit(c, `Envió ${nuevos} pagos nuevos a Finanzas`, { modulo: MOD });
     return json({ revisados: pagos.length, nuevos });

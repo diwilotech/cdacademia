@@ -193,7 +193,7 @@ window.AC = (function () {
         { label: 'Valor', cls: 'text-end', html: (p) => `<span class="${p.anulado ? 'text-decoration-line-through text-body-secondary' : ''}">${C.money(p.valor)}</span>` },
         { label: '', cls: 'text-end', html: (p) => (p.en_finanzas ? `<a class="btn btn-sm btn-outline-primary" href="/api/matriculas/${m.id}/pagos/${p.num}/recibo" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Recibo de caja</a>` : '') }], d.pagos)}
         <div class="d-flex mt-3"><span class="flex-grow-1 text-body-secondary small">${d.pagos.length} ${d.pagos.length === 1 ? 'pago' : 'pagos'}</span><span>Total pagado <b>${C.money(d.total)}</b></span></div>
-        <div class="mt-2"><a class="btn btn-sm btn-outline-secondary" href="/api/matriculas/${m.id}/cuenta-de-cobro" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1"></i>Cuenta de cobro</a></div>
+        ${d.cuenta_cobro ? `<div class="mt-2"><a class="btn btn-sm btn-outline-secondary" href="/api/matriculas/${m.id}/cuenta-de-cobro" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1"></i>Cuenta de cobro</a></div>` : ''}
         ${d.faltan ? `<div class="small text-warning-emphasis mt-2"><i class="bi bi-exclamation-triangle me-1"></i>${d.faltan} ${d.faltan === 1 ? 'pago aún no está' : 'pagos aún no están'} en Finanzas: usa «Enviar pagos a Finanzas» en Matrículas.</div>` : ''}`
         : empty('bi-receipt', 'Todavía no hay pagos de esta matrícula.')}</div>
       <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>`, { size: 'modal-lg' });

@@ -8,7 +8,7 @@
 import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
-import { generarCuotas, estadoCuotas, parse } from '../lib/academia.js';
+import { generarCuotas, estadoCuotas, parse, getConfig } from '../lib/academia.js';
 import { finanzasLeer, finanzasPagina, cuentaDeCobro } from '../lib/central.js';
 
 const MOD = 'matriculas';
@@ -61,6 +61,7 @@ async function pagosDeFinanzas(c, id) {
 
 // Crea o actualiza la cuenta de cobro de la matrícula en Finanzas (vence con la última cuota). Devuelve {id, number} o null.
 export async function cuentaDeMatricula(c, id) {
+  if (!(await getConfig(c.env, c.businessId)).cuentaCobro) return null;   // este negocio trabaja solo con recibos de caja
   const ins = await one(c.env, `SELECT i.id, i.fecha, i.valor, i.descuento, e.nombre AS estudiante, e.documento, e.email, k.nombre AS curso FROM ac_inscripciones i
     JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
     WHERE i.id = ? AND i.business_id = ?`, id, c.businessId);
@@ -79,7 +80,7 @@ export function routes(r) {
 
   r.get('/api/matriculas/:id/pagos', 'tenant:cuotas', async (c) => {
     const { ins, pagos, faltan } = await pagosDeFinanzas(c, Number(c.params.id));
-    return json({ estudiante: ins.estudiante, curso: ins.curso, pagos, faltan, total: pagos.filter((p) => !p.anulado).reduce((s, p) => s + p.valor, 0) });
+    return json({ cuenta_cobro: !!(await getConfig(c.env, c.businessId)).cuentaCobro, estudiante: ins.estudiante, curso: ins.curso, pagos, faltan, total: pagos.filter((p) => !p.anulado).reduce((s, p) => s + p.valor, 0) });
   });
 
   // El recibo de caja de un pago: es el de Finanzas.

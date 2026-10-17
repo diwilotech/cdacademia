@@ -29,6 +29,9 @@ DW.ready.then(async (me) => {
       <div class="col-12"><h2 class="h6 mb-0 mt-2">Reposiciones</h2></div>
       ${campo('c_valorRepo', 'Valor de reponer una clase', inp('valorRepo', 'number', 'min="0" step="1000"'), 'col-sm-6 col-lg-4', '0 = sin cobro')}
       ${campo('c_valorRepoVirtual', 'Valor de reposición virtual', inp('valorRepoVirtual', 'number', 'min="0" step="1000"'))}
+      <div class="col-12"><h2 class="h6 mb-0 mt-2">Finanzas</h2></div>
+      <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c_cuentaCobro" name="cuentaCobro" ${c.cuentaCobro ? 'checked' : ''} ${RO ? 'disabled' : ''}><label class="form-check-label" for="c_cuentaCobro">Crear una cuenta de cobro al matricular</label></div>
+        <div class="form-text">Cada matrícula tiene su cuenta por cobrar en Finanzas y los pagos la abonan. Si lo apagas, cada pago genera solo un recibo de caja, sin cuenta de cobro.</div></div>
       <div class="col-12"><h2 class="h6 mb-0 mt-2">Recibo de pago</h2></div>
       ${campo('c_recibo', 'Formato', `<select class="form-select" id="c_recibo" name="recibo" ${RO ? 'disabled' : ''}><option value="ticket" ${c.recibo === 'ticket' ? 'selected' : ''}>Tirilla (impresora térmica)</option><option value="carta" ${c.recibo === 'carta' ? 'selected' : ''}>Hoja carta</option></select>`)}
       ${campo('c_consecutivo', 'Siguiente número de recibo', inp('consecutivo', 'number', 'min="1"'), 'col-sm-6 col-lg-4', 'se usa el mayor entre este y el último')}
@@ -63,6 +66,7 @@ DW.ready.then(async (me) => {
     f.onsubmit = async (e) => {
       e.preventDefault();
       const body = Object.fromEntries([...new FormData(f)]);
+      body.cuentaCobro = f.cuentaCobro.checked;
       try { await api('/api/academia/config', { method: 'PUT', body }); await AC.cfg(true); toast('Datos guardados'); } catch (x) { toast(x.message, false); }
     };
   });

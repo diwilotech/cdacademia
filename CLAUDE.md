@@ -15,6 +15,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 - `modulos.app.json` (`"centrales": ["finanzas","marketing","marca","ai"]`). Módulos BASE (siempre activos): `ai` (IA: chats de clientes en `/chat/<slug>`, conversaciones, asistente, agentes, plantillas, consumo, conexiones MCP, claves de API `/v1/*` y bitácora; usa `/api/settings/*` y `/api/ia/tokens` de la app) reemplaza a Configuración y va abajo en el menú, junto a Equipo; `marca` es el servicio de marca (se edita en Marketing → Tarjetas → Marca). Color y modo de la app: menú de usuario. Ya no existe `/staff/configuracion.html`. Login: `public/index.html`, `public/js/login.js`, `public/css/diwilo-login.css`.
 - Turnstile: `TURNSTILE_SITE_KEY` en wrangler, secreto `TURNSTILE_SECRET_KEY`.
 
+- Clases grabadas (reposiciones): `src/api/videos.js` (subida por partes a R2, enlaces personales), `src/lib/ver.js` + `public/ver.html` + `public/js/ver.js` (`/ver/<enlace>`: público, sesión única, marca de agua con el nombre, sin descarga, Range; al 90 % del tiempo real visto la reposición queda hecha). Tablas `ac_videos`, `ac_video_partes`, `ac_video_accesos` (migración 0013). Disuade, no impide grabar la pantalla.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

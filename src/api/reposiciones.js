@@ -47,7 +47,15 @@ export async function fallas(c, { inscripcionId } = {}) {
     LEFT JOIN ac_reposiciones r ON r.inscripcion_id = a.inscripcion_id AND r.clase_n = a.clase_n AND r.business_id = a.business_id
     LEFT JOIN ac_espacios s ON s.id = r.espacio_id AND s.business_id = a.business_id
     WHERE a.business_id = ? AND a.estado IN ('A', 'J') AND i.estado <> 'retirada'${extra} ORDER BY cl.fecha DESC, e.nombre LIMIT 2000`, ...args);
-  return rows;
+  // Clase grabada: si hay un video de esa clase, y lo que el estudiante ha visto con su enlace
+  const vids = await all(c.env, "SELECT id, curso_id, clase_n, titulo, duracion_s FROM ac_videos WHERE business_id = ? AND estado = 'listo'", c.businessId);
+  const acc = vids.length ? await all(c.env, 'SELECT a.reposicion_id, a.vistas, a.visto_s, a.completado_at, a.revocado, a.expira, v.duracion_s FROM ac_video_accesos a JOIN ac_videos v ON v.id = a.video_id WHERE a.business_id = ? ORDER BY a.id DESC', c.businessId) : [];
+  const ahora = Date.now();
+  return rows.map((x) => {
+    const v = vids.find((q) => q.curso_id === x.curso_id && q.clase_n === x.clase_n), a = x.id ? acc.find((q) => q.reposicion_id === x.id) : null;
+    return { ...x, video: v ? { id: v.id, titulo: v.titulo } : null,
+      enlace: a ? { vistas: a.vistas, pct: a.duracion_s ? Math.min(100, Math.round((a.visto_s / a.duracion_s) * 100)) : 0, completado: !!a.completado_at, vencido: a.expira < ahora, revocado: !!a.revocado } : null };
+  });
 }
 
 async function inscripcion(c, id) {

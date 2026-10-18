@@ -25,13 +25,15 @@ import * as cursosApi from './api/cursos.js';
 import * as matriculasApi from './api/matriculas.js';
 import * as cuotasApi from './api/cuotas.js';
 import * as reposicionesApi from './api/reposiciones.js';
+import * as videosApi from './api/videos.js';
+import { ver } from './lib/ver.js';
 import { isCentralApi, centralModuleOf, centralApi, centralPage, centralAsset, centralPublic } from './lib/central.js';
 import { CENTRALES } from './lib/modules.js';
 
 const router = new Router();
 // platform va primero. Agrega aquí cada módulo nuevo de src/api/ (y su entrada en modulos.app.json).
 // Los horizontales (Finanzas, Marketing…) no van aquí: se piden en modulos.app.json → "centrales" y viven en Diwilo Modulos.
-const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi];
+const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi, videosApi];
 for (const mod of [platformApi, platformModulesApi, authApi, meApi, settingsApi, mcpApi, teamApi, ...MODULE_APIS]) if (typeof mod.routes === 'function') mod.routes(router);
 
 const SECURITY_HEADERS = {
@@ -68,7 +70,7 @@ async function handleCentral(req, env, ctx, url) {
 
 
 // Direcciones que no son de un negocio (el resto de una sola parte, como /demo, se busca entre las direcciones de los negocios).
-const RESERVADAS = new Set(['api', 'staff', 'mcp', 'm', 'l', 'c', 'chat', 'v1', 'validar', 'app', 'admin', 'login', 'platform', 'css', 'js', 'icons', 'assets', 'privacidad', 'dmca']);
+const RESERVADAS = new Set(['api', 'staff', 'mcp', 'm', 'l', 'c', 'chat', 'v1', 'ver', 'validar', 'app', 'admin', 'login', 'platform', 'css', 'js', 'icons', 'assets', 'privacidad', 'dmca']);
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const aPanel = (url, slug, go) => Response.redirect(`${url.origin}/${slug}${go ? `?go=${encodeURIComponent(go)}` : ''}`, 302);
 
@@ -87,6 +89,8 @@ const worker = {
       if (isApi) return withHeaders(await handleApi(req, env, ctx, url), SECURITY_HEADERS);
       if (url.pathname === '/mcp') return withHeaders(await mcpApi.mcpFetch(req, env, ctx), SECURITY_HEADERS);
       // Rutas públicas que declaran los módulos: links de rastreo (/l/…) y validación de documentos (/validar/…)
+      // Clase grabada de una reposición: enlace personal del estudiante (sin sesión de la app)
+      if (url.pathname.startsWith('/ver/')) return ver(req, env, url);
       // Los chats de clientes se muestran dentro de las webs y tarjetas (iframe): su respuesta trae sus propios encabezados de marco
       if (url.pathname.startsWith('/chat/') || url.pathname.startsWith('/v1/')) return withHeaders(await centralPublic(env, url, req), { 'x-content-type-options': 'nosniff' });
       if (url.pathname.startsWith('/l/') || url.pathname.startsWith('/validar/') || url.pathname.startsWith('/c/')) return withHeaders(await centralPublic(env, url, req), SECURITY_HEADERS);

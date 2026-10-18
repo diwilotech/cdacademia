@@ -137,7 +137,9 @@
       "tipo": "propio",
       "tablas": [
         "ac_reposiciones",
-        "ac_espacios"
+        "ac_espacios",
+        "ac_videos",
+        "ac_video_accesos"
       ]
     },
     {

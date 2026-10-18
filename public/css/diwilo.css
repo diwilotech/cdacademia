@@ -291,3 +291,7 @@ body.dw-embed .dw-readonly { top: 0; }
 /* Ventanas con formulario: el cuerpo se desplaza (slider) y el encabezado y los botones quedan fijos */
 .modal-dialog-scrollable .modal-content > form { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; }
 .modal-dialog-scrollable .modal-content > form > .modal-body { overflow-y: auto; }
+
+/* Colores de la app en el menú de usuario */
+.dw-tdot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: 0 0 0 1px var(--dw-borde); }
+.dw-tdot.active { border-color: var(--bs-body-bg); box-shadow: 0 0 0 2px var(--dw-p); }

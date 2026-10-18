@@ -135,6 +135,25 @@ export async function centralPublic(env, url, req) {
     const body = r.base64 ? Uint8Array.from(atob(r.body), (ch) => ch.charCodeAt(0)) : r.body;
     return new Response(r.status === 302 ? null : body, { status: r.status, headers: r.headers });
   }
+  // Chats de clientes (IA): /chat/<slug> (página), /chat/<slug>/widget.js (burbuja para webs y tarjetas) y /chat/<slug>/mensaje
+  if (url.pathname.startsWith('/chat/') && CENTRALES.includes('ai')) {
+    const r = await need(env).chat(APP.id, decodeURIComponent(url.pathname.slice(6)), { method: req.method, query: url.search, body: req.method === 'POST' ? (await req.text()).slice(0, 4000) : null,
+      meta: { country: req.headers.get('cf-ipcountry'), ua: req.headers.get('user-agent') }, origin: url.origin });
+    if (r.business_id) {
+      const biz = await env.DB.prepare("SELECT 1 FROM businesses WHERE id = ? AND status = 'active' AND archived_at IS NULL").bind(r.business_id).first();
+      if (!biz) return notFound();
+    }
+    return new Response(r.body, { status: r.status, headers: r.headers });
+  }
+  // API pública del negocio con clave (IA → Conexiones): solo lectura de conversaciones y contactos
+  if (url.pathname.startsWith('/v1/') && CENTRALES.includes('ai')) {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, OPTIONS' };
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    if (req.method !== 'GET') return new Response(JSON.stringify({ error: 'Solo GET' }), { status: 405, headers: { ...cors, 'content-type': 'application/json' } });
+    const clave = /^Bearer\s+(\S+)/i.exec(req.headers.get('authorization') || '')?.[1] || '';
+    const r = await need(env).apiPublica(APP.id, clave, url.pathname, url.search);
+    return new Response(r.body, { status: r.status, headers: r.headers });
+  }
   if (url.pathname.startsWith('/validar/') && CENTRALES.includes('finanzas')) {
     const r = await need(env).validar(APP.id, decodeURIComponent(url.pathname.slice(9)), url.origin);
     return new Response(r.body, { status: r.status, headers: { ...r.headers, 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' } });

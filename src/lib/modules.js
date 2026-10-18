@@ -4,15 +4,15 @@
 //     sus datos, su lógica y el código de sus páginas viven allá; la app los llama por RPC (src/lib/central.js).
 //   - business_modules: copia local de los módulos efectivos que asigna Diwilo (plan + excepciones).
 //     Un negocio que Diwilo aún no gestiona (sin fila en business_modules_sync) tiene todos los módulos activos.
-// Los módulos base (dashboard, equipo) siempre están activos y no se listan aquí. «marca» (Marca e IA: apariencia, logo, IA, conexiones y bitácora)
-// reemplaza a la antigua Configuración: es un módulo central BASE, siempre activo y visible para todo el equipo sin depender del plan.
+// Los módulos base (dashboard, equipo) siempre están activos y no se listan aquí. «ai» (IA: chats, agentes, conexiones, API, consumo y bitácora) reemplaza a la antigua Configuración y «marca»
+// (la marca del negocio, que se edita en Marketing) es su servicio: ambos son módulos centrales BASE, siempre activos sin depender del plan.
 import appManifest from '../../modulos.app.json';
 import { HttpError } from './http.js';
 import { todayBogota } from './auth.js';
 
 export const APP = { id: appManifest.app, nombre: appManifest.nombre, tema: appManifest.tema || 'violeta' };
 export const CENTRALES = appManifest.centrales || [];
-export const BASE_CENTRALES = CENTRALES.filter((id) => id === 'marca');
+export const BASE_CENTRALES = CENTRALES.filter((id) => ['marca', 'ai'].includes(id));
 const OWN = (appManifest.modulos || []).map((m) => ({ ...m, tipo: 'propio' }));
 const byOrder = (a, b) => (a.menu?.orden ?? 99) - (b.menu?.orden ?? 99);
 

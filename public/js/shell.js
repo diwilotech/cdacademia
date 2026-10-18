@@ -5,6 +5,8 @@
 // y espera a DW.ready (Promise con /api/me) para cargar sus datos.
 (function () {
   const { api, esc, changePassword } = window.App;
+  // Colores de la app (paleta cerrada): se cambian desde el menú de usuario; el logo y el resto de la marca, en Marketing → Tarjetas → Marca
+  const TEMAS = [['violeta', 'Violeta', '#6d28d9'], ['azul', 'Azul', '#1d4ed8'], ['indigo', 'Índigo', '#4338ca'], ['rosa', 'Rosa', '#be185d'], ['rojo', 'Rojo', '#b91c1c'], ['naranja', 'Naranja', '#c2410c'], ['verde', 'Verde', '#15803d'], ['turquesa', 'Turquesa', '#0f766e'], ['grafito', 'Grafito', '#374151']];
   const ROLE = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' };
   const RANK = { staff: 1, admin: 2, owner: 3 };
   const main = document.querySelector('main.dw-main');
@@ -45,10 +47,10 @@
   const link = (m) => `<li class="${inBottom.has(m.id) ? 'dw-in-bottom' : ''}"><a data-mod="${esc(m.id)}" href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}" ${isActive(m) ? 'aria-current="page"' : ''} title="${esc(m.nombre)}"><i class="bi ${esc(m.icono || 'bi-grid')}"></i><span>${esc(m.nombre)}</span></a></li>`;
 
   function render(me) {
-    // «Marca e IA» (reemplaza a Configuración) va abajo, junto a Equipo
-    const marcaMod = me.modules.find((m) => m.id === 'marca');
-    const FOOT = [...BASE_END, ...(marcaMod ? [marcaMod] : [])];
-    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && m.id !== 'marca').sort((a, b) => a.orden - b.orden), ...FOOT];
+    // «IA» (reemplaza a Configuración) va abajo, junto a Equipo; «marca» es un servicio sin pantalla propia (se edita en Marketing → Tarjetas)
+    const iaMod = me.modules.find((m) => m.id === 'ai');
+    const FOOT = [...BASE_END, ...(iaMod ? [iaMod] : [])];
+    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && !['ai', 'marca'].includes(m.id)).sort((a, b) => a.orden - b.orden), ...FOOT];
     const initials = (me.user.name || me.user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const logo = me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : esc(me.business.name.trim()[0] || 'D').toUpperCase();
     const canManage = RANK[me.role] >= RANK.admin;
@@ -76,7 +78,7 @@
             <li class="px-3 py-2"><div class="fw-semibold">${esc(me.user.name || me.user.email)}</div><div class="small text-body-secondary">${esc(me.user.email)} · ${ROLE[me.role] || esc(me.role)}</div></li>
             <li><hr class="dropdown-divider"></li>
             ${me.businesses.length > 1 ? `<li><h6 class="dropdown-header">Cambiar de negocio</h6></li>${me.businesses.map((b) => `<li><button class="dropdown-item ${b.id === me.business.id ? 'active' : ''}" data-biz="${esc(b.id)}"><i class="bi bi-shop me-2"></i>${esc(b.name)}</button></li>`).join('')}<li><hr class="dropdown-divider"></li>` : ''}
-            ${canManage ? '<li><a class="dropdown-item" data-mod="marca" href="/staff/marca.html"><i class="bi bi-palette me-2"></i>Marca e IA</a></li>' : ''}
+            ${canManage ? `<li><h6 class="dropdown-header">Apariencia</h6></li><li class="px-3 pb-2"><div class="d-flex flex-wrap gap-2" data-temas>${TEMAS.map(([id, n, hex]) => `<button type="button" class="dw-tdot ${me.settings.tema === id ? 'active' : ''}" data-tema="${id}" style="background:${hex}" title="${n}" aria-label="${n}"></button>`).join('')}</div><div class="btn-group btn-group-sm w-100 mt-2" role="group"><button type="button" class="btn btn-outline-primary ${me.settings.modo === 'light' ? 'active' : ''}" data-modo="light"><i class="bi bi-sun me-1"></i>Claro</button><button type="button" class="btn btn-outline-primary ${me.settings.modo === 'dark' ? 'active' : ''}" data-modo="dark"><i class="bi bi-moon me-1"></i>Oscuro</button></div></li>` : ''}
             <li><button class="dropdown-item" data-pass><i class="bi bi-key me-2"></i>Cambiar contraseña</button></li>
             <li><a class="dropdown-item" href="/privacidad" target="_blank" rel="noopener"><i class="bi bi-shield-check me-2"></i>Política de datos</a></li>
             <li><hr class="dropdown-divider"></li>
@@ -105,6 +107,18 @@
         try { localStorage.setItem('dw_mini', document.body.classList.contains('dw-mini') ? '1' : '0'); } catch (_) {}
       };
       document.querySelector('[data-pass]').onclick = changePassword;
+      // Apariencia (solo propietario y administrador): se guarda al tocar y vale para todo el equipo
+      const guardarApariencia = async (cambio) => {
+        try {
+          const nuevo = { ...me.settings, ...cambio };
+          const r = await api('/api/settings/apariencia', { method: 'PUT', body: { tema: nuevo.tema, modo: nuevo.modo } });
+          me.settings = { ...me.settings, ...r }; applyTheme(me.settings);
+          document.querySelectorAll('[data-tema]').forEach((b) => b.classList.toggle('active', b.dataset.tema === me.settings.tema));
+          document.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('active', b.dataset.modo === me.settings.modo));
+        } catch (_) { /* sin permiso o sin conexión: queda como estaba */ }
+      };
+      document.querySelectorAll('[data-tema]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); guardarApariencia({ tema: b.dataset.tema }); }));
+      document.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); guardarApariencia({ modo: b.dataset.modo }); }));
       document.querySelector('[data-logout]').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.replace('/'); };
       document.querySelectorAll('[data-biz]').forEach((b) => (b.onclick = async () => {
         await api('/api/auth/business', { method: 'POST', body: { businessId: b.dataset.biz } });

@@ -68,7 +68,7 @@ async function handleCentral(req, env, ctx, url) {
 
 
 // Direcciones que no son de un negocio (el resto de una sola parte, como /demo, se busca entre las direcciones de los negocios).
-const RESERVADAS = new Set(['api', 'staff', 'mcp', 'm', 'l', 'c', 'validar', 'app', 'admin', 'login', 'platform', 'css', 'js', 'icons', 'assets', 'privacidad', 'dmca']);
+const RESERVADAS = new Set(['api', 'staff', 'mcp', 'm', 'l', 'c', 'chat', 'v1', 'validar', 'app', 'admin', 'login', 'platform', 'css', 'js', 'icons', 'assets', 'privacidad', 'dmca']);
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const aPanel = (url, slug, go) => Response.redirect(`${url.origin}/${slug}${go ? `?go=${encodeURIComponent(go)}` : ''}`, 302);
 
@@ -87,6 +87,8 @@ const worker = {
       if (isApi) return withHeaders(await handleApi(req, env, ctx, url), SECURITY_HEADERS);
       if (url.pathname === '/mcp') return withHeaders(await mcpApi.mcpFetch(req, env, ctx), SECURITY_HEADERS);
       // Rutas públicas que declaran los módulos: links de rastreo (/l/…) y validación de documentos (/validar/…)
+      // Los chats de clientes se muestran dentro de las webs y tarjetas (iframe): su respuesta trae sus propios encabezados de marco
+      if (url.pathname.startsWith('/chat/') || url.pathname.startsWith('/v1/')) return withHeaders(await centralPublic(env, url, req), { 'x-content-type-options': 'nosniff' });
       if (url.pathname.startsWith('/l/') || url.pathname.startsWith('/validar/') || url.pathname.startsWith('/c/')) return withHeaders(await centralPublic(env, url, req), SECURITY_HEADERS);
       // Código de las páginas de los módulos centrales
       if (url.pathname.startsWith('/m/')) return withHeaders(await centralAsset(env, url.pathname), SECURITY_HEADERS);

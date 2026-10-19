@@ -7,7 +7,7 @@
 //   /privacidad, /dmca, /manifest.json, /sw.js   públicos
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Router } from './router.js';
-import { HttpError, errorResponse } from './lib/http.js';
+import { HttpError, errorResponse, json } from './lib/http.js';
 import { authenticate, loadSession } from './lib/auth.js';
 import { platformCall } from './lib/platform-rpc.js';
 import * as authApi from './api/auth.js';
@@ -65,6 +65,8 @@ async function handleCentral(req, env, ctx, url) {
   if (req.method !== 'GET' && req.headers.get('x-app') !== '1') throw new HttpError(403, 'Solicitud no permitida');
   const c = { req, env, ctx, url, params: {} };
   await authenticate(c, `tenant:${centralModuleOf(url.pathname)}`);
+  // Guía de uso del módulo para el MCP (se arma aquí con su manifiesto y las herramientas del rol)
+  if (req.method === 'GET' && /^\/api\/[a-z]+\/mcp$/.test(url.pathname)) return json(await mcpApi.guiaDeModulo(c, centralModuleOf(url.pathname), url.origin));
   return centralApi(c);
 }
 

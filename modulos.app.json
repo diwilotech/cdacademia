@@ -36,7 +36,23 @@
         "ac_cupones",
         "ac_asistencia",
         "ac_notas"
-      ]
+      ],
+      "mcp": {
+        "guia": "Cursos con sus clases, asistencia y notas. Para saber qué hay hoy usa cursos_clases_de_hoy. Las clases se generan del horario del curso y saltan festivos.",
+        "ejemplos": [
+          "Pídele: «¿Qué clases tengo hoy y con cuántos estudiantes?»"
+        ],
+        "flujos": [
+          {
+            "id": "hoy",
+            "nombre": "Clases de hoy",
+            "descripcion": "Ver las clases del día.",
+            "pasos": [
+              "cursos.clases_de_hoy"
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "estudiantes",
@@ -60,7 +76,34 @@
       "tipo": "propio",
       "tablas": [
         "ac_estudiantes"
-      ]
+      ],
+      "mcp": {
+        "guia": "Directorio de estudiantes de la academia. Busca primero con estudiantes_buscar (nombre, documento o teléfono) y abre la ficha con estudiantes_ficha antes de responder sobre una persona. Crea estudiantes solo si no existen ya (busca antes para no duplicar).",
+        "ejemplos": [
+          "Pídele: «¿Cuál es el teléfono de Laura Pérez y en qué cursos está?»",
+          "Pídele: «Crea al estudiante Pedro Ruiz, documento 123, teléfono 300…»"
+        ],
+        "flujos": [
+          {
+            "id": "ficha",
+            "nombre": "Ficha de un estudiante",
+            "descripcion": "Buscar a una persona y mostrar su ficha completa.",
+            "pasos": [
+              "estudiantes.buscar",
+              "estudiantes.ficha"
+            ]
+          },
+          {
+            "id": "nuevo",
+            "nombre": "Registrar un estudiante",
+            "descripcion": "Verificar que no exista y crearlo.",
+            "pasos": [
+              "estudiantes.buscar",
+              "estudiantes.crear"
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "matriculas",
@@ -110,7 +153,25 @@
       "tablas": [
         "ac_cuotas",
         "ac_pagos"
-      ]
+      ],
+      "mcp": {
+        "guia": "Cartera y pagos de las matrículas. Consulta la cartera con cuotas_cartera (por estado: vencida, hoy, pendiente) antes de hablar de deudas. Registrar un pago es una escritura con efectos contables (genera recibo y asiento en Finanzas): confírmalo con la persona y verifica el valor y el medio.",
+        "ejemplos": [
+          "Pídele: «¿Quién tiene cuotas vencidas esta semana?»",
+          "Pídele: «Registra un pago de 150.000 por Nequi de la matrícula 12»"
+        ],
+        "flujos": [
+          {
+            "id": "cobranza",
+            "nombre": "Cobranza de la semana",
+            "descripcion": "Listar la cartera vencida y proponer a quién escribir.",
+            "pasos": [
+              "cuotas.cartera"
+            ],
+            "prompt": "Revisa la cartera de la academia (cuotas vencidas y que vencen hoy), ordénala por antigüedad y propón a quién escribirle primero con un mensaje corto en el tono de la marca. No registres pagos sin mi confirmación."
+          }
+        ]
+      }
     },
     {
       "id": "reposiciones",
@@ -140,7 +201,23 @@
         "ac_espacios",
         "ac_videos",
         "ac_video_accesos"
-      ]
+      ],
+      "mcp": {
+        "guia": "Fallas (ausente o con excusa) y su reposición: agendada en un espacio con cupos, virtual con clase grabada, o hecha. Consulta lo pendiente con reposiciones_pendientes. Una reposición virtual se completa cuando el estudiante ve el 90 % de la clase grabada con su enlace personal.",
+        "ejemplos": [
+          "Pídele: «¿Qué reposiciones están pendientes por agendar?»"
+        ],
+        "flujos": [
+          {
+            "id": "pendientes",
+            "nombre": "Reposiciones pendientes",
+            "descripcion": "Ver las fallas sin reponer y proponer cómo cerrarlas.",
+            "pasos": [
+              "reposiciones.pendientes"
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "material",

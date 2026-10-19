@@ -5,14 +5,16 @@
 //   /m/<modulo>.js         código de la página            /l/:slug · /validar/:código · /c/…   rutas públicas de los módulos
 //   centralTools(c)        herramientas de IA para el MCP de la app
 import { HttpError } from './http.js';
-import { CENTRALES, activeModuleIds, APP } from './modules.js';
+import { CENTRALES, activeModuleIds, allModules, roleReaches, APP } from './modules.js';
+import { TOOLS as OWN_TOOLS } from '../ia/index.js';
+import { audit } from './audit.js';
 
 export const isCentralApi = (path) => CENTRALES.some((id) => path === `/api/${id}` || path.startsWith(`/api/${id}/`));
 const centralOf = (path) => CENTRALES.find((id) => path.startsWith(`/api/${id}`));
 
 const need = (env) => { if (!env.MODULOS) throw new HttpError(503, 'Falta la conexión con Diwilo Modulos (service binding MODULOS)'); return env.MODULOS; };
 
-async function ctxOf(c) {
+export async function ctxOf(c) {
   const name = c.session?.business_name ?? (await c.env.DB.prepare('SELECT name FROM businesses WHERE id = ?').bind(c.businessId).first())?.name;
   const st = await c.env.DB.prepare('SELECT logo_key, tema, modo FROM business_settings WHERE business_id = ?').bind(c.businessId).first();
   const logo = st?.logo_key ? '/api/settings/logo' : null, tema = st?.tema || APP.tema, modo = st?.modo === 'dark' ? 'dark' : 'light';
@@ -86,10 +88,36 @@ async function saveAudit(c, entries = []) {
   c.audited = true;
 }
 
+// Lo propio de esta app para la IA del módulo central «ai» (asistente, agentes, guías): sus módulos con su guía de uso y sus herramientas, y cómo
+// ejecutarlas. Las ejecuta la APP con la sesión de quien hizo la llamada (mismo rol, módulo activo, solo lectura y bitácora), no el Worker central.
+// Se entrega por RPC en ctx.propias (las funciones viajan como llamadas de vuelta, válidas mientras dura la petición).
+export async function propiasDe(c) {
+  const activos = new Set(await activeModuleIds(c.env, c.businessId));
+  const mods = (await allModules(c.env)).filter((m) => m.tipo === 'propio' && activos.has(m.id) && roleReaches(c.role, m.permisos?.ver || 'staff'));
+  const tools = OWN_TOOLS.filter((t) => (!t.modulo || activos.has(t.modulo)) && roleReaches(c.role, t.rol || 'staff'));
+  return {
+    modulos: mods.map(({ id, nombre, descripcion, permisos, mcp }) => ({ id, nombre, descripcion: descripcion || null, permisos, mcp: mcp || null, tipo: 'propio' })),
+    catalogo: tools.map(({ name, description, inputSchema, rol, tipo, modulo }) => ({ name, description, inputSchema, rol: rol || 'staff', tipo: tipo === 'escritura' ? 'escritura' : 'lectura', modulo })),
+    async ejecutar(name, args) {
+      const t = tools.find((x) => x.name === name);
+      if (!t) return { ok: false, error: 'Herramienta no disponible para este negocio o rol', status: 404 };
+      if (t.tipo === 'escritura' && c.readOnly) return { ok: false, error: 'La suscripción del negocio está vencida: solo lectura.', status: 402 };
+      try {
+        c.audited = false;
+        const result = await t.run(c, args || {});
+        if (t.tipo === 'escritura' && !c.audited) await audit(c, `IA: ${t.name}`, { modulo: t.modulo, detalle: args, origen: 'mcp' });
+        return { ok: true, result };
+      } catch (e) { return { ok: false, error: e instanceof HttpError ? e.message : 'Error al ejecutar la herramienta', status: e.status || 500 }; }
+    },
+  };
+}
+
 // API de un módulo central. Ya pasó authenticate(c, 'tenant:<modulo>') en src/index.js.
 export async function centralApi(c) {
   const body = c.req.method === 'GET' || c.req.method === 'HEAD' ? null : await c.req.text();
-  const r = await need(c.env).call(await ctxOf(c), { method: c.req.method, path: c.url.pathname, query: c.url.search, body });
+  const ctx = await ctxOf(c);
+  if (c.url.pathname.startsWith('/api/ai/')) ctx.propias = await propiasDe(c);   // el asistente y los agentes usan también las herramientas propias de la app
+  const r = await need(c.env).call(ctx, { method: c.req.method, path: c.url.pathname, query: c.url.search, body });
   await saveAudit(c, r.audit);
   return new Response(r.body, { status: r.status, headers: r.headers });
 }

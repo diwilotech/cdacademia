@@ -17,6 +17,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 
 - Clases grabadas (reposiciones): `src/api/videos.js` (subida por partes a R2, enlaces personales), `src/lib/ver.js` + `public/ver.html` + `public/js/ver.js` (`/ver/<enlace>`: público, sesión única, marca de agua con el nombre, sin descarga, Range; al 90 % del tiempo real visto la reposición queda hecha). Tablas `ac_videos`, `ac_video_partes`, `ac_video_accesos` (migración 0013). Disuade, no impide grabar la pantalla.
 
+- Guía de uso por módulo para el MCP: bloque `mcp` del manifiesto (`modulos.app.json` / `modulo.json` central) → `GET /api/<módulo>/mcp`, recursos `diwilo://<módulo>/guia` y prompts `<módulo>_<flujo>` (estándar único en Diwilo Modulos: `src/lib/guias.js`; aquí `src/api/mcp.js` pide las guías por RPC y `propiasDe` en `src/lib/central.js` entrega las herramientas propias al asistente y a los agentes de la IA). Todo módulo nuevo debe traer su bloque `mcp`.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

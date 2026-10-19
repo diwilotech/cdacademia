@@ -12,12 +12,27 @@
 import { json, readJson, HttpError, str } from '../lib/http.js';
 import { db, uuid, nowIso } from '../lib/db.js';
 import { randomHex, sha256Hex, isExpired } from '../lib/auth.js';
-import { activeModuleIds, roleReaches, APP } from '../lib/modules.js';
+import { activeModuleIds, roleReaches, OWN_IDS, APP } from '../lib/modules.js';
 import { audit } from '../lib/audit.js';
 import { TOOLS } from '../ia/index.js';
-import { centralTools } from '../lib/central.js';
+import { centralTools, ctxOf, propiasDe } from '../lib/central.js';
 
+// Los clientes de IA solo aceptan [a-zA-Z0-9_-] en el nombre: «items.listar» se publica como «items_listar».
+const wire = (name) => name.replace(/\./g, '_');
 const PROTOCOL = '2025-06-18';
+
+// Guías de uso de los módulos de este negocio y este rol: UN estándar para todos (src/lib/guias.js de Diwilo Modulos), el mismo que usan el asistente y los agentes.
+// Los módulos propios de la app mandan su manifiesto y sus herramientas en ctx.propias.
+export async function guiasDe(c, origin) {
+  if (!c.env.MODULOS) throw new HttpError(503, 'Las guías de uso no están disponibles (falta la conexión con Diwilo Modulos)');
+  return c.env.MODULOS.guias({ ...(await ctxOf(c)), origin, propias: await propiasDe(c) });
+}
+export async function guiaDeModulo(c, id, origin) {
+  const d = (await guiasDe(c, origin)).find((x) => x.modulo === id);
+  if (!d) throw new HttpError(404, 'Módulo no encontrado');
+  const { markdown, ...doc } = d;
+  return doc;
+}
 
 async function tokenContext(c) {
   const m = /^Bearer\s+(dwm_[0-9a-f]{64})$/i.exec(c.req.headers.get('authorization') || '');
@@ -34,13 +49,11 @@ async function tokenContext(c) {
     session: { user_id: t.user_id, email: t.email, name: t.name } });
 }
 
-async function availableTools(c) {
+export async function availableTools(c) {
   const active = new Set(await activeModuleIds(c.env, c.businessId));
   return [...TOOLS, ...(await centralTools(c.env))].filter((t) => (!t.modulo || active.has(t.modulo)) && roleReaches(c.role, t.rol || 'staff'));
 }
 
-// Los clientes de IA solo aceptan [a-zA-Z0-9_-] en el nombre: «items.listar» se publica como «items_listar».
-const wire = (name) => name.replace(/\./g, '_');
 const describe = (t) => ({
   name: wire(t.name), description: t.description, inputSchema: t.inputSchema,
   annotations: { readOnlyHint: t.tipo !== 'escritura', destructiveHint: t.tipo === 'escritura', title: t.description },
@@ -52,10 +65,30 @@ async function handle(c, msg) {
   const fail = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return fail(-32600, 'Petición no válida');
   if (method.startsWith('notifications/')) return null;
-  if (method === 'initialize') return ok({ protocolVersion: PROTOCOL, capabilities: { tools: { listChanged: false } }, serverInfo: { name: APP.id, title: APP.nombre, version: '1.0.0' },
-    instructions: `Herramientas de ${APP.nombre} para el negocio conectado. Pide confirmación antes de usar herramientas que escriben.` });
+  if (method === 'initialize') return ok({ protocolVersion: PROTOCOL, capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } }, serverInfo: { name: APP.id, title: APP.nombre, version: '1.0.0' },
+    instructions: `Herramientas de ${APP.nombre} para el negocio conectado. Pide confirmación antes de usar herramientas que escriben. Cada módulo tiene su guía de uso: lee el recurso diwilo://<módulo>/guia (resources/list) o usa sus prompts (prompts/list).` });
   if (method === 'ping') return ok({});
   if (method === 'tools/list') return ok({ tools: (await availableTools(c)).map(describe) });
+  if (method === 'resources/list') {
+    return ok({ resources: (await guiasDe(c, new URL(c.req.url).origin)).map((d) => ({ uri: `diwilo://${d.modulo}/guia`, name: `Guía de ${d.nombre}`, description: `Cómo usar el módulo ${d.nombre} con las herramientas del MCP`, mimeType: 'text/markdown' })) });
+  }
+  if (method === 'resources/read') {
+    const id = /^diwilo:\/\/([a-z]+)\/guia$/.exec(String(params.uri || ''))?.[1];
+    const d = id && (await guiasDe(c, new URL(c.req.url).origin)).find((x) => x.modulo === id);
+    if (!d) return fail(-32002, 'Recurso no encontrado');
+    return ok({ contents: [{ uri: params.uri, mimeType: 'text/markdown', text: d.markdown }] });
+  }
+  if (method === 'prompts/list') {
+    const out = [];
+    for (const d of await guiasDe(c, new URL(c.req.url).origin)) for (const f of d.flujos) out.push({ name: `${d.modulo}_${f.id}`, title: f.nombre, description: f.descripcion || f.nombre, arguments: [] });
+    return ok({ prompts: out });
+  }
+  if (method === 'prompts/get') {
+    const [id, ...rest] = String(params.name || '').split('_'), fid = rest.join('_');
+    const d = id && (await guiasDe(c, new URL(c.req.url).origin)).find((x) => x.modulo === id), f = d?.flujos.find((x) => x.id === fid);
+    if (!f) return fail(-32602, 'Prompt no encontrado');
+    return ok({ description: f.descripcion || f.nombre, messages: [{ role: 'user', content: { type: 'text', text: f.prompt } }] });
+  }
   if (method === 'tools/call') {
     const tool = (await availableTools(c)).find((t) => wire(t.name) === params.name || t.name === params.name);
     if (!tool) return fail(-32602, 'Herramienta no disponible para este negocio o rol');
@@ -92,6 +125,9 @@ export async function mcpFetch(req, env, ctx) {
 }
 
 export function routes(r) {
+  // Guía de uso de CADA módulo propio para el MCP: GET /api/<módulo>/mcp (los centrales la responde handleCentral con el mismo documento)
+  for (const id of OWN_IDS) r.get(`/api/${id}/mcp`, `tenant:${id}`, async (c) => json(await guiaDeModulo(c, id, c.url.origin)));
+
   r.get('/api/ia/tokens', 'tenant', async (c) => {
     const all = ['owner', 'admin'].includes(c.role);
     return json({ tokens: await db(c.env).all(`SELECT t.id, t.name, t.created_at, t.last_used_at, t.revoked_at, u.email

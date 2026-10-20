@@ -26,6 +26,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 
 - La clase del estudiante (migración 0016, `src/api/trabajo.js`): el día de la clase (y después) ve el material (`ac_clases.material_id`; archivos por `/api/alumno/material/:key`, `AC.doc.base`), sube su trabajo (`ac_entregas`, R2 `<negocio>/entrega/`; el equipo lo ve en Cursos → Entregas) y presenta las evaluaciones de esa clase (`ac_evaluaciones.clase_n`): solo el día de la clase, se envía una vez (`ac_examenes.enviado_at`), sin respuestas correctas hacia el cliente; si todo se califica solo y no hay nota, queda en Notas. Calendario con vista Semana/Mes.
 
+- Nómina (migración 0017, rutas en `src/api/team.js`, modal en `public/js/pages/equipo.js`): cuánto se le paga a cada persona del equipo (`ac_nomina`, `persona` = `u:<usuario>` | `p:<profesional>`); solo propietario/admin; el total mensual suma lo fijo (mensual/quincenal/semanal), por clase y por hora son variables. El centro de costo es texto con sugerencias de Finanzas.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

@@ -6,6 +6,7 @@ import { createInvite, invitePath } from '../lib/auth.js';
 import { assignableModules, parseModulos, moduleAllowed } from '../lib/modules.js';
 
 const TEAM_ROLES = ['admin', 'staff'];
+const PERIODOS = ['mensual', 'quincenal', 'semanal', 'clase', 'hora'];
 
 async function member(c, userId) {
   const m = await db(c.env).first('SELECT role FROM memberships WHERE business_id = ? AND user_id = ?', c.businessId, userId);
@@ -23,6 +24,37 @@ async function modulosDe(c, raw) {
 const inviteUrl = (c, token) => new URL(invitePath(token), c.url.origin).toString();
 
 export function routes(r) {
+  // Nómina: cuánto se le paga a cada persona del equipo (sensible: solo propietario y administradores).
+  //   GET /api/team/nomina  ·  PUT /api/team/nomina/:persona { valor, periodicidad, centro_costo?, notas? }  ·  DELETE /api/team/nomina/:persona
+  const personaOk = async (c, persona) => {
+    const m = /^([up]):(.{1,60})$/.exec(persona || '');
+    if (!m) throw new HttpError(400, 'Persona no válida');
+    const ok = m[1] === 'u'
+      ? await db(c.env).first("SELECT 1 FROM memberships WHERE business_id = ? AND user_id = ? AND role <> 'estudiante'", c.businessId, m[2])
+      : await db(c.env).first('SELECT 1 FROM ac_profesionales WHERE business_id = ? AND id = ?', c.businessId, Number(m[2]) || 0);
+    if (!ok) throw new HttpError(404, 'Esa persona no está en el equipo');
+  };
+  r.get('/api/team/nomina', 'manager', async (c) => {
+    const rows = await db(c.env).all('SELECT persona, valor, periodicidad, centro_costo, notas, updated_at FROM ac_nomina WHERE business_id = ?', c.businessId);
+    const mes = { mensual: 1, quincenal: 2, semanal: 4.33 };   // clase y hora son variables: no suman al total mensual
+    return json({ rows, total_mensual: Math.round(rows.reduce((a, x) => a + x.valor * (mes[x.periodicidad] || 0), 0)) });
+  });
+  r.put('/api/team/nomina/:persona', 'manager', async (c) => {
+    await personaOk(c, c.params.persona);
+    const b = await readJson(c.req);
+    const valor = Math.round(Number(b.valor));
+    if (!Number.isFinite(valor) || valor < 0 || valor > 1e10) throw new HttpError(400, 'Escribe un valor válido');
+    const periodo = oneOf(b.periodicidad, PERIODOS, { label: 'Periodicidad', fallback: 'mensual' });
+    await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, centro_costo, notas, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, c.session.user_id, Date.now());
+    return json({ ok: true });
+  });
+  r.delete('/api/team/nomina/:persona', 'manager', async (c) => {
+    await db(c.env).run('DELETE FROM ac_nomina WHERE business_id = ? AND persona = ?', c.businessId, c.params.persona);
+    return json({ ok: true });
+  });
+
   r.get('/api/team', 'tenant', async (c) => {
     const users = await db(c.env).all(
       `SELECT u.id, u.email, u.name, m.role, m.modulos, u.password_hash IS NOT NULL AS has_password

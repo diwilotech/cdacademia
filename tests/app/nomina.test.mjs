@@ -24,13 +24,21 @@ export default async function ({ check, newBusiness, newMember }) {
   check('Nómina: lo que se aproxima a pagar al mes (sueldo fijo y clases × valor)', aO?.estimado === 2000000 && aL?.periodicidad === 'clase' && aL.clases === cl.length && aL.estimado === 50000 * cl.length, JSON.stringify([aO, aL]));
   check('Nómina: el aproximado es solo del propietario y administradores', (await S.app('/api/team/nomina/aproximado')).status === 403);
   check('Nómina: otro negocio y el personal no ven las clases', (await S.app(`/api/team/nomina/clases?profesional=${prof.data.id}`)).status === 403 && (await B.app(`/api/team/nomina/clases?profesional=${prof.data.id}&month=${hoy.slice(0, 7)}`)).data.clases.length === 0);
-  // La cédula se pone desde Equipo y no pisa el pago
-  const docPut = await A.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '79.123.456' } });
+  // Los datos de la persona (nombre, tipo y número de documento, celular) se editan desde Equipo y no pisan el pago
+  const dp = await A.app(`/api/team/persona/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { nombre: 'Dueña Academia', tipo_documento: 'NIT', documento: '900.123.456-7', celular: '300 111 2233' } });
   const perDoc = (await A.app('/api/team/nomina/personas')).data.personas.find((x) => x.key === `u:${yo.id}`);
-  check('Nómina: la cédula se pone desde Equipo y conserva el pago', docPut.status === 200 && perDoc.documento === '79.123.456' && perDoc.valor === 2000000, JSON.stringify(perDoc));
-  await put(A.app, `u:${yo.id}`, { valor: 2100000, periodicidad: 'mensual' });
-  check('Nómina: cambiar el pago no borra la cédula', (await A.app('/api/team/nomina/personas')).data.personas.find((x) => x.key === `u:${yo.id}`).documento === '79.123.456');
-  check('Nómina: la cédula es solo del propietario y administradores y de gente del equipo', (await S.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 403 && (await B.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 404);
+  check('Nómina: los datos de la persona se editan desde Equipo y conservan el pago', dp.status === 200 && perDoc.nombre === 'Dueña Academia' && perDoc.tipo_documento === 'NIT' && perDoc.documento === '900.123.456-7' && perDoc.celular === '300 111 2233' && perDoc.valor === 2000000, JSON.stringify(perDoc));
+  await put(A.app, `u:${yo.id}`, { valor: 2100000, periodicidad: 'quincenal', centro_costo: 'Administración' });
+  check('Nómina: cambiar el pago no borra los datos de la persona', (await A.app('/api/team/nomina/personas')).data.personas.find((x) => x.key === `u:${yo.id}`).documento === '900.123.456-7');
+  check('Nómina: los datos son solo del propietario y administradores y de gente del equipo', (await S.app(`/api/team/persona/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 403 && (await B.app(`/api/team/persona/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 404);
+  check('Nómina: un tipo de documento inválido se rechaza', (await A.app(`/api/team/persona/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { tipo_documento: 'XX', documento: '1' } })).status === 400);
+  // La nómina de cada persona queda en Finanzas como gasto recurrente de tipo Nómina (nombre, cédula, valor, ciclo y centro de costo)
+  const recN = (await A.app('/api/finanzas/recurring?limit=200')).data.rows.find((x) => x.ref === `academia:nomina:u:${yo.id}`);
+  check('Nómina: queda en Finanzas como gasto recurrente de tipo Nómina con su cédula y ciclo', recN?.category === 'nomina' && recN.name === 'Nómina · Dueña Academia' && recN.vendor === 'Dueña Academia' && recN.tax_id === 'NIT 900.123.456-7' && recN.amount === 2100000 && recN.cycle === 'quincenal' && recN.url === `/staff/equipo.html#pago:u:${yo.id}` && recN.cost_center_id > 0, JSON.stringify(recN));
+  const recL = (await A.app('/api/finanzas/recurring?limit=200')).data.rows.find((x) => x.ref === `academia:nomina:p:${prof.data.id}`);
+  check('Nómina: el pago por clase queda como mensual con la nota «Pago por clase»', recL?.cycle === 'mensual' && recL.notes === 'Pago por clase' && recL.amount === 50000, JSON.stringify(recL));
+  await put(A.app, `p:${prof.data.id}`, { valor: 0, periodicidad: 'clase' });
+  check('Nómina: sin pago definido el gasto de nómina queda pausado', (await A.app('/api/finanzas/recurring?limit=200')).data.rows.find((x) => x.ref === `academia:nomina:p:${prof.data.id}`)?.active === 0);
   const aF = (await A.app(`/api/team/nomina/aproximado?month=${hoy.slice(0, 7)}`)).data.rows.find((x) => x.key === `p:${prof.data.id}`);
   check('Nómina: el aproximado dice cuántas clases faltan en el mes', typeof aF?.clases_faltan === 'number' && aF.clases_faltan <= aF.clases, JSON.stringify(aF));
   check('Nómina: el personal no ve ni cambia la nómina (403)', (await S.app('/api/team/nomina')).status === 403 && (await put(S.app, `u:${yo.id}`, { valor: 1 })).status === 403);

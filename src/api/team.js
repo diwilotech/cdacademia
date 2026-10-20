@@ -4,6 +4,8 @@ import { json, readJson, HttpError, str, oneOf, email } from '../lib/http.js';
 import { db, uuid } from '../lib/db.js';
 import { createInvite, invitePath } from '../lib/auth.js';
 import { assignableModules, parseModulos, moduleAllowed } from '../lib/modules.js';
+import { recurrenteNomina } from '../lib/central.js';
+import { audit } from '../lib/audit.js';
 
 const TEAM_ROLES = ['admin', 'staff'];
 const PERIODOS = ['mensual', 'quincenal', 'semanal', 'clase', 'hora'];
@@ -43,18 +45,19 @@ export function routes(r) {
   const personasConPago = async (c) => {
     const d = db(c.env);
     const [nom, users, profs] = await Promise.all([
-      d.all('SELECT persona, valor, periodicidad, centro_costo, notas, documento FROM ac_nomina WHERE business_id = ?', c.businessId),
+      d.all('SELECT persona, valor, periodicidad, centro_costo, notas, documento, tipo_documento, celular FROM ac_nomina WHERE business_id = ?', c.businessId),
       d.all("SELECT u.id, u.name, u.email, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'", c.businessId),
-      d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ? AND activo = 1', c.businessId)]);
+      d.all('SELECT id, nombre, email, telefono FROM ac_profesionales WHERE business_id = ? AND activo = 1', c.businessId)]);
     const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' }, mail = (e) => String(e || '').trim().toLowerCase();
     // Una persona puede estar como usuario y como profesional: se unen sus datos (el pago de la fila que lo tenga y la cédula de cualquiera)
-    const pagoDe = (...keys) => { const f = nom.filter((x) => keys.includes(x.persona)); if (!f.length) return undefined; const base = f.find((x) => x.valor > 0) || f[0]; return { ...base, documento: base.documento || f.find((x) => x.documento)?.documento || null }; };
-    const ficha = (key, nombre, detalle, profId, g) => ({ key, nombre, detalle, profesional_id: profId, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null, documento: g?.documento || null });
+    const pagoDe = (...keys) => { const f = nom.filter((x) => keys.includes(x.persona)); if (!f.length) return undefined; const base = f.find((x) => x.valor > 0) || f[0]; const pick = (k) => base[k] || f.find((x) => x[k])?.[k] || null; return { ...base, documento: pick('documento'), tipo_documento: pick('tipo_documento'), celular: pick('celular') }; };
+    const ficha = (key, nombre, detalle, profId, g, extra = {}) => ({ key, nombre, detalle, email: extra.email || null, profesional_id: profId, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null,
+      documento: g?.documento || null, tipo_documento: g?.tipo_documento || (g?.documento ? 'CC' : null), celular: g?.celular || extra.telefono || null });
     const out = users.map((u) => {
       const p = profs.find((y) => y.email && mail(y.email) === mail(u.email));
-      return ficha(`u:${u.id}`, u.name || u.email, `${ROL[u.role] || u.role}${p ? ' · Profesional' : ''}`, p?.id || null, pagoDe(`u:${u.id}`, p && `p:${p.id}`));
+      return ficha(`u:${u.id}`, u.name || u.email, `${ROL[u.role] || u.role}${p ? ' · Profesional' : ''}`, p?.id || null, pagoDe(`u:${u.id}`, p && `p:${p.id}`), { email: u.email, telefono: p?.telefono });
     });
-    for (const p of profs.filter((y) => !out.some((o) => o.profesional_id === y.id))) out.push(ficha(`p:${p.id}`, p.nombre, 'Profesional', p.id, pagoDe(`p:${p.id}`)));
+    for (const p of profs.filter((y) => !out.some((o) => o.profesional_id === y.id))) out.push(ficha(`p:${p.id}`, p.nombre, 'Profesional', p.id, pagoDe(`p:${p.id}`), { email: p.email, telefono: p.telefono }));
     return out;
   };
   r.get('/api/team/nomina/personas', 'manager', async (c) => json({ personas: await personasConPago(c) }));
@@ -80,12 +83,26 @@ export function routes(r) {
       WHERE cl.business_id = ? AND k.profesional_id = ? AND cl.fecha BETWEEN ? AND ? ORDER BY cl.fecha, cl.ini`, c.businessId, Number(q.get('profesional')) || 0, `${month}-01`, `${month}-31`);
     return json({ month, clases: rows });
   });
-  // La cédula o NIT de una persona se pone desde Equipo (sale en su documento de pago en Finanzas): PUT /api/team/documento/:persona { documento }
-  r.put('/api/team/documento/:persona', 'manager', async (c) => {
+  // Lleva a Finanzas la nómina de una persona (gasto recurrente de tipo «Nómina») con sus datos al día
+  const sincronizar = async (c, key) => {
+    const p = (await personasConPago(c)).find((x) => x.key === key || (key.startsWith('p:') && x.profesional_id === Number(key.slice(2))));
+    if (p) await recurrenteNomina(c, { ...p, key: p.key });
+  };
+  // Datos de la persona (se editan desde Equipo): nombre, tipo y número de documento, celular. PUT /api/team/persona/:persona { nombre?, tipo_documento, documento, celular }
+  r.put('/api/team/persona/:persona', 'manager', async (c) => {
     await personaOk(c, c.params.persona);
-    const doc = str((await readJson(c.req)).documento, { max: 40 }) || null;
-    await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, documento, updated_by, updated_at) VALUES (?, ?, 0, 'mensual', ?, ?, ?)
-      ON CONFLICT(business_id, persona) DO UPDATE SET documento = excluded.documento, updated_by = excluded.updated_by, updated_at = excluded.updated_at`, c.businessId, c.params.persona, doc, c.session.user_id, Date.now());
+    const b = await readJson(c.req), d = db(c.env), m = /^([up]):(.+)$/.exec(c.params.persona);
+    const nombre = b.nombre === undefined ? null : str(b.nombre, { max: 100, label: 'Nombre' }) || null;
+    const tipo = oneOf(b.tipo_documento, ['CC', 'NIT', 'CE', 'PA'], { label: 'Tipo de documento', fallback: 'CC' });
+    await d.run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, documento, tipo_documento, celular, updated_by, updated_at) VALUES (?, ?, 0, 'mensual', ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, persona) DO UPDATE SET documento = excluded.documento, tipo_documento = excluded.tipo_documento, celular = excluded.celular, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      c.businessId, c.params.persona, str(b.documento, { max: 40 }) || null, tipo, str(b.celular, { max: 30 }) || null, c.session.user_id, Date.now());
+    if (nombre) {
+      if (m[1] === 'u') await d.run('UPDATE users SET name = ? WHERE id = ? AND id IN (SELECT user_id FROM memberships WHERE business_id = ?)', nombre, m[2], c.businessId);
+      else await c.env.DB.prepare('UPDATE ac_profesionales SET nombre = ?, updated_at = ? WHERE id = ? AND business_id = ?').bind(nombre, Date.now(), Number(m[2]), c.businessId).run();
+    }
+    await audit(c, 'Editó los datos de una persona del equipo', { modulo: 'equipo' });
+    await sincronizar(c, c.params.persona);
     return json({ ok: true });
   });
   r.put('/api/team/nomina/:persona', 'manager', async (c) => {
@@ -97,6 +114,7 @@ export function routes(r) {
     await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, centro_costo, notas, documento, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, documento = COALESCE(excluded.documento, ac_nomina.documento), updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
       c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, b.documento === undefined ? null : str(b.documento, { max: 40 }) || null, c.session.user_id, Date.now());
+    await sincronizar(c, c.params.persona);
     return json({ ok: true });
   });
   r.delete('/api/team/nomina/:persona', 'manager', async (c) => {

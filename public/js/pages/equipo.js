@@ -11,7 +11,7 @@ DW.ready.then(async (me) => {
   inviteBtn.hidden = !me.canManage;
   nomBtn.hidden = !me.canManage || !me.modules.some((m) => m.id === 'finanzas');
   profBtn.hidden = !canManage;
-  let users = [], profs = [], catalogo = [], areas = [];
+  let users = [], profs = [], catalogo = [], areas = [], docs = new Map();
   const key = (s) => String(s || '').trim().toLowerCase();
 
   function showLink(url, who) {
@@ -23,6 +23,7 @@ DW.ready.then(async (me) => {
   const modBoxes = (sel) => catalogo.map((m, i) => `<div class="col-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="mod${i}" data-mod="${esc(m.id)}" ${(sel || catalogo.filter((x) => x.defecto).map((x) => x.id)).includes(m.id) ? 'checked' : ''}><label class="form-check-label" for="mod${i}">${esc(m.nombre)}</label></div></div>`).join('');
   const picked = (el) => [...el.querySelectorAll('[data-mod]:checked')].map((c) => c.dataset.mod);
 
+  const personaKey = (r) => (r.user ? `u:${r.user.id}` : `p:${r.prof.id}`);
   // Personas = usuarios con acceso + profesionales (se unen por correo; los que no tienen acceso salen como «Sin acceso»).
   const rows = () => {
     const byMail = new Map(profs.filter((p) => p.email).map((p) => [key(p.email), p]));
@@ -33,14 +34,15 @@ DW.ready.then(async (me) => {
   };
 
   async function load() {
-    const [t, p] = await Promise.all([api('/api/team'), api('/api/profesionales/profesionales?limit=500').catch(() => ({ rows: [] }))]);
-    users = t.users; catalogo = t.catalogo; profs = p.rows || [];
+    const [t, p, pn] = await Promise.all([api('/api/team'), api('/api/profesionales/profesionales?limit=500').catch(() => ({ rows: [] })), me.canManage ? api('/api/team/nomina/personas').catch(() => ({ personas: [] })) : Promise.resolve({ personas: [] })]);
+    users = t.users; catalogo = t.catalogo; profs = p.rows || []; docs = new Map(pn.personas.filter((x) => x.documento).map((x) => [x.key, x.documento]));
     areas = await AC.listas.areas().catch(() => []);
     const nombreArea = (id) => areas.find((a) => a.id === id)?.nombre || '—';
     const all = rows();
     list.innerHTML = all.length ? table([
       { label: 'Persona', main: true, html: (r) => { const n = r.user?.name || r.prof?.nombre || r.user?.email; const e = r.user?.email || r.prof?.email || r.prof?.telefono || '';
-        return `<div>${esc(n)}</div><div class="small text-body-secondary fw-normal">${esc(e)}</div>`; } },
+        const k = personaKey(r), doc = docs.get(k);
+        return `<div>${esc(n)}</div><div class="small text-body-secondary fw-normal">${esc(e)}</div>${me.canManage ? `<div class="small fw-normal"><span class="text-body-secondary">Cédula o NIT:</span> ${doc ? esc(doc) : '<span class="text-body-secondary">—</span>'} <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-doc="${esc(k)}" data-nombre="${esc(n)}" data-actual="${esc(doc || '')}" title="Poner la cédula o NIT" aria-label="Poner la cédula o NIT"><i class="bi bi-pencil"></i></button></div>` : ''}`; } },
       { label: 'Rol', html: (r) => {
         const rol = !r.user ? '<span class="badge text-bg-secondary">Sin acceso a la app</span>'
           : (r.user.role === 'owner' || !canManage ? `<span class="badge text-bg-light">${ROLE[r.user.role] || esc(r.user.role)}</span>`
@@ -94,6 +96,15 @@ DW.ready.then(async (me) => {
   });
   list.addEventListener('click', async (e) => {
     const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), hp = e.target.closest('[data-hacerprof]'), qp = e.target.closest('[data-quitarprof]'), da = e.target.closest('[data-dar]');
+    const dc = e.target.closest('[data-doc]');
+    if (dc) {   // la cédula o NIT se pone aquí y sale en el documento de pago de Finanzas
+      const { el, m } = modal(`<form><div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Cédula o NIT · ${esc(dc.dataset.nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body"><input class="form-control" name="documento" maxlength="40" value="${esc(dc.dataset.actual)}" placeholder="Ej.: 1.020.304.050" autofocus><div class="form-text">Sale en el documento de sus pagos en Finanzas.</div></div>
+        <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary">Guardar</button></div></form>`);
+      el.querySelector('form').onsubmit = async (ev) => { ev.preventDefault();
+        try { await api(`/api/team/documento/${encodeURIComponent(dc.dataset.doc)}`, { method: 'PUT', body: { documento: ev.target.documento.value } }); m.hide(); toast('Cédula guardada'); load(); } catch (ex) { toast(ex.message, false); } };
+      return;
+    }
     try {
       if (fi) AC.fichaProfesional({ row: profs.find((p) => p.id === +fi.dataset.ficha), areas, changed: load });
       if (hp) {

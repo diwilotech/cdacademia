@@ -24,6 +24,15 @@ export default async function ({ check, newBusiness, newMember }) {
   check('Nómina: lo que se aproxima a pagar al mes (sueldo fijo y clases × valor)', aO?.estimado === 2000000 && aL?.periodicidad === 'clase' && aL.clases === cl.length && aL.estimado === 50000 * cl.length, JSON.stringify([aO, aL]));
   check('Nómina: el aproximado es solo del propietario y administradores', (await S.app('/api/team/nomina/aproximado')).status === 403);
   check('Nómina: otro negocio y el personal no ven las clases', (await S.app(`/api/team/nomina/clases?profesional=${prof.data.id}`)).status === 403 && (await B.app(`/api/team/nomina/clases?profesional=${prof.data.id}&month=${hoy.slice(0, 7)}`)).data.clases.length === 0);
+  // La cédula se pone desde Equipo y no pisa el pago
+  const docPut = await A.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '79.123.456' } });
+  const perDoc = (await A.app('/api/team/nomina/personas')).data.personas.find((x) => x.key === `u:${yo.id}`);
+  check('Nómina: la cédula se pone desde Equipo y conserva el pago', docPut.status === 200 && perDoc.documento === '79.123.456' && perDoc.valor === 2000000, JSON.stringify(perDoc));
+  await put(A.app, `u:${yo.id}`, { valor: 2100000, periodicidad: 'mensual' });
+  check('Nómina: cambiar el pago no borra la cédula', (await A.app('/api/team/nomina/personas')).data.personas.find((x) => x.key === `u:${yo.id}`).documento === '79.123.456');
+  check('Nómina: la cédula es solo del propietario y administradores y de gente del equipo', (await S.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 403 && (await B.app(`/api/team/documento/${encodeURIComponent(`u:${yo.id}`)}`, { method: 'PUT', body: { documento: '1' } })).status === 404);
+  const aF = (await A.app(`/api/team/nomina/aproximado?month=${hoy.slice(0, 7)}`)).data.rows.find((x) => x.key === `p:${prof.data.id}`);
+  check('Nómina: el aproximado dice cuántas clases faltan en el mes', typeof aF?.clases_faltan === 'number' && aF.clases_faltan <= aF.clases, JSON.stringify(aF));
   check('Nómina: el personal no ve ni cambia la nómina (403)', (await S.app('/api/team/nomina')).status === 403 && (await put(S.app, `u:${yo.id}`, { valor: 1 })).status === 403);
   check('Nómina: no acepta una persona de otro negocio', (await put(B.app, `u:${yo.id}`, { valor: 1000 })).status === 404 && (await put(B.app, `p:${prof.data.id}`, { valor: 1000 })).status === 404);
   check('Nómina: otro negocio no ve la nómina ajena', (await B.app('/api/team/nomina')).data.rows.length === 0);

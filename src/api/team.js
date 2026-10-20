@@ -47,7 +47,8 @@ export function routes(r) {
       d.all("SELECT u.id, u.name, u.email, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'", c.businessId),
       d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ? AND activo = 1', c.businessId)]);
     const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' }, mail = (e) => String(e || '').trim().toLowerCase();
-    const pagoDe = (...keys) => nom.find((x) => keys.includes(x.persona));
+    // Una persona puede estar como usuario y como profesional: se unen sus datos (el pago de la fila que lo tenga y la cédula de cualquiera)
+    const pagoDe = (...keys) => { const f = nom.filter((x) => keys.includes(x.persona)); if (!f.length) return undefined; const base = f.find((x) => x.valor > 0) || f[0]; return { ...base, documento: base.documento || f.find((x) => x.documento)?.documento || null }; };
     const ficha = (key, nombre, detalle, profId, g) => ({ key, nombre, detalle, profesional_id: profId, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null, documento: g?.documento || null });
     const out = users.map((u) => {
       const p = profs.find((y) => y.email && mail(y.email) === mail(u.email));
@@ -61,13 +62,15 @@ export function routes(r) {
   r.get('/api/team/nomina/aproximado', 'manager', async (c) => {
     const month = /^\d{4}-\d{2}$/.test(c.url.searchParams.get('month') || '') ? c.url.searchParams.get('month') : new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 7);
     const personas = await personasConPago(c), FACTOR = { mensual: 1, quincenal: 2, semanal: 4 };
-    const clases = await db(c.env).all(`SELECT k.profesional_id AS prof, cl.ini, cl.fin FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+    const hoy = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+    const clases = await db(c.env).all(`SELECT k.profesional_id AS prof, cl.fecha, cl.ini, cl.fin FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
       WHERE cl.business_id = ? AND k.profesional_id IS NOT NULL AND cl.fecha BETWEEN ? AND ?`, c.businessId, `${month}-01`, `${month}-31`);
     const min = (h) => { const [a, b] = String(h || '').split(':').map(Number); return Number.isFinite(a) ? a * 60 + (b || 0) : null; };
     return json({ month, rows: personas.map((p) => {
       const mias = p.profesional_id ? clases.filter((x) => x.prof === p.profesional_id) : [], horas = Math.round(mias.reduce((a, x) => a + Math.max(0, (min(x.fin) ?? 0) - (min(x.ini) ?? 0)), 0) / 6) / 10;
       const base = FACTOR[p.periodicidad] ? p.valor * FACTOR[p.periodicidad] : 0, variable = p.periodicidad === 'clase' ? p.valor * mias.length : p.periodicidad === 'hora' ? Math.round(p.valor * horas) : 0;
-      return { key: p.key, estimado: Math.round(base + variable), clases: mias.length, horas, periodicidad: p.periodicidad, definido: p.valor > 0 };
+      const faltan = mias.filter((x) => x.fecha >= hoy), horasFaltan = Math.round(faltan.reduce((a, x) => a + Math.max(0, (min(x.fin) ?? 0) - (min(x.ini) ?? 0)), 0) / 6) / 10;
+      return { key: p.key, valor: p.valor, estimado: Math.round(base + variable), clases: mias.length, clases_faltan: faltan.length, horas, horas_faltan: horasFaltan, periodicidad: p.periodicidad, definido: p.valor > 0 };
     }) });
   });
   // Las clases que dicta un profesional en un mes (para armar su pago): GET /api/team/nomina/clases?profesional=<id>&month=AAAA-MM
@@ -77,6 +80,14 @@ export function routes(r) {
       WHERE cl.business_id = ? AND k.profesional_id = ? AND cl.fecha BETWEEN ? AND ? ORDER BY cl.fecha, cl.ini`, c.businessId, Number(q.get('profesional')) || 0, `${month}-01`, `${month}-31`);
     return json({ month, clases: rows });
   });
+  // La cédula o NIT de una persona se pone desde Equipo (sale en su documento de pago en Finanzas): PUT /api/team/documento/:persona { documento }
+  r.put('/api/team/documento/:persona', 'manager', async (c) => {
+    await personaOk(c, c.params.persona);
+    const doc = str((await readJson(c.req)).documento, { max: 40 }) || null;
+    await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, documento, updated_by, updated_at) VALUES (?, ?, 0, 'mensual', ?, ?, ?)
+      ON CONFLICT(business_id, persona) DO UPDATE SET documento = excluded.documento, updated_by = excluded.updated_by, updated_at = excluded.updated_at`, c.businessId, c.params.persona, doc, c.session.user_id, Date.now());
+    return json({ ok: true });
+  });
   r.put('/api/team/nomina/:persona', 'manager', async (c) => {
     await personaOk(c, c.params.persona);
     const b = await readJson(c.req);
@@ -84,8 +95,8 @@ export function routes(r) {
     if (!Number.isFinite(valor) || valor < 0 || valor > 1e10) throw new HttpError(400, 'Escribe un valor válido');
     const periodo = oneOf(b.periodicidad, PERIODOS, { label: 'Periodicidad', fallback: 'mensual' });
     await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, centro_costo, notas, documento, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, documento = excluded.documento, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
-      c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, str(b.documento, { max: 40 }) || null, c.session.user_id, Date.now());
+      ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, documento = COALESCE(excluded.documento, ac_nomina.documento), updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, b.documento === undefined ? null : str(b.documento, { max: 40 }) || null, c.session.user_id, Date.now());
     return json({ ok: true });
   });
   r.delete('/api/team/nomina/:persona', 'manager', async (c) => {

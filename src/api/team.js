@@ -39,18 +39,31 @@ export function routes(r) {
     const mes = { mensual: 1, quincenal: 2, semanal: 4.33 };   // clase y hora son variables: no suman al total mensual
     return json({ rows, total_mensual: Math.round(rows.reduce((a, x) => a + x.valor * (mes[x.periodicidad] || 0), 0)) });
   });
-  // Personas con pago definido (nombre, rol y valor): lo usa Finanzas → Pagos del mes → Nómina
+  // Todas las personas del equipo con su pago definido (si lo hay): lo usa Finanzas → Pagos del mes → Nómina
   r.get('/api/team/nomina/personas', 'manager', async (c) => {
     const d = db(c.env);
     const [nom, users, profs] = await Promise.all([
-      d.all('SELECT persona, valor, periodicidad, centro_costo, notas FROM ac_nomina WHERE business_id = ? AND valor > 0', c.businessId),
+      d.all('SELECT persona, valor, periodicidad, centro_costo, notas FROM ac_nomina WHERE business_id = ?', c.businessId),
       d.all("SELECT u.id, u.name, u.email, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'", c.businessId),
-      d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ?', c.businessId)]);
-    const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' };
-    return json({ personas: nom.map((x) => {
-      const u = x.persona.startsWith('u:') ? users.find((y) => y.id === x.persona.slice(2)) : null, p = x.persona.startsWith('p:') ? profs.find((y) => String(y.id) === x.persona.slice(2)) : null;
-      return { key: x.persona, nombre: u ? (u.name || u.email) : p?.nombre || x.persona, detalle: u ? ROL[u.role] || u.role : p ? 'Profesional' : '', valor: x.valor, periodicidad: x.periodicidad, centro_costo: x.centro_costo, notas: x.notas };
-    }) });
+      d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ? AND activo = 1', c.businessId)]);
+    const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' }, mail = (e) => String(e || '').trim().toLowerCase();
+    const pagoDe = (...keys) => nom.find((x) => keys.includes(x.persona));
+    const out = users.map((u) => {
+      const p = profs.find((y) => y.email && mail(y.email) === mail(u.email)), g = pagoDe(`u:${u.id}`, p && `p:${p.id}`);
+      return { key: `u:${u.id}`, nombre: u.name || u.email, detalle: `${ROL[u.role] || u.role}${p ? ' · Profesional' : ''}`, profesional_id: p?.id || null, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null };
+    });
+    for (const p of profs.filter((y) => !out.some((o) => o.profesional_id === y.id))) {
+      const g = pagoDe(`p:${p.id}`);
+      out.push({ key: `p:${p.id}`, nombre: p.nombre, detalle: 'Profesional', profesional_id: p.id, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null });
+    }
+    return json({ personas: out });
+  });
+  // Las clases que dicta un profesional en un mes (para armar su pago): GET /api/team/nomina/clases?profesional=<id>&month=AAAA-MM
+  r.get('/api/team/nomina/clases', 'manager', async (c) => {
+    const q = c.url.searchParams, month = /^\d{4}-\d{2}$/.test(q.get('month') || '') ? q.get('month') : new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 7);
+    const rows = await db(c.env).all(`SELECT cl.n, cl.fecha, cl.ini, cl.fin, cl.tema, k.nombre AS curso FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+      WHERE cl.business_id = ? AND k.profesional_id = ? AND cl.fecha BETWEEN ? AND ? ORDER BY cl.fecha, cl.ini`, c.businessId, Number(q.get('profesional')) || 0, `${month}-01`, `${month}-31`);
+    return json({ month, clases: rows });
   });
   r.put('/api/team/nomina/:persona', 'manager', async (c) => {
     await personaOk(c, c.params.persona);

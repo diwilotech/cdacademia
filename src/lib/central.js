@@ -38,7 +38,7 @@ export async function movimientoFinanzas(c, p) {
     const body = anulado ? { ref } : {
       ref, date: p.fecha, amount: p.valor, method: p.metodo || null, counterparty: p.estudiante || null, centro_costo: p.curso || null,
       concept: p.tipo === 'reposicion' ? `Reposición de clase · ${p.curso || ''}` : `Abono a la matrícula · ${p.curso || ''}`,
-      notes: `Pago N.º ${p.num} de la academia`, ...(p.inscripcion_id && p.tipo !== 'reposicion' ? { invoice_ref: `academia:matricula:${p.inscripcion_id}` } : {}),
+      notes: `Pago N.º ${p.num} de la academia`, ...(p.files?.length ? { files: p.files } : {}), ...(p.inscripcion_id && p.tipo !== 'reposicion' ? { invoice_ref: `academia:matricula:${p.inscripcion_id}` } : {}),
     };
     const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: `/api/finanzas/receipts/externo${anulado ? '/void' : ''}`, body: JSON.stringify(body) });
     await saveAudit(c, r.audit);

@@ -59,7 +59,8 @@ export async function pagosDeFinanzas(c, id) {
   return { ins, pagos, faltan: pagos.filter((p) => !p.en_finanzas && !p.anulado).length };
 }
 
-// Crea o actualiza la cuenta de cobro de la matrícula en Finanzas (vence con la última cuota). Devuelve {id, number} o null.
+// La cuenta de cobro de la matrícula en Finanzas: se emite al matricular (con una línea por cuota) y después queda igual aunque cambien las cuotas;
+// los pagos se abonan sobre ella. Devuelve {id, number} o null.
 export async function cuentaDeMatricula(c, id) {
   if (!(await getConfig(c.env, c.businessId)).cuentaCobro) return null;   // este negocio trabaja solo con recibos de caja
   const ins = await one(c.env, `SELECT i.id, i.fecha, i.valor, i.descuento, e.nombre AS estudiante, e.documento, e.email, k.nombre AS curso FROM ac_inscripciones i
@@ -150,7 +151,7 @@ export function routes(r) {
     if (cols.length) await c.env.DB.prepare(`UPDATE ac_inscripciones SET ${cols.map((x) => `${x} = ?`).join(', ')}, updated_at = ? WHERE id = ? AND business_id = ?`).bind(...cols.map((x) => set[x]), now(), ins.id, c.businessId).run();
     if (plan) await guardarCuotas(c, { ...ins, ...set }, plan);
     await audit(c, `Editó una matrícula${set.estado ? ` (${set.estado})` : ''}${plan ? ' y rehízo sus cuotas' : ''}`, { modulo: MOD });
-    if (plan) await cuentaDeMatricula(c, ins.id);   // el nuevo valor o vencimiento llega a la cuenta de cobro
+    if (plan) await cuentaDeMatricula(c, ins.id);   // solo la crea si faltaba: la cuenta ya emitida no cambia
     return json({ ok: true });
   });
 

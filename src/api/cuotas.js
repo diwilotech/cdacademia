@@ -50,7 +50,9 @@ export async function registrarPago(c, b) {
     .bind(c.businessId, num, ins.id, valor, metodo, cast('concepto', 'text', b.concepto) || (tipo === 'reposicion' ? 'Reposición de clase' : 'Abono a cuotas'), fecha, tipo, c.session.user_id, t, t).run();
   await audit(c, `Registró el pago N.º ${num} de ${ins.nombre} por ${pesos(valor)} (${ins.curso})`, { modulo: MOD });
   if (tipo === 'cuota') await cuentaDeMatricula(c, ins.id);   // asegura la cuenta de cobro a la que se abona
-  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso, inscripcion_id: cfg.cuentaCobro ? ins.id : null });
+  // Si el pago viene de un comprobante que subió el estudiante, ese archivo viaja con el recibo (se abre desde Finanzas)
+  const files = b.comprobante_id ? [{ nombre: 'Comprobante de pago', url: `/api/cuotas/comprobantes/${Number(b.comprobante_id)}/archivo` }] : [];
+  const fin = await movimientoFinanzas(c, { num, valor, fecha, tipo, metodo, estudiante: ins.nombre, curso: ins.curso, inscripcion_id: cfg.cuentaCobro ? ins.id : null, files });
   return { id: res.meta.last_row_id, num, finanzas: fin.enviado };
 }
 

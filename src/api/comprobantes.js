@@ -100,7 +100,7 @@ export function routes(r) {
     if (!claim.meta.changes) throw new HttpError(409, 'Este comprobante ya fue revisado');
     try {
       const p = await registrarPago(c, { inscripcion_id: row.inscripcion_id, valor: b.valor ?? row.valor, metodo: b.metodo || (['Transferencia', 'Nequi', 'Daviplata', 'Bre-B', 'Tarjeta'].includes(row.metodo) ? row.metodo : 'Transferencia'),
-        fecha: b.fecha || row.fecha, concepto: `Abono a cuotas (comprobante N.º ${id})` });
+        fecha: b.fecha || row.fecha, concepto: `Abono a cuotas (comprobante N.º ${id})`, comprobante_id: id });
       await c.env.DB.prepare('UPDATE ac_comprobantes SET pago_num = ? WHERE id = ? AND business_id = ?').bind(p.num, id, c.businessId).run();
       return json({ ok: true, pago: p.num, finanzas: p.finanzas });
     } catch (e) {

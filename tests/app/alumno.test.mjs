@@ -79,6 +79,18 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   check('Alumno: no se aprueba dos veces', (await A.app(`/api/cuotas/comprobantes/${up.data.id}/aprobar`, { method: 'POST', body: {} })).status === 409);
   const rec = await S(`/api/alumno/curso/${c1.id}/recibos`);
   check('Alumno: ve su recibo y lo abre', rec.data.recibos?.length === 1 && rec.data.recibos[0].valor === 200000 && (await S(`/api/alumno/curso/${c1.id}/recibos/${rec.data.recibos[0].num}`)).data.text?.includes('Recibo de caja'), JSON.stringify(rec.data));
+  // Finanzas: el recibo aparece en Movimientos con el comprobante, y la cuenta de cobro no cambia aunque cambien las cuotas
+  const movs = (await A.app('/api/finanzas/movements?limit=100')).data.rows || [];
+  const mv = movs.find((m) => m.receipt_number === rec.data.recibos[0].recibo);
+  check('Finanzas: el movimiento trae su recibo y el comprobante', !!mv && mv.receipt_files?.[0]?.url === `/api/cuotas/comprobantes/${up.data.id}/archivo`, JSON.stringify(mv || movs[0]).slice(0, 250));
+  const antes = (await S(`/api/alumno/curso/${c1.id}/cuenta-de-cobro`)).data.text || '';
+  const cambia = await A.app(`/api/matriculas/${c1.id}`, { method: 'PATCH', body: { plan: { n: 4, frecuencia: 'semanal', primera: hoy } } });
+  const despues = (await S(`/api/alumno/curso/${c1.id}/cuenta-de-cobro`)).data.text || '';
+  const lineas = (t) => (t.match(/<tr><td class="idx">/g) || []).length;
+  check('Finanzas: al cambiar las cuotas la cuenta de cobro queda igual', cambia.status === 200 && lineas(antes) === 2 && lineas(despues) === 2 && (await S(`/api/alumno/curso/${c1.id}`)).data.pagos.cuotas.length === 4, `${lineas(antes)} ${lineas(despues)}`);
+  const detF = await A.app(`/api/finanzas/invoices/${(await A.app('/api/finanzas/invoices?limit=50')).data.rows.find((i) => i.ref === `academia:matricula:${c1.id}`).id}/detalle`);
+  check('Finanzas: la cuenta por cobrar trae sus pagos con archivos', detF.status === 200 && detF.data.recibos.length === 1 && detF.data.recibos[0].files.length === 1, JSON.stringify(detF.data.recibos).slice(0, 200));
+  check('Finanzas: gastos recurrentes con «este mes» y «por pagar»', (await A.app('/api/finanzas/recurring/estado')).data.por_pagar !== undefined);
   const up2 = await subir(100000);
   check('Alumno: rechazar pide motivo y el estudiante lo ve', (await A.app(`/api/cuotas/comprobantes/${up2.data.id}/rechazar`, { method: 'POST', body: {} })).status === 400
     && (await A.app(`/api/cuotas/comprobantes/${up2.data.id}/rechazar`, { method: 'POST', body: { motivo: 'No se ve el valor' } })).status === 200

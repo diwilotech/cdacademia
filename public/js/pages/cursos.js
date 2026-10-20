@@ -421,6 +421,7 @@ DW.ready.then(async (me) => {
         { label: 'Clase', main: true, html: (c) => `Clase ${c.n}${c.tema ? `<div class="small fw-normal">${esc(c.tema)}</div>` : ''}` },
         { label: 'Fecha', html: (c) => `${c.fecha ? C.day(c.fecha) : '—'}${c.ini ? ` · ${esc(c.ini)}–${esc(c.fin)}` : ''}${c.movida ? ` ${C.chip('soon', 'Movida')}` : ''}` },
         { label: 'Concepto', html: (c) => `<span class="small">${c.material_id ? esc(c.detalle || 'Según el material') : '<span class="text-body-secondary">Sin material asignado</span>'}</span>${c.virtual ? ` ${C.chip('free', 'Virtual')}` : ''}` },
+        { label: 'Evaluación', html: (c) => { const es = D.evaluaciones.filter((e) => e.clase_n === c.n); return es.length ? es.map((e) => C.chip('soon', `${e.nombre} · ${e.peso}%`)).join(' ') : '<span class="text-body-secondary">—</span>'; } },
         { label: '', cls: 'text-end', html: (c) => (RO ? '' : `<button class="btn btn-sm btn-outline-primary" data-clase="${c.n}"><i class="bi bi-pencil me-1"></i>Editar</button>`) }], D.clases)}</div>`
         : empty('bi-calendar-x', 'El curso no tiene clases: pon el número de clases, la fecha de inicio y el horario.');
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-clase]'); if (b) editarClase(D.clases.find((c) => c.n === +b.dataset.clase), () => V.reload()); });

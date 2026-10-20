@@ -349,6 +349,11 @@ export function routes(r) {
       all(c.env, `SELECT s.id, s.fecha, s.ini, s.fin, s.cupos, s.notas, p.nombre AS profesional, (SELECT COUNT(*) FROM ac_reposiciones r WHERE r.espacio_id = s.id AND r.business_id = s.business_id) AS ocupados
         FROM ac_espacios s LEFT JOIN ac_profesionales p ON p.id = s.profesional_id AND p.business_id = s.business_id WHERE s.business_id = ? AND s.fecha BETWEEN ? AND ? ORDER BY s.fecha, s.ini`, c.businessId, desde, hasta).catch(() => []),
     ]);
+    // Las evaluaciones se ponen en Notas, en una clase: el calendario marca esa clase con su parcial
+    if (clases.length) {
+      const evs = await all(c.env, `SELECT curso_id, clase_n, nombre, tipo, peso FROM ac_evaluaciones WHERE business_id = ? AND clase_n IS NOT NULL AND curso_id IN (${[...new Set(clases.map((x) => x.curso_id))].map(() => '?').join(',')})`, c.businessId, ...new Set(clases.map((x) => x.curso_id)));
+      for (const cl of clases) cl.evaluaciones = evs.filter((e) => e.curso_id === cl.curso_id && e.clase_n === cl.n).map((e) => ({ nombre: e.nombre, tipo: e.tipo, peso: e.peso }));
+    }
     return json({ desde, hasta, clases, espacios });
   });
 

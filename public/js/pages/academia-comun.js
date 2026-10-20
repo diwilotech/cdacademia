@@ -134,9 +134,13 @@ window.AC = (function () {
     let desde = lunes(C.todayCo());
     host.innerHTML = `<div class="d-flex align-items-center gap-2 mb-3"><button class="btn btn-light" data-prev aria-label="Semana anterior"><i class="bi bi-chevron-left"></i></button>
       <b class="flex-grow-1 text-center" data-rango></b><button class="btn btn-light" data-hoy>Hoy</button><button class="btn btn-light" data-next aria-label="Semana siguiente"><i class="bi bi-chevron-right"></i></button></div><div data-tabla></div>`;
-    const evClase = (x) => `<a class="dw-ev" ${/^#[0-9a-f]{3,8}$/i.test(x.color || '') ? `style="--ev:${esc(x.color)}"` : ''} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)}">
+    // Una clase con evaluación (parcial) se pinta de otro color y dice cuál es
+    const evEstilo = (x) => (x.evaluaciones?.length ? ' dw-ev--parcial' : '');
+    const evColor = (x) => (!x.evaluaciones?.length && /^#[0-9a-f]{3,8}$/i.test(x.color || '') ? `style="--ev:${esc(x.color)}"` : '');
+    const evClase = (x) => `<a class="dw-ev${evEstilo(x)}" ${evColor(x)} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)}">
         <b>${esc(h12(x.ini))}${x.fin ? ` – ${esc(h12(x.fin))}` : ''}</b><span class="d-block text-truncate">${esc(x.curso)}</span>
-        <span class="text-body-secondary">Clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.virtual ? ' · virtual' : ''}</span></a>`;
+        <span class="text-body-secondary">Clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.virtual ? ' · virtual' : ''}</span>
+        ${x.evaluaciones?.length ? `<span class="d-block fw-semibold"><i class="bi bi-pencil-square me-1"></i>${x.evaluaciones.map((e) => esc(e.nombre)).join(', ')}</span>` : ''}</a>`;
     const evRepo = (x) => `<a class="dw-ev dw-ev--repo" href="/staff/cursos.html#reposiciones" title="Espacio de reposición"><b>${esc(h12(x.ini))} – ${esc(h12(x.fin))}</b>
         <span class="d-block"><i class="bi bi-arrow-repeat me-1"></i>Reposición</span><span class="text-body-secondary">${x.ocupados} de ${x.cupos} cupos${x.profesional ? ` · ${esc(x.profesional)}` : ''}</span></a>`;
     const load = async () => {
@@ -173,7 +177,7 @@ window.AC = (function () {
       let d; try { d = await api(`/api/cursos/calendario?desde=${desde}&hasta=${hasta}`); } catch (x) { $('[data-tabla]', host).innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
       const semanas = Math.round((Date.parse(hasta) - Date.parse(desde)) / 864e5 + 1) / 7;
       const celda = (f) => {
-        const ev = [...d.clases.filter((x) => x.fecha === f).map((x) => ({ h: x.ini || '', html: `<a class="dw-ev dw-ev--mini" ${/^#[0-9a-f]{3,8}$/i.test(x.color || '') ? `style="--ev:${esc(x.color)}"` : ''} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)} · clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}"><b>${esc(hhmm(x.ini))}</b> ${esc(x.curso)}</a>` })),
+        const ev = [...d.clases.filter((x) => x.fecha === f).map((x) => ({ h: x.ini || '', html: `<a class="dw-ev dw-ev--mini${evEstilo(x)}" ${evColor(x)} href="/staff/cursos.html?id=${x.curso_id}" title="${esc(x.curso)} · clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.evaluaciones?.length ? ` · ${esc(x.evaluaciones.map((e) => e.nombre).join(', '))}` : ''}"><b>${esc(hhmm(x.ini))}</b> ${x.evaluaciones?.length ? '<i class="bi bi-pencil-square"></i> ' : ''}${esc(x.curso)}</a>` })),
           ...d.espacios.filter((x) => x.fecha === f).map((x) => ({ h: x.ini, html: `<a class="dw-ev dw-ev--mini dw-ev--repo" href="/staff/cursos.html#reposiciones" title="Espacio de reposición · ${x.ocupados} de ${x.cupos} cupos"><b>${esc(hhmm(x.ini))}</b> <i class="bi bi-arrow-repeat"></i> Reposición</a>` }))]
           .sort((p, q) => p.h.localeCompare(q.h));
         const fuera = !f.startsWith(ym);

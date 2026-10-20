@@ -142,6 +142,8 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   const calF = (await S(`/api/alumno/calendario?desde=${claseFut.fecha}&hasta=${claseFut.fecha}`)).data.clases.find((x) => x.n === claseFut.n);
   check('Calendario: el examen de una clase futura sale pendiente', calF?.evaluaciones?.[0]?.estado === 'pendiente', JSON.stringify(calF?.evaluaciones));
   check('Notas: cada evaluación dice a qué clase pertenece', (await S(`/api/alumno/curso/${c1.id}`)).data.evaluaciones.every((e) => 'clase_n' in e && 'enviado' in e));
+  const calE = (await A.app(`/api/cursos/calendario?desde=${hoy}&hasta=${hoy}`)).data.clases.find((x) => x.curso_id === k1.data.id && x.n === claseHoy.n);
+  check('Calendario del equipo: la clase con evaluación trae su parcial', calE?.evaluaciones?.length === 2 && calE.evaluaciones.some((e) => e.nombre === 'Quiz contorno'), JSON.stringify(calE?.evaluaciones));
   check('Inicio: marca la clase de hoy', (await S('/api/alumno/inicio')).data.cursos.find((c) => c.id === c1.id)?.clase_hoy?.n === claseHoy.n);
 
   // IA Diwilo (botón flotante del panel): el equipo pregunta; el estudiante no

@@ -38,7 +38,7 @@
         "ac_notas"
       ],
       "mcp": {
-        "guia": "Cursos con sus clases, asistencia y notas. Para saber qué hay hoy usa cursos_clases_de_hoy. Las clases se generan del horario del curso y saltan festivos.",
+        "guia": "Cursos de la academia: cada curso tiene área, nivel, horario por días, número de clases, profesional, cupo, precio y fechas. Las clases del día salen de aquí (cursos.clases_de_hoy). Las evaluaciones (notas) se asignan a una clase y aparecen en el calendario del estudiante; el material de cada clase se publica el día de la clase. Esta IA solo consulta cursos: crear o cambiar cursos se hace en la pantalla Cursos.",
         "ejemplos": [
           "Pídele: «¿Qué clases tengo hoy y con cuántos estudiantes?»"
         ],
@@ -78,7 +78,7 @@
         "ac_estudiantes"
       ],
       "mcp": {
-        "guia": "Directorio de estudiantes de la academia. Busca primero con estudiantes_buscar (nombre, documento o teléfono) y abre la ficha con estudiantes_ficha antes de responder sobre una persona. Crea estudiantes solo si no existen ya (busca antes para no duplicar).",
+        "guia": "Estudiantes: ficha con documento, contacto y acudiente, sus matrículas y su acceso a la app (el estudiante entra a su inicio con el calendario, material, trabajos, evaluaciones y pagos). Busca siempre antes de crear para no duplicar (estudiantes.buscar por nombre, documento, correo o teléfono) y pide confirmación antes de estudiantes.crear. Invitar al estudiante a la app se hace desde su ficha.",
         "ejemplos": [
           "Pídele: «¿Cuál es el teléfono de Laura Pérez y en qué cursos está?»",
           "Pídele: «Crea al estudiante Pedro Ruiz, documento 123, teléfono 300…»"
@@ -125,7 +125,12 @@
       "tipo": "propio",
       "tablas": [
         "ac_inscripciones"
-      ]
+      ],
+      "mcp": {
+        "guia": "Matrículas: inscribe a un estudiante en un curso con su plan de cuotas; la cuenta de cobro queda fija aunque cambien las cuotas. Esta IA no crea matrículas: para cobros usa el módulo de cuotas y para ver el estado de la cartera cuotas.cartera.",
+        "ejemplos": [],
+        "flujos": []
+      }
     },
     {
       "id": "cuotas",
@@ -155,7 +160,7 @@
         "ac_pagos"
       ],
       "mcp": {
-        "guia": "Cartera y pagos de las matrículas. Consulta la cartera con cuotas_cartera (por estado: vencida, hoy, pendiente) antes de hablar de deudas. Registrar un pago es una escritura con efectos contables (genera recibo y asiento en Finanzas): confírmalo con la persona y verifica el valor y el medio.",
+        "guia": "Matrículas, cuotas y cobros: cada matrícula tiene un plan de cuotas con valor, vencimiento y estado (al día, en mora, pagada). La cuenta de cobro de la matrícula queda en Finanzas (una por matrícula, con una línea por cuota) y cada pago genera su recibo y su movimiento en Finanzas SOLO: no los registres otra vez ahí. cuotas.cartera muestra quién debe; cuotas.registrar_pago registra un abono (pide confirmación: estudiante, cuota, valor y método). Los comprobantes que sube el estudiante los aprueba o rechaza el equipo en Matrículas → Comprobantes.",
         "ejemplos": [
           "Pídele: «¿Quién tiene cuotas vencidas esta semana?»",
           "Pídele: «Registra un pago de 150.000 por Nequi de la matrícula 12»"
@@ -203,7 +208,7 @@
         "ac_video_accesos"
       ],
       "mcp": {
-        "guia": "Fallas (ausente o con excusa) y su reposición: agendada en un espacio con cupos, virtual con clase grabada, o hecha. Consulta lo pendiente con reposiciones_pendientes. Una reposición virtual se completa cuando el estudiante ve el 90 % de la clase grabada con su enlace personal.",
+        "guia": "Reposiciones de clase: cuando un estudiante falta puede reponer la clase (en vivo o con la clase grabada que ve con un enlace personal). reposiciones.pendientes lista las que faltan por agendar o ver; úsala para tareas de seguimiento. Agendar o registrar la reposición se hace en la pantalla Reposiciones.",
         "ejemplos": [
           "Pídele: «¿Qué reposiciones están pendientes por agendar?»"
         ],
@@ -236,7 +241,12 @@
       "tipo": "propio",
       "tablas": [
         "ac_material"
-      ]
+      ],
+      "mcp": {
+        "guia": "Material de clase: documentos y archivos que se asignan a una clase y el estudiante ve el día de la clase; también recibe sus entregas (trabajos) que el equipo revisa en Cursos → Entregas. Se gestiona desde la pantalla Material.",
+        "ejemplos": [],
+        "flujos": []
+      }
     },
     {
       "id": "profesionales",
@@ -256,7 +266,12 @@
       "tipo": "propio",
       "tablas": [
         "ac_profesionales"
-      ]
+      ],
+      "mcp": {
+        "guia": "Profesionales (docentes) y equipo: cada profesional tiene áreas, niveles, horario de disponibilidad y si hace reposiciones. En Equipo cada persona tiene su Info (datos y si es profesional) y su Nómina ($): los ítems del mes que se le pagan; el pago se hace en Finanzas con el botón Pagar. Esta IA no cambia nómina: indica ir a Equipo → $ y luego a Finanzas.",
+        "ejemplos": [],
+        "flujos": []
+      }
     },
     {
       "id": "academia",
@@ -275,7 +290,12 @@
       "tipo": "propio",
       "tablas": [
         "ac_areas"
-      ]
+      ],
+      "mcp": {
+        "guia": "Mi academia: áreas, niveles, sedes y la configuración general de la academia. Es de consulta para la IA; los cambios se hacen en la pantalla.",
+        "ejemplos": [],
+        "flujos": []
+      }
     }
   ]
 }

@@ -33,7 +33,7 @@ export const ENTITIES = {
       // Sus matrículas, cuotas, asistencia y notas se van con él (los pagos registrados se conservan en la bitácora).
       const ins = await all(c.env, 'SELECT id FROM ac_inscripciones WHERE business_id = ? AND estudiante_id = ?', c.businessId, before.id);
       for (const i of ins) {
-        await c.env.DB.batch(['ac_cuotas', 'ac_asistencia', 'ac_notas', 'ac_reposiciones', 'ac_pagos', 'ac_examenes'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND inscripcion_id = ?`).bind(c.businessId, i.id)));
+        await c.env.DB.batch(['ac_cuotas', 'ac_asistencia', 'ac_notas', 'ac_reposiciones', 'ac_pagos', 'ac_examenes', 'ac_entregas', 'ac_comprobantes'].map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE business_id = ? AND inscripcion_id = ?`).bind(c.businessId, i.id)));
       }
       await c.env.DB.prepare('DELETE FROM ac_inscripciones WHERE business_id = ? AND estudiante_id = ?').bind(c.businessId, before.id).run();
     } },

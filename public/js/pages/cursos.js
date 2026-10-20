@@ -281,7 +281,7 @@ DW.ready.then(async (me) => {
   const sub = `<p class="small text-body-secondary">${[k.area, k.nivel, k.profesional && `Profesional: ${k.profesional}`, AC.horario(k.horario), k.inicio && `${C.day(k.inicio)} – ${C.day(k.fin)}`, `${k.dictadas} de ${k.num_clases} clases dictadas`].filter(Boolean).map(esc).join(' · ')}</p>`;
   const proxClase = () => { const hoy = C.todayCo(); const c = D.clases.filter((x) => x.fecha && x.fecha <= hoy).pop() || D.clases[0]; return c?.n || 1; };
 
-  const tabs = [...(MANAGE ? [['inicio', 'Inicio', 'bi-house']] : []), ['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
+  const tabs = [...(MANAGE ? [['inicio', 'Inicio', 'bi-house']] : []), ['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol'], ['entregas', 'Entregas', 'bi-folder2-open']];
   if (me.modules.some((x) => x.id === 'reposiciones')) tabs.push(['reposiciones', 'Reposiciones', 'bi-arrow-repeat']);
   const V = AC.vistas(tabs, async (t, view) => {
     await cargar();
@@ -295,6 +295,16 @@ DW.ready.then(async (me) => {
         { label: '', cls: 'text-end', html: (i) => `<button class="btn btn-sm btn-outline-primary" data-ficha="${i.estudiante_id}"><i class="bi bi-person-vcard me-1"></i>Ficha</button>` }], D.inscritos)}</div>`
         : empty('bi-people', `Aún no hay ${P} matriculados en este curso.`));
       view.addEventListener('click', (e) => { const b = e.target.closest('[data-ficha]'); if (b) AC.ficha(b.dataset.ficha, me).catch((x) => toast(x.message, false)); });
+      return;
+    }
+    if (t === 'entregas') {   // lo que suben los estudiantes en cada clase
+      const r = await api(`/api/cursos/${k.id}/entregas`);
+      const tam = (n) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
+      view.innerHTML = r.rows.length ? `<div class="dw-card p-0 p-md-2">${table([
+        { label: AC.cap(S), main: true, html: (x) => esc(x.estudiante) }, { label: 'Clase', html: (x) => `Clase ${x.clase_n}` },
+        { label: 'Archivo', html: (x) => `<a href="/api/cursos/entregas/${x.id}/archivo" target="_blank" rel="noopener"><i class="bi bi-paperclip me-1"></i>${esc(x.nombre)}</a> <small class="text-body-secondary">${tam(x.size)}</small>` },
+        { label: 'Subido', html: (x) => esc(new Date(x.created_at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) }], r.rows)}</div>`
+        : empty('bi-folder2-open', `Aún no hay trabajos subidos por ${P}.`);
       return;
     }
     const activos = () => D.inscritos.filter((i) => i.estado === 'activa');

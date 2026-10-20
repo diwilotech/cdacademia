@@ -85,10 +85,52 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
     && (await S('/api/alumno/inicio')).data.avisos.some((a) => /No se ve el valor/.test(a.texto)));
   check('Alumno: el equipo no puede subir como estudiante', (await A.app(`/api/alumno/curso/${c1.id}/comprobantes?valor=1000`, { method: 'POST', body: png, headers: { 'content-type': 'image/png' } })).status === 403);
 
+  // La clase: material del día, entregas y evaluaciones
+  const mat = await A.app('/api/material/material', { method: 'POST', body: { titulo: 'Contorno facial', descripcion: 'Técnicas base', bloques: [{ tipo: 'texto', texto: 'Hoy practicamos el contorno.' }] } });
+  const clases1 = (await A.app(`/api/cursos/${k1.data.id}/detalle`)).data.clases;
+  const claseFut = clases1.at(-1), claseHoy = clases1.find((x) => x.fecha >= hoy && x.n !== claseFut.n) || clases1.at(-2);
+  check('Clase: hay clases de prueba', claseFut.fecha > hoy, JSON.stringify(clases1.map((x) => x.fecha)));
+  // Ponemos la clase de hoy (la movemos a hoy) con material y dos evaluaciones: una en línea y una en papel
+  await A.app(`/api/cursos/${k1.data.id}/clases/${claseHoy.n}`, { method: 'PATCH', body: { fecha: hoy, material_id: mat.data.id } });
+  const evq = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Quiz contorno', peso: 20, clase_n: claseHoy.n, tipo: 'multiple',
+    examen: JSON.stringify({ instrucciones: 'Responde', preguntas: [{ tipo: 'unica', enunciado: '¿Dónde va el contorno?', puntos: 2, opciones: [{ texto: 'Pómulos', ok: true }, { texto: 'Frente' }] }, { tipo: 'vf', enunciado: 'El contorno se difumina', puntos: 1, vf: true }] }) } });
+  const evp = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Práctica en papel', peso: 10, clase_n: claseHoy.n, tipo: 'examen' } });
+  const evf = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Quiz futuro', peso: 10, clase_n: claseFut.n, tipo: 'multiple',
+    examen: JSON.stringify({ preguntas: [{ tipo: 'vf', enunciado: 'x', puntos: 1, vf: true }] }) } });
+  check('Clase: evaluaciones creadas', evq.status === 201 && evp.status === 201 && evf.status === 201, JSON.stringify([evq.data, evp.data]));
+  const cl = await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}`);
+  check('Clase: el día de la clase ve el material y sus evaluaciones', cl.status === 200 && !cl.data.bloqueada && cl.data.material?.bloques?.length === 1 && cl.data.evaluaciones.length === 2 && cl.data.evaluaciones.every((e) => e.abierta), JSON.stringify(cl.data).slice(0, 300));
+  const q1 = cl.data.evaluaciones.find((e) => e.nombre === 'Quiz contorno');
+  check('Clase: el examen no trae las respuestas correctas', q1.examen && !JSON.stringify(q1.examen).includes('"ok"') && !JSON.stringify(q1.examen).includes('"vf":'), JSON.stringify(q1.examen).slice(0, 200));
+  const fut = await S(`/api/alumno/curso/${c1.id}/clase/${claseFut.n}`);
+  check('Clase: una clase futura está bloqueada y no entrega material ni examen', fut.data.bloqueada === true && !fut.data.material && !fut.data.evaluaciones);
+  check('Clase: no presenta el examen de una clase futura', (await S(`/api/alumno/curso/${c1.id}/evaluaciones/${evf.data.id}/enviar`, { method: 'POST', body: { resp: {} } })).status === 409);
+  check('Clase: el equipo no usa la API del estudiante', (await A.app(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}`)).status === 403);
+  const mfile = Object.assign(new Uint8Array(png));
+  const tri = await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}/entregas?nombre=trabajo.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } });
+  check('Clase: sube su trabajo', tri.status === 201, JSON.stringify(tri.data));
+  check('Clase: no sube ejecutables', (await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}/entregas?nombre=a.exe`, { method: 'POST', body: mfile, headers: { 'content-type': 'application/x-msdownload' } })).status === 400);
+  check('Clase: no sube trabajo a una clase futura', (await S(`/api/alumno/curso/${c1.id}/clase/${claseFut.n}/entregas?nombre=a.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } })).status === 409);
+  check('Clase: el equipo ve lo que subió', (await A.app(`/api/cursos/${k1.data.id}/entregas`)).data.rows?.some((x) => x.estudiante === 'Sofía Alumna' && x.nombre === 'trabajo.png'));
+  check('Clase: el otro estudiante no abre su archivo', (await A.app(`/api/cursos/entregas/${tri.data.id}/archivo`)).status === 200 && (await B.app(`/api/cursos/entregas/${tri.data.id}/archivo`)).status === 404);
+  const op = q1.examen.preguntas[0].opciones.find((o) => o.texto === 'Pómulos').id;
+  const env = await S(`/api/alumno/curso/${c1.id}/evaluaciones/${q1.id}/enviar`, { method: 'POST', body: { resp: { [q1.examen.preguntas[0].id]: op, [q1.examen.preguntas[1].id]: true } } });
+  check('Clase: envía el examen y se califica solo', env.status === 200 && env.data.evaluacion.enviado && env.data.evaluacion.nota === 5, JSON.stringify(env.data).slice(0, 300));
+  check('Clase: el examen enviado no se puede cambiar ni reenviar', (await S(`/api/alumno/curso/${c1.id}/evaluaciones/${q1.id}`, { method: 'PUT', body: { resp: {} } })).status === 409);
+  check('Clase: la nota quedó en Notas', (await S(`/api/alumno/curso/${c1.id}`)).data.evaluaciones.find((e) => e.id === q1.id)?.nota === 5);
+  check('Clase: el examen en papel pide archivos antes de enviar', (await S(`/api/alumno/curso/${c1.id}/evaluaciones/${evp.data.id}/enviar`, { method: 'POST', body: {} })).status === 400);
+  const ea = await S(`/api/alumno/curso/${c1.id}/evaluaciones/${evp.data.id}/archivo?nombre=hoja1.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } });
+  const ee = await S(`/api/alumno/curso/${c1.id}/evaluaciones/${evp.data.id}/enviar`, { method: 'POST', body: {} });
+  check('Clase: sube el examen en papel y queda en revisión', ea.status === 201 && ee.status === 200 && ee.data.evaluacion.en_revision === true, JSON.stringify(ee.data).slice(0, 200));
+  check('Clase: el equipo ve el examen enviado', (await A.app(`/api/cursos/${k1.data.id}/examenes/${evp.data.id}/${c1.id}`)).data.archivos?.length === 1);
+  const mes = await S(`/api/alumno/calendario?desde=${lunes(hoy)}&hasta=${mas(34)}`);
+  check('Calendario: el rango de un mes completo responde', mes.status === 200 && mes.data.clases.length > 0);
+  check('Inicio: marca la clase de hoy', (await S('/api/alumno/inicio')).data.cursos.find((c) => c.id === c1.id)?.clase_hoy?.n === claseHoy.n);
+
   // IA Diwilo (botón flotante del panel): el equipo pregunta; el estudiante no
   const ia = await A.app('/api/ai/asistente', { method: 'POST', body: { mensajes: [{ role: 'user', content: '[prueba] hola' }] } });
   check('IA Diwilo: el asistente responde al equipo', ia.status === 200 && typeof ia.data.respuesta === 'string', JSON.stringify(ia.data).slice(0, 200));
-  check('IA Diwilo: el panel carga el botón flotante', (await A.app(`/${slug}`)).data.text?.includes('/js/ia-fab.js') === true);
+  check('IA Diwilo: el panel carga el botón flotante', (await A.app(`/${slug}`)).data.text?.includes('/m/iafab.js') === true && (await A.app('/m/iafab.js')).data.text?.includes('IA Diwilo'));
   check('IA Diwilo: el estudiante no usa el asistente del equipo', (await S('/api/ai/asistente', { method: 'POST', body: { mensajes: [{ role: 'user', content: 'hola' }] } })).status === 403);
 
   // Quitar el acceso corta la sesión

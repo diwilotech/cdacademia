@@ -24,6 +24,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 - Pagos del estudiante (migración 0015, `src/api/comprobantes.js`): sube foto/PDF (máx. 5 MB, tipo por bytes) a R2 → `ac_comprobantes` en revisión; el equipo (Matrículas → pestaña Comprobantes, módulo `cuotas`) aprueba (llama `registrarPago` → recibo en Finanzas) o rechaza con motivo. El estudiante ve su cuenta de cobro y recibos (`/api/alumno/curso/:id/cuenta-de-cobro|recibos`) servidos desde Finanzas. La cuenta de cobro lleva una línea por cuota (`cuentaDeMatricula`) y toma la marca del negocio (Diwilo Modulos ≥ finanzas 1.4.0: desplegar ese primero).
 - Pruebas: `DEV_LOG=1 npm test` muestra los errores del Worker. Si falla con «no such column» en la base local de Modulos, la base de `.wrangler` quedó vieja respecto a sus migraciones.
 
+- La clase del estudiante (migración 0016, `src/api/trabajo.js`): el día de la clase (y después) ve el material (`ac_clases.material_id`; archivos por `/api/alumno/material/:key`, `AC.doc.base`), sube su trabajo (`ac_entregas`, R2 `<negocio>/entrega/`; el equipo lo ve en Cursos → Entregas) y presenta las evaluaciones de esa clase (`ac_evaluaciones.clase_n`): solo el día de la clase, se envía una vez (`ac_examenes.enviado_at`), sin respuestas correctas hacia el cliente; si todo se califica solo y no hay nota, queda en Notas. Calendario con vista Semana/Mes.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

@@ -5,7 +5,8 @@ window.AC = window.AC || {};
 window.AC.doc = (function () {
   const { esc, modal } = window.App;
   const uid = () => Math.random().toString(36).slice(2, 9);
-  const urlArchivo = (k) => `/api/material/archivos/${encodeURIComponent(k)}`;
+  // `AC.doc.base` cambia la ruta de los archivos (el estudiante los pide por /api/alumno/material/)
+  const urlArchivo = (k) => `${window.AC.doc?.base || '/api/material/archivos/'}${encodeURIComponent(k)}`;
   const urlDescarga = (b) => `${urlArchivo(b.key)}?dl=1`;
   const extDe = (n) => (String(n).match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
   const fmtTam = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -84,5 +85,5 @@ window.AC.doc = (function () {
     return false;
   }
 
-  return { uid, urlArchivo, urlDescarga, extDe, fmtTam, mime, esImagen, esPdf, iconoArchivo, inlineMd, lineas, embedVideo, archivoHtml, enlaceHtml, bloqueHtml, html, vista, click };
+  return { base: '/api/material/archivos/', uid, urlArchivo, urlDescarga, extDe, fmtTam, mime, esImagen, esPdf, iconoArchivo, inlineMd, lineas, embedVideo, archivoHtml, enlaceHtml, bloqueHtml, html, vista, click };
 })();

@@ -16,7 +16,7 @@ const C = { money: (n) => '$' + Math.round(n || 0).toLocaleString('es-CO') };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Matrículas activas del estudiante con los datos de su curso.
-const matriculas = (c, id) => all(c.env,
+export const matriculas = (c, id) => all(c.env,
   `SELECT i.id, i.curso_id, i.valor, i.descuento, k.nombre AS curso, k.nivel, k.num_clases, k.jornada, a.color, p.nombre AS profesional
      FROM ac_inscripciones i JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
      LEFT JOIN ac_areas a ON a.id = k.area_id AND a.business_id = k.business_id
@@ -46,7 +46,10 @@ export function routes(r) {
       const proxima = clases.find((x) => x.fecha >= hoy) || null;
       const estado = !primera ? 'sin_fecha' : primera > hoy ? 'por_iniciar' : ultima < hoy ? 'terminado' : 'en_curso';
       const cu = estadoCuotas(cuotas, pag.s), vencidas = cu.filter((x) => x.estado === 'vencida'), sig = cu.find((x) => x.estado !== 'pagada' && x.estado !== 'vencida') || null;
-      cursos.push({ id: i.id, curso_id: i.curso_id, curso: i.curso, nivel: i.nivel, color: i.color, profesional: i.profesional, jornada: i.jornada,
+      // Si hoy hay clase: cuántas evaluaciones de esa clase le faltan por presentar
+      const pendHoy = proxima && proxima.fecha === hoy ? (await all(c.env, `SELECT e.id, e.nombre FROM ac_evaluaciones e LEFT JOIN ac_examenes x ON x.evaluacion_id = e.id AND x.inscripcion_id = ? AND x.business_id = e.business_id
+        WHERE e.business_id = ? AND e.curso_id = ? AND e.clase_n = ? AND x.enviado_at IS NULL`, i.id, c.businessId, i.curso_id, proxima.n)) : [];
+      cursos.push({ id: i.id, clase_hoy: proxima && proxima.fecha === hoy ? { n: proxima.n, ini: proxima.ini, fin: proxima.fin, tema: proxima.tema, pendientes: pendHoy.map((e) => e.nombre) } : null, curso_id: i.curso_id, curso: i.curso, nivel: i.nivel, color: i.color, profesional: i.profesional, jornada: i.jornada,
         inicio: primera, fin: ultima, estado, empieza_en: estado === 'por_iniciar' ? dias(hoy, primera) : null, total_clases: total, hechas, proxima,
         asistencia: { pct: asis.pct, fallas: asis.fallas, por_reponer: asis.por_reponer }, notas: nts, academico: estadoAcad(asis, nts, cfg),
         saldo: Math.max(0, i.valor - i.descuento - pag.s), vencido: vencidas.reduce((s, x) => s + x.falta, 0), proxima_cuota: sig ? { etiqueta: sig.etiqueta, vence: sig.vence, falta: sig.falta } : null });
@@ -54,7 +57,8 @@ export function routes(r) {
       // Avisos (se calculan al abrir; no se guardan)
       if (estado === 'por_iniciar' && dias(hoy, primera) <= 30) avisos.push({ tipo: 'inicio', icono: 'bi-flag', tono: 'info', fecha: primera, texto: `${i.curso} empieza ${dias(hoy, primera) === 1 ? 'mañana' : `en ${dias(hoy, primera)} días`}` });
       if (proxima && proxima.fecha === hoy) avisos.push({ tipo: 'clase', icono: 'bi-journal-bookmark', tono: 'info', fecha: hoy, texto: `Hoy tienes clase de ${i.curso}${proxima.ini ? ` a las ${proxima.ini}` : ''}` });
-      else if (proxima && proxima.fecha === addDays(hoy, 1) && estado !== 'por_iniciar') avisos.push({ tipo: 'clase', icono: 'bi-journal-bookmark', tono: 'info', fecha: proxima.fecha, texto: `Mañana tienes clase de ${i.curso}${proxima.ini ? ` a las ${proxima.ini}` : ''}` });
+      for (const e of pendHoy) avisos.push({ tipo: 'evaluacion', icono: 'bi-pencil-square', tono: 'soon', fecha: hoy, texto: `Hoy puedes presentar «${e.nombre}» (${i.curso})` });
+      if (proxima && proxima.fecha === addDays(hoy, 1) && estado !== 'por_iniciar') avisos.push({ tipo: 'clase', icono: 'bi-journal-bookmark', tono: 'info', fecha: proxima.fecha, texto: `Mañana tienes clase de ${i.curso}${proxima.ini ? ` a las ${proxima.ini}` : ''}` });
       for (const q of vencidas) avisos.push({ tipo: 'cuota', icono: 'bi-exclamation-circle', tono: 'bad', fecha: q.vence, texto: `Tu cuota de ${i.curso} está vencida (${q.etiqueta || `cuota ${q.n}`})` });
       for (const q of cu.filter((x) => x.estado !== 'pagada' && x.estado !== 'vencida' && dias(hoy, x.vence) <= 7)) avisos.push({ tipo: 'cuota', icono: 'bi-cash-coin', tono: 'soon', fecha: q.vence, texto: `${cap(q.etiqueta || `cuota ${q.n}`)} de ${i.curso} vence ${q.vence === hoy ? 'hoy' : `el ${q.vence}`}` });
       for (const x of repos.filter((y) => y.estado === 'agendada' && y.fecha && y.fecha >= hoy && dias(hoy, y.fecha) <= 7)) avisos.push({ tipo: 'reposicion', icono: 'bi-arrow-repeat', tono: 'info', fecha: x.fecha, texto: `Reposición de ${i.curso} (clase ${x.clase_n}) el ${x.fecha}${x.ini ? ` a las ${x.ini}` : ''}` });

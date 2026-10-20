@@ -150,11 +150,11 @@
     el.innerHTML = rows.length ? rows.map((r) => `<div class="dw-rank"><div class="d-flex small"><span class="flex-grow-1 text-truncate">${esc(r.k)}</span><b>${esc(fmt(r.n))}</b></div><div class="progress" style="height:5px"><div class="progress-bar" style="width:${(r.n / max * 100).toFixed(1)}%"></div></div></div>`).join('')
       : '<p class="text-body-secondary mb-0 small">Sin datos todavía.</p>';
   };
-  // Pestañas de vistas dentro de una página (nav-pills)
+  // Secciones de arriba de una página: botones pequeños solo con palabras
   const seg = (el, items, onPick, initial) => {
-    el.className = 'nav nav-pills mb-3 flex-nowrap overflow-auto dw-seg';
-    el.innerHTML = items.map(([k, l, ic]) => `<li class="nav-item"><button class="nav-link text-nowrap ${k === initial ? 'active' : ''}" data-k="${k}">${ic ? `<i class="bi ${ic} me-1"></i>` : ''}${esc(l)}</button></li>`).join('');
-    el.onclick = (e) => { const b = e.target.closest('[data-k]'); if (!b) return; el.querySelectorAll('.nav-link').forEach((x) => x.classList.toggle('active', x === b)); onPick(b.dataset.k); };
+    el.className = 'dw-segb'; el.hidden = false;
+    el.innerHTML = items.map(([k, l]) => `<button type="button" class="btn btn-sm btn-outline-secondary ${k === initial ? 'active' : ''}" data-k="${k}">${esc(l)}</button>`).join('');
+    el.onclick = (e) => { const b = e.target.closest('[data-k]'); if (!b) return; el.querySelectorAll('.btn').forEach((x) => x.classList.toggle('active', x === b)); onPick(b.dataset.k); };
   };
   // Descarga de un archivo generado (CSV) sin abrir otra pestaña
   async function download(path, fallback) {

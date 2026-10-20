@@ -194,7 +194,8 @@ a.dw-kpi:hover .dw-kpi__v { color: var(--bs-link-color); }
 .dw-kcol h3 { font-size: .9rem; font-weight: 700; margin: 0 0 8px; display: flex; justify-content: space-between; gap: 8px; }
 .dw-kcard { background: var(--dw-tarjeta); border: 1px solid var(--dw-borde); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: grab; display: grid; gap: 2px; font-size: .88rem; box-shadow: var(--dw-sombra); }
 .dw-kcard b { font-weight: 600; }
-.dw-seg { gap: 4px; }
+.dw-segb { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; padding: 0; list-style: none; } .dw-segb .btn { flex: none; white-space: nowrap; } .dw-segb .btn.active { background: var(--dw-p); border-color: var(--dw-p); color: #fff; }
+@media (max-width: 767.98px) { .dw-segb { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .dw-segb::-webkit-scrollbar { display: none; } }
 
 /* Totales compactos (2 columnas en celular) y selectores que no se salen de la pantalla */
 .dw-main .form-select { max-width: 100%; text-overflow: ellipsis; }
@@ -302,27 +303,10 @@ body.dw-alumno .dw-main { margin-left: 0; padding: calc(var(--dw-top-h) + 20px) 
 .dw-curso { display: block; color: inherit; text-decoration: none; border-left: 4px solid var(--ev, var(--dw-p)); }
 .dw-curso:hover { background: rgba(var(--dw-p-rgb), .05); color: inherit; }
 .dw-ev--inicio { --ev: #16a34a; background: rgba(22, 163, 74, .12); border-left: 3px solid var(--ev); border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: .76rem; }
-
-/* IA Diwilo: botón flotante y panel del asistente (panel del equipo) */
-.ia-fab { position: fixed; right: 22px; bottom: 20px; z-index: 1040; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border: 0; border-radius: 999px; cursor: pointer; color: #fff;
-  background: linear-gradient(135deg, var(--dw-p), var(--dw-p-osc)); box-shadow: 0 8px 24px rgba(var(--dw-p-rgb), .35); font-weight: 600; transition: transform .15s; }
-.ia-fab:hover { transform: translateY(-2px); } .ia-fab.on { opacity: 0; pointer-events: none; }
-.ia-panel { position: fixed; right: 16px; bottom: 16px; z-index: 1045; width: min(430px, calc(100vw - 32px)); height: min(640px, calc(100vh - 32px)); display: flex; flex-direction: column;
-  background: var(--dw-tarjeta); border: 1px solid var(--dw-borde); border-radius: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, .25); overflow: hidden; }
-.ia-panel[hidden] { display: none; }
-.ia-panel header { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--dw-borde); }
-.ia-panel header div { flex: 1; display: grid; gap: 2px; min-width: 0; } .ia-panel header small { font-size: 11px; color: var(--bs-secondary-color); }
-.ia-logo { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--dw-p), var(--dw-p-osc)); flex: none; }
-.ia-log { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.ia-msg { max-width: 92%; padding: 10px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; background: var(--bs-tertiary-bg); }
-.ia-msg.user { align-self: flex-end; background: var(--dw-p); color: #fff; }
-.ia-msg .li { display: block; padding-left: 14px; position: relative; } .ia-msg .li::before { content: '•'; position: absolute; left: 2px; }
-.ia-used { display: block; margin-top: 6px; font-size: 11px; color: var(--bs-secondary-color); }
-.ia-pending { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(var(--dw-p-rgb), .1); border: 1px solid rgba(var(--dw-p-rgb), .35); }
-.ia-pending pre { margin: 0; font-size: 11.5px; white-space: pre-wrap; }
-.ia-sugg { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; }
-.ia-sugg .pill { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--dw-borde); background: transparent; color: inherit; cursor: pointer; }
-.ia-sugg .pill:hover { background: var(--dw-activo-bg); }
-.ia-form { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px 12px; border-top: 1px solid var(--dw-borde); }
-.ia-form textarea { flex: 1; resize: none; min-height: 40px; max-height: 140px; }
-@media (max-width: 991.98px) { .ia-fab { right: 14px; bottom: calc(var(--dw-bottom-h) + 14px); } .ia-fab span { display: none; } .ia-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); } }
+/* Calendario del estudiante: vista de mes y clase de hoy */
+.dw-mes td.dw-dia { height: 104px; padding: 4px; cursor: pointer; } .dw-mes td.fuera { opacity: .45; } .dw-dia__n { font-size: .78rem; font-weight: 600; margin-bottom: 2px; }
+.dw-mes td.hoy .dw-dia__n { color: var(--dw-p); } .dw-mes .dw-ev { padding: 2px 5px; margin-bottom: 2px; font-size: .7rem; }
+.dw-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--dw-p); margin: 4px auto 0; }
+@media (max-width: 767.98px) { .dw-mes td.dw-dia { height: 54px; text-align: center; } .dw-mes th { font-size: .7rem; padding: 4px 0; } }
+.dw-ev--hoy { box-shadow: 0 0 0 2px rgba(var(--dw-p-rgb), .35); }
+.dw-hoy { border-left: 4px solid var(--ev, var(--dw-p)); background: rgba(var(--dw-p-rgb), .05); }

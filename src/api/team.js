@@ -35,28 +35,40 @@ export function routes(r) {
     if (!ok) throw new HttpError(404, 'Esa persona no está en el equipo');
   };
   r.get('/api/team/nomina', 'manager', async (c) => {
-    const rows = await db(c.env).all('SELECT persona, valor, periodicidad, centro_costo, notas, updated_at FROM ac_nomina WHERE business_id = ?', c.businessId);
+    const rows = await db(c.env).all('SELECT persona, valor, periodicidad, centro_costo, notas, documento, updated_at FROM ac_nomina WHERE business_id = ?', c.businessId);
     const mes = { mensual: 1, quincenal: 2, semanal: 4.33 };   // clase y hora son variables: no suman al total mensual
     return json({ rows, total_mensual: Math.round(rows.reduce((a, x) => a + x.valor * (mes[x.periodicidad] || 0), 0)) });
   });
-  // Todas las personas del equipo con su pago definido (si lo hay): lo usa Finanzas → Pagos del mes → Nómina
-  r.get('/api/team/nomina/personas', 'manager', async (c) => {
+  // Todas las personas del equipo con su pago definido (si lo hay)
+  const personasConPago = async (c) => {
     const d = db(c.env);
     const [nom, users, profs] = await Promise.all([
-      d.all('SELECT persona, valor, periodicidad, centro_costo, notas FROM ac_nomina WHERE business_id = ?', c.businessId),
+      d.all('SELECT persona, valor, periodicidad, centro_costo, notas, documento FROM ac_nomina WHERE business_id = ?', c.businessId),
       d.all("SELECT u.id, u.name, u.email, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'", c.businessId),
       d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ? AND activo = 1', c.businessId)]);
     const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' }, mail = (e) => String(e || '').trim().toLowerCase();
     const pagoDe = (...keys) => nom.find((x) => keys.includes(x.persona));
+    const ficha = (key, nombre, detalle, profId, g) => ({ key, nombre, detalle, profesional_id: profId, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null, documento: g?.documento || null });
     const out = users.map((u) => {
-      const p = profs.find((y) => y.email && mail(y.email) === mail(u.email)), g = pagoDe(`u:${u.id}`, p && `p:${p.id}`);
-      return { key: `u:${u.id}`, nombre: u.name || u.email, detalle: `${ROL[u.role] || u.role}${p ? ' · Profesional' : ''}`, profesional_id: p?.id || null, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null };
+      const p = profs.find((y) => y.email && mail(y.email) === mail(u.email));
+      return ficha(`u:${u.id}`, u.name || u.email, `${ROL[u.role] || u.role}${p ? ' · Profesional' : ''}`, p?.id || null, pagoDe(`u:${u.id}`, p && `p:${p.id}`));
     });
-    for (const p of profs.filter((y) => !out.some((o) => o.profesional_id === y.id))) {
-      const g = pagoDe(`p:${p.id}`);
-      out.push({ key: `p:${p.id}`, nombre: p.nombre, detalle: 'Profesional', profesional_id: p.id, valor: g?.valor || 0, periodicidad: g?.periodicidad || 'mensual', centro_costo: g?.centro_costo || null, notas: g?.notas || null });
-    }
-    return json({ personas: out });
+    for (const p of profs.filter((y) => !out.some((o) => o.profesional_id === y.id))) out.push(ficha(`p:${p.id}`, p.nombre, 'Profesional', p.id, pagoDe(`p:${p.id}`)));
+    return out;
+  };
+  r.get('/api/team/nomina/personas', 'manager', async (c) => json({ personas: await personasConPago(c) }));
+  // Lo que se aproxima a pagar en el mes a cada persona: lo fijo (sueldo) + lo variable (clases u horas que dicta) × su valor. GET /api/team/nomina/aproximado?month=AAAA-MM
+  r.get('/api/team/nomina/aproximado', 'manager', async (c) => {
+    const month = /^\d{4}-\d{2}$/.test(c.url.searchParams.get('month') || '') ? c.url.searchParams.get('month') : new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 7);
+    const personas = await personasConPago(c), FACTOR = { mensual: 1, quincenal: 2, semanal: 4 };
+    const clases = await db(c.env).all(`SELECT k.profesional_id AS prof, cl.ini, cl.fin FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+      WHERE cl.business_id = ? AND k.profesional_id IS NOT NULL AND cl.fecha BETWEEN ? AND ?`, c.businessId, `${month}-01`, `${month}-31`);
+    const min = (h) => { const [a, b] = String(h || '').split(':').map(Number); return Number.isFinite(a) ? a * 60 + (b || 0) : null; };
+    return json({ month, rows: personas.map((p) => {
+      const mias = p.profesional_id ? clases.filter((x) => x.prof === p.profesional_id) : [], horas = Math.round(mias.reduce((a, x) => a + Math.max(0, (min(x.fin) ?? 0) - (min(x.ini) ?? 0)), 0) / 6) / 10;
+      const base = FACTOR[p.periodicidad] ? p.valor * FACTOR[p.periodicidad] : 0, variable = p.periodicidad === 'clase' ? p.valor * mias.length : p.periodicidad === 'hora' ? Math.round(p.valor * horas) : 0;
+      return { key: p.key, estimado: Math.round(base + variable), clases: mias.length, horas, periodicidad: p.periodicidad, definido: p.valor > 0 };
+    }) });
   });
   // Las clases que dicta un profesional en un mes (para armar su pago): GET /api/team/nomina/clases?profesional=<id>&month=AAAA-MM
   r.get('/api/team/nomina/clases', 'manager', async (c) => {
@@ -71,9 +83,9 @@ export function routes(r) {
     const valor = Math.round(Number(b.valor));
     if (!Number.isFinite(valor) || valor < 0 || valor > 1e10) throw new HttpError(400, 'Escribe un valor válido');
     const periodo = oneOf(b.periodicidad, PERIODOS, { label: 'Periodicidad', fallback: 'mensual' });
-    await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, centro_costo, notas, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
-      c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, c.session.user_id, Date.now());
+    await db(c.env).run(`INSERT INTO ac_nomina (business_id, persona, valor, periodicidad, centro_costo, notas, documento, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(business_id, persona) DO UPDATE SET valor = excluded.valor, periodicidad = excluded.periodicidad, centro_costo = excluded.centro_costo, notas = excluded.notas, documento = excluded.documento, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      c.businessId, c.params.persona, valor, periodo, str(b.centro_costo, { max: 120 }) || null, str(b.notas, { max: 300 }) || null, str(b.documento, { max: 40 }) || null, c.session.user_id, Date.now());
     return json({ ok: true });
   });
   r.delete('/api/team/nomina/:persona', 'manager', async (c) => {

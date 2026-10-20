@@ -11,7 +11,7 @@ DW.ready.then(async (me) => {
   inviteBtn.hidden = !me.canManage;
   nomBtn.hidden = !me.canManage;
   profBtn.hidden = !canManage;
-  let users = [], profs = [], catalogo = [], areas = [];
+  let users = [], profs = [], catalogo = [], areas = [], aprox = new Map();
   const key = (s) => String(s || '').trim().toLowerCase();
 
   function showLink(url, who) {
@@ -34,8 +34,8 @@ DW.ready.then(async (me) => {
   };
 
   async function load() {
-    const [t, p] = await Promise.all([api('/api/team'), api('/api/profesionales/profesionales?limit=500').catch(() => ({ rows: [] }))]);
-    users = t.users; catalogo = t.catalogo; profs = p.rows || [];
+    const [t, p, ap] = await Promise.all([api('/api/team'), api('/api/profesionales/profesionales?limit=500').catch(() => ({ rows: [] })), me.canManage ? api('/api/team/nomina/aproximado').catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })]);
+    users = t.users; catalogo = t.catalogo; profs = p.rows || []; aprox = new Map(ap.rows.map((x) => [x.key, x]));
     areas = await AC.listas.areas().catch(() => []);
     const nombreArea = (id) => areas.find((a) => a.id === id)?.nombre || '—';
     const all = rows();
@@ -52,6 +52,11 @@ DW.ready.then(async (me) => {
         const ars = r.prof ? `<div class="small">${r.prof.areas.map((a) => esc(nombreArea(a.area_id))).join(', ') || 'Sin áreas'}${r.prof.activo ? '' : ' · inactivo'}</div>` : '';
         const st = r.user?.status === 'invited' ? '<span class="badge text-bg-warning">Invitación pendiente</span>' : '';
         return mods + ars + st; } },
+      ...(me.canManage ? [{ label: 'Por pagar este mes', cls: 'text-end text-nowrap', html: (r) => {
+        const a = aprox.get(personaKey(r)) || aprox.get(r.user && r.prof ? `p:${r.prof.id}` : '');
+        if (!a || !a.definido) return '<span class="text-body-secondary small">Sin pago definido</span>';
+        const detalle = a.periodicidad === 'clase' ? `${a.clases} clase${a.clases === 1 ? '' : 's'} este mes` : a.periodicidad === 'hora' ? `${a.horas} h este mes` : a.clases ? `+ ${a.clases} clase${a.clases === 1 ? '' : 's'} para sus ítems` : PER[a.periodicidad];
+        return `<b>${pesos(a.estimado)}</b><div class="small text-body-secondary fw-normal">${esc(detalle)}</div>`; } }] : []),
       { label: '', cls: 'text-end text-nowrap', html: (r) => {
         const u = r.user, id = esc(u?.id || '');
         return [
@@ -95,19 +100,19 @@ DW.ready.then(async (me) => {
     const personas = rows().map((r) => {
       const k = personaKey(r), g = guardada.rows.find((x) => x.persona === k) || (r.prof && guardada.rows.find((x) => x.persona === `p:${r.prof.id}`)) || {};
       return { k, nombre: r.user?.name || r.prof?.nombre || r.user?.email, detalle: r.user ? ROLE[r.user.role] || r.user.role : 'Profesional sin acceso', prof: !!r.prof,
-        valor: g.valor || 0, periodicidad: g.periodicidad || 'mensual', centro: g.centro_costo || '', notas: g.notas || '', orig: JSON.stringify([g.valor || 0, g.periodicidad || 'mensual', g.centro_costo || '', g.notas || '']), existe: !!g.persona };
+        valor: g.valor || 0, periodicidad: g.periodicidad || 'mensual', centro: g.centro_costo || '', notas: g.notas || '', documento: g.documento || '', orig: JSON.stringify([g.valor || 0, g.periodicidad || 'mensual', g.centro_costo || '', g.notas || '', g.documento || '']), existe: !!g.persona };
     });
     const mo = document.createElement('div');
     mo.className = 'modal fade'; mo.tabIndex = -1;
     mo.innerHTML = `<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl"><div class="modal-content">
       <div class="modal-header"><div><h2 class="modal-title h5 mb-0">Nómina del equipo</h2><div class="small text-body-secondary">Cuánto se le paga a cada persona. Solo lo ven el propietario y los administradores.</div></div><button type="button" class="btn-close" data-cerrar aria-label="Cerrar"></button></div>
       <div class="modal-body"><div class="row g-2 mb-3" data-resumen></div><datalist id="nomCentros">${centros.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
-        <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Persona</th><th style="min-width:150px">Se le paga</th><th style="min-width:140px">Cada</th><th class="text-end">Al mes (aprox.)</th><th style="min-width:160px">Centro de costo</th><th style="min-width:160px">Notas</th></tr></thead><tbody data-filas></tbody></table></div></div>
+        <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Persona</th><th style="min-width:130px">Cédula o NIT</th><th style="min-width:150px">Se le paga</th><th style="min-width:140px">Cada</th><th class="text-end">Al mes (aprox.)</th><th style="min-width:160px">Centro de costo</th><th style="min-width:160px">Notas</th></tr></thead><tbody data-filas></tbody></table></div></div>
       <div class="modal-footer justify-content-between"><span class="small text-body-secondary" data-estado></span><span class="d-flex gap-2"><button type="button" class="btn btn-light" data-cerrar>Cerrar</button>${canManage ? '<button type="button" class="btn btn-primary" data-guardar disabled><i class="bi bi-check2-square me-1"></i>Guardar nómina</button>' : ''}</span></div></div></div>`;
     document.body.appendChild(mo);
     const modal_ = new bootstrap.Modal(mo, { backdrop: 'static', keyboard: false });
     mo.addEventListener('hidden.bs.modal', () => mo.remove());
-    const sig = (p) => JSON.stringify([p.valor, p.periodicidad, p.centro, p.notas]), cambios = () => personas.filter((p) => sig(p) !== p.orig);
+    const sig = (p) => JSON.stringify([p.valor, p.periodicidad, p.centro, p.notas, p.documento]), cambios = () => personas.filter((p) => sig(p) !== p.orig);
     const mensual = (p) => Math.round(p.valor * (aMes[p.periodicidad] || 0));
     const resumen = () => {
       const total = personas.reduce((a, p) => a + mensual(p), 0), variables = personas.filter((p) => p.valor > 0 && !aMes[p.periodicidad]).length, sin = personas.filter((p) => !p.valor).length, n = cambios().length;
@@ -118,11 +123,12 @@ DW.ready.then(async (me) => {
       const g = mo.querySelector('[data-guardar]'); if (g) g.disabled = !n;
     };
     mo.querySelector('[data-filas]').innerHTML = personas.map((p, i) => `<tr data-i="${i}" class="${p.k === foco ? 'table-warning' : ''}"><td><b>${esc(p.nombre)}</b><div class="small text-body-secondary">${esc(p.detalle)}${p.prof ? ' · Profesional' : ''}</div></td>
+      <td><input class="form-control form-control-sm" maxlength="40" value="${esc(p.documento)}" data-f="documento" placeholder="Para su documento de pago" aria-label="Cédula o NIT" ${canManage ? '' : 'disabled'}></td>
       <td><div class="input-group input-group-sm"><span class="input-group-text">$</span><input class="form-control" type="number" min="0" step="1000" value="${p.valor || ''}" data-f="valor" aria-label="Valor" ${canManage ? '' : 'disabled'}></div></td>
       <td><select class="form-select form-select-sm" data-f="periodicidad" aria-label="Cada" ${canManage ? '' : 'disabled'}>${Object.entries(PER).map(([k, l]) => `<option value="${k}" ${k === p.periodicidad ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
       <td class="text-end fw-semibold" data-mes>${aMes[p.periodicidad] ? pesos(mensual(p)) : '<span class="text-body-secondary fw-normal small">variable</span>'}</td>
       <td><input class="form-control form-control-sm" list="nomCentros" maxlength="120" value="${esc(p.centro)}" data-f="centro" placeholder="Ej.: Maquillaje" aria-label="Centro de costo" ${canManage ? '' : 'disabled'}></td>
-      <td><input class="form-control form-control-sm" maxlength="300" value="${esc(p.notas)}" data-f="notas" aria-label="Notas" ${canManage ? '' : 'disabled'}></td></tr>`).join('') || '<tr><td colspan="6" class="text-body-secondary">Aún no hay nadie en el equipo.</td></tr>';
+      <td><input class="form-control form-control-sm" maxlength="300" value="${esc(p.notas)}" data-f="notas" aria-label="Notas" ${canManage ? '' : 'disabled'}></td></tr>`).join('') || '<tr><td colspan="7" class="text-body-secondary">Aún no hay nadie en el equipo.</td></tr>';
     mo.addEventListener('input', (e) => {
       const tr = e.target.closest('[data-i]'), f = e.target.dataset?.f; if (!tr || !f) return;
       const p = personas[+tr.dataset.i]; p[f] = f === 'valor' ? Math.max(0, Math.round(Number(e.target.value) || 0)) : e.target.value;
@@ -135,8 +141,8 @@ DW.ready.then(async (me) => {
       const btn = e.currentTarget, lote = cambios(); btn.disabled = true; let mal = 0;
       for (const p of lote) {
         try {
-          if (!p.valor && !p.centro && !p.notas) { if (p.existe) await api(`/api/team/nomina/${encodeURIComponent(p.k)}`, { method: 'DELETE' }); p.existe = false; }
-          else { await api(`/api/team/nomina/${encodeURIComponent(p.k)}`, { method: 'PUT', body: { valor: p.valor, periodicidad: p.periodicidad, centro_costo: p.centro, notas: p.notas } }); p.existe = true; }
+          if (!p.valor && !p.centro && !p.notas && !p.documento) { if (p.existe) await api(`/api/team/nomina/${encodeURIComponent(p.k)}`, { method: 'DELETE' }); p.existe = false; }
+          else { await api(`/api/team/nomina/${encodeURIComponent(p.k)}`, { method: 'PUT', body: { valor: p.valor, periodicidad: p.periodicidad, centro_costo: p.centro, notas: p.notas, documento: p.documento } }); p.existe = true; }
           p.orig = sig(p); mo.querySelector(`[data-i="${personas.indexOf(p)}"]`)?.classList.remove('table-warning');
         } catch (ex) { mal++; toast(`${p.nombre}: ${ex.message}`, false); }
       }
@@ -156,7 +162,10 @@ DW.ready.then(async (me) => {
   list.addEventListener('click', async (e) => {
     const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), hp = e.target.closest('[data-hacerprof]'), qp = e.target.closest('[data-quitarprof]'), da = e.target.closest('[data-dar]');
     const pg = e.target.closest('[data-pago]');
-    if (pg) return nomina(pg.dataset.pago);
+    if (pg) {   // los ítems de la persona se arman en Finanzas (Pagos del mes); sin Finanzas, se ve el pago definido
+      if (me.modules.some((m) => m.id === 'finanzas')) { location.href = `/staff/finanzas.html#pagos:${encodeURIComponent(pg.dataset.pago)}`; return; }
+      return nomina(pg.dataset.pago);
+    }
     try {
       if (fi) AC.fichaProfesional({ row: profs.find((p) => p.id === +fi.dataset.ficha), areas, changed: load });
       if (hp) {

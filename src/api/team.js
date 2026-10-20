@@ -39,6 +39,19 @@ export function routes(r) {
     const mes = { mensual: 1, quincenal: 2, semanal: 4.33 };   // clase y hora son variables: no suman al total mensual
     return json({ rows, total_mensual: Math.round(rows.reduce((a, x) => a + x.valor * (mes[x.periodicidad] || 0), 0)) });
   });
+  // Personas con pago definido (nombre, rol y valor): lo usa Finanzas → Pagos del mes → Nómina
+  r.get('/api/team/nomina/personas', 'manager', async (c) => {
+    const d = db(c.env);
+    const [nom, users, profs] = await Promise.all([
+      d.all('SELECT persona, valor, periodicidad, centro_costo, notas FROM ac_nomina WHERE business_id = ? AND valor > 0', c.businessId),
+      d.all("SELECT u.id, u.name, u.email, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'", c.businessId),
+      d.all('SELECT id, nombre, email FROM ac_profesionales WHERE business_id = ?', c.businessId)]);
+    const ROL = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' };
+    return json({ personas: nom.map((x) => {
+      const u = x.persona.startsWith('u:') ? users.find((y) => y.id === x.persona.slice(2)) : null, p = x.persona.startsWith('p:') ? profs.find((y) => String(y.id) === x.persona.slice(2)) : null;
+      return { key: x.persona, nombre: u ? (u.name || u.email) : p?.nombre || x.persona, detalle: u ? ROL[u.role] || u.role : p ? 'Profesional' : '', valor: x.valor, periodicidad: x.periodicidad, centro_costo: x.centro_costo, notas: x.notas };
+    }) });
+  });
   r.put('/api/team/nomina/:persona', 'manager', async (c) => {
     await personaOk(c, c.params.persona);
     const b = await readJson(c.req);

@@ -11,6 +11,9 @@ export default async function ({ check, newBusiness, newMember }) {
   check('Nómina: un profesional se paga por clase', (await put(A.app, `p:${prof.data.id}`, { valor: 50000, periodicidad: 'clase', notas: 'Maquillaje' })).status === 200);
   const n = (await A.app('/api/team/nomina')).data;
   check('Nómina: el total mensual solo suma lo fijo (por clase es variable)', n.rows.length === 2 && n.total_mensual === 2000000, JSON.stringify(n));
+  const per = (await A.app('/api/team/nomina/personas')).data.personas;
+  check('Nómina: la lista para Finanzas trae nombre, detalle y valor de cada persona', per.length === 2 && per.some((x) => x.key === `p:${prof.data.id}` && x.nombre === 'Laura Docente' && x.detalle === 'Profesional' && x.valor === 50000 && x.periodicidad === 'clase'), JSON.stringify(per));
+  check('Nómina: la lista para Finanzas es solo del propietario y administradores', (await S.app('/api/team/nomina/personas')).status === 403 && (await B.app('/api/team/nomina/personas')).data.personas.length === 0);
   check('Nómina: el personal no ve ni cambia la nómina (403)', (await S.app('/api/team/nomina')).status === 403 && (await put(S.app, `u:${yo.id}`, { valor: 1 })).status === 403);
   check('Nómina: no acepta una persona de otro negocio', (await put(B.app, `u:${yo.id}`, { valor: 1000 })).status === 404 && (await put(B.app, `p:${prof.data.id}`, { valor: 1000 })).status === 404);
   check('Nómina: otro negocio no ve la nómina ajena', (await B.app('/api/team/nomina')).data.rows.length === 0);

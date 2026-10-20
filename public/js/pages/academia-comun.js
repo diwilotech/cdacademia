@@ -81,6 +81,28 @@ window.AC = (function () {
   }
 
   // Ficha del estudiante: matrículas con avance, saldo y pagos.
+  // Acceso del estudiante a su inicio en la app: invitar por correo (enlace para crear su contraseña), reenviar o quitar.
+  async function accesoApp(host, e) {
+    const ESTADO = { sin_acceso: ['free', 'Sin acceso'], invitado: ['soon', 'Invitado (aún no crea su contraseña)'], activo: ['ok', 'Con acceso'] };
+    const pintar = (a, enlace) => {
+      const [tono, txt] = ESTADO[a.estado];
+      host.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center">${C.chip(tono, txt)}${a.email ? `<span>${esc(a.email)}</span>` : ''}
+        <span class="flex-grow-1"></span><button type="button" class="btn btn-sm btn-outline-primary" data-dar>${a.estado === 'sin_acceso' ? '<i class="bi bi-envelope-plus me-1"></i>Dar acceso' : '<i class="bi bi-link-45deg me-1"></i>Nuevo enlace'}</button>
+        ${a.estado !== 'sin_acceso' ? '<button type="button" class="btn btn-sm btn-outline-danger" data-quitar><i class="bi bi-person-x me-1"></i>Quitar</button>' : ''}</div>
+        ${a.estado === 'sin_acceso' && !a.email ? '<div class="mt-2"><input class="form-control form-control-sm" type="email" data-mail placeholder="Correo del estudiante"></div>' : ''}
+        ${enlace ? `<div class="mt-2">Envíale este enlace para que cree su contraseña:<div class="input-group input-group-sm mt-1"><input class="form-control" readonly value="${esc(enlace)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>` : ''}`;
+      host.querySelector('[data-dar]').onclick = async () => {
+        try { const r = await api(`/api/estudiantes/${e.id}/acceso`, { method: 'POST', body: { email: host.querySelector('[data-mail]')?.value || a.email || undefined } }); pintar(r, r.invite_url); }
+        catch (x) { window.App.toast(x.message, false); }
+      };
+      const q = host.querySelector('[data-quitar]');
+      if (q) q.onclick = async () => { try { await api(`/api/estudiantes/${e.id}/acceso`, { method: 'DELETE' }); pintar({ estado: 'sin_acceso', email: e.email }); } catch (x) { window.App.toast(x.message, false); } };
+      const cp = host.querySelector('[data-copiar]');
+      if (cp) cp.onclick = () => { navigator.clipboard?.writeText(host.querySelector('[data-enlace]').value); window.App.toast('Enlace copiado'); };
+    };
+    try { pintar(await api(`/api/estudiantes/${e.id}/acceso`)); } catch (x) { host.textContent = x.message; }
+  }
+
   async function ficha(id, me) {
     const [f, c] = await Promise.all([api(`/api/estudiantes/${id}/ficha`), cfg()]);
     const e = f.estudiante, dinero = me.canManage;
@@ -96,7 +118,9 @@ window.AC = (function () {
           ${dinero && me.modules.some((x) => x.id === 'cuotas') ? `<button type="button" class="btn btn-sm btn-outline-primary mt-2" data-pagos="${m.id}" data-curso="${esc(m.curso)}"><i class="bi bi-receipt me-1"></i>Ver pagos y recibos</button>` : ''}</div>`).join('')
         : '<p class="text-body-secondary small">Aún no está matriculado en ningún curso.</p>'}
         ${e.notas ? `<h3 class="h6 mt-3">Notas</h3><p class="small mb-0" style="white-space:pre-wrap">${esc(e.notas)}</p>` : ''}
+        ${me.canManage ? '<h3 class="h6 mt-3">Acceso a la app</h3><div data-acceso class="small text-body-secondary">Cargando…</div>' : ''}
       </div>`, { size: 'modal-lg' });
+    if (me.canManage) accesoApp(fichaEl.querySelector('[data-acceso]'), e);
     fichaEl.addEventListener('click', (ev) => { const b = ev.target.closest('[data-pagos]'); if (b) verPagos({ id: b.dataset.pagos, estudiante: e.nombre, curso: b.dataset.curso }); });
   }
 

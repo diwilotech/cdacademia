@@ -10,6 +10,7 @@ const TEAM_ROLES = ['admin', 'staff'];
 async function member(c, userId) {
   const m = await db(c.env).first('SELECT role FROM memberships WHERE business_id = ? AND user_id = ?', c.businessId, userId);
   if (!m) throw new HttpError(404, 'No está en el equipo');
+  if (m.role === 'estudiante') throw new HttpError(404, 'No está en el equipo');
   if (m.role === 'owner') throw new HttpError(409, 'El propietario solo se cambia desde Diwilo');
   return m;
 }
@@ -25,7 +26,7 @@ export function routes(r) {
   r.get('/api/team', 'tenant', async (c) => {
     const users = await db(c.env).all(
       `SELECT u.id, u.email, u.name, m.role, m.modulos, u.password_hash IS NOT NULL AS has_password
-         FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ?
+         FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = ? AND m.role <> 'estudiante'
         ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, u.email`, c.businessId);
     const catalogo = (await assignableModules(c.env)).map((m) => ({ id: m.id, nombre: m.nombre, defecto: moduleAllowed('staff', null, m.id) }));
     return json({ catalogo, users: users.map((u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, status: u.has_password ? 'active' : 'invited',

@@ -1,0 +1,98 @@
+// Inicio del estudiante: acceso por invitación, aislamiento (solo ve lo suyo y nada del panel del equipo),
+// curso por iniciar con cuenta regresiva y calendario por semana.
+export default async function ({ check, client, newBusiness, TS_TOKEN }) {
+  const A = await newBusiness('Academia Alumnos', { login: true });
+  const B = await newBusiness('Academia Otra', { login: true });
+  const slug = A.created.data.slug;
+  const hoy = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
+  const mas = (n) => new Date(Date.parse(`${hoy}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+  const lunes = (iso) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+
+  // Dos cursos: uno que ya empezó y otro que empieza en 10 días
+  const k1 = await A.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Maquillaje en curso', precio: 400000, inicio: mas(-7), num_clases: 6, festivos: false, horario: [{ dia: 1, ini: '08:00', fin: '10:00' }, { dia: 3, ini: '08:00', fin: '10:00' }, { dia: 5, ini: '08:00', fin: '10:00' }] } });
+  const k2 = await A.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'Barbería futura', precio: 300000, inicio: mas(10), num_clases: 4, festivos: false, horario: [{ dia: 2, ini: '19:00', fin: '21:00' }, { dia: 4, ini: '19:00', fin: '21:00' }] } });
+  const e1 = await A.app('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: 'Sofía Alumna', email: `sofia${Date.now()}@ejemplo.com` } });
+  const e2 = await A.app('/api/estudiantes/estudiantes', { method: 'POST', body: { nombre: 'Otro Alumno', email: `otro${Date.now()}@ejemplo.com` } });
+  await A.app('/api/matriculas', { method: 'POST', body: { estudiante_id: e1.data.id, curso_id: k1.data.id, fecha: hoy, plan: { n: 2, frecuencia: 'mensual', primera: hoy } } });
+  await A.app('/api/matriculas', { method: 'POST', body: { estudiante_id: e2.data.id, curso_id: k1.data.id, fecha: hoy } });
+
+  // Acceso: solo propietario/administrador; el estudiante crea su contraseña con el enlace
+  const sin = await A.app(`/api/estudiantes/${e1.data.id}/acceso`);
+  check('Alumno: la ficha empieza sin acceso', sin.data.estado === 'sin_acceso');
+  const dar = await A.app(`/api/estudiantes/${e1.data.id}/acceso`, { method: 'POST', body: {} });
+  check('Alumno: dar acceso devuelve el enlace de invitación', dar.status === 201 && dar.data.estado === 'invitado' && /#invite=/.test(dar.data.invite_url), JSON.stringify(dar.data));
+  const S = client();
+  const token = new URLSearchParams(dar.data.invite_url.split('#')[1]).get('invite');
+  const reg = await S('/api/auth/invite', { method: 'POST', body: { token, password: 'clave-segura-1', consent: true, adult: true, turnstile: TS_TOKEN } });
+  check('Alumno: crea su contraseña y entra', reg.status === 200 && reg.data.businesses?.[0]?.role === 'estudiante', JSON.stringify(reg.data));
+  check('Alumno: la ficha pasa a «Con acceso»', (await A.app(`/api/estudiantes/${e1.data.id}/acceso`)).data.estado === 'activo');
+  check('Alumno: el equipo no lo ve en Equipo', !(await A.app('/api/team')).data.users.some((u) => u.role === 'estudiante'));
+  check('Alumno: un correo del equipo no se puede dar como estudiante', (await A.app(`/api/estudiantes/${e2.data.id}/acceso`, { method: 'POST', body: { email: A.mail } })).status === 409);
+
+  // Aislamiento: el estudiante no entra al panel ni a las APIs del equipo
+  check('Alumno: /<dirección> sirve su inicio, no el panel', (await S(`/${slug}`)).data.text?.includes('alumno.js') === true && !(await S(`/${slug}`)).data.text?.includes('dw-frame'));
+  check('Alumno: /staff/ lo regresa a su inicio', (await S('/staff/')).headers.get('location')?.endsWith(`/${slug}`));
+  for (const [ruta, nombre] of [['/api/estudiantes/estudiantes', 'estudiantes'], ['/api/cursos/cursos', 'cursos'], ['/api/me', 'me'], ['/api/team', 'equipo'], ['/api/matriculas', 'matrículas'], ['/api/settings/bitacora', 'bitácora'], ['/api/finanzas/summary', 'finanzas']]) {
+    const r = await S(ruta);
+    check(`Alumno: no accede a ${nombre} (403)`, r.status === 403, String(r.status));
+  }
+  check('Alumno: no crea claves de IA', (await S('/api/ia/tokens', { method: 'POST', body: { name: 'x' } })).status === 403);
+  check('Alumno: un miembro del equipo no entra a la API del alumno', (await A.app('/api/alumno/inicio')).status === 403);
+
+  // Inicio: sus cursos, con cuenta regresiva del que aún no empieza
+  const mat2 = await A.app('/api/matriculas', { method: 'POST', body: { estudiante_id: e1.data.id, curso_id: k2.data.id, fecha: hoy } });
+  const ini = await S('/api/alumno/inicio');
+  const [c1, c2] = [ini.data.cursos?.find((c) => c.curso === 'Maquillaje en curso'), ini.data.cursos?.find((c) => c.curso === 'Barbería futura')];
+  check('Alumno: ve solo sus cursos', ini.status === 200 && ini.data.cursos.length === 2 && ini.data.estudiante.nombre === 'Sofía Alumna', JSON.stringify(ini.data).slice(0, 300));
+  check('Alumno: curso por iniciar con días que faltan', c2?.estado === 'por_iniciar' && c2.inicio >= mas(10) && c2.empieza_en === Math.round((Date.parse(c2.inicio) - Date.parse(hoy)) / 864e5), JSON.stringify(c2));
+  check('Alumno: curso en marcha con su avance', c1?.estado === 'en_curso' && c1.total_clases === 6 && c1.hechas >= 1, JSON.stringify(c1));
+  check('Alumno: avisa que el curso futuro empieza pronto y de la cuota', ini.data.avisos.some((a) => a.tipo === 'inicio' && /Barbería futura/.test(a.texto)), JSON.stringify(ini.data.avisos));
+  check('Alumno: no ve cursos de otros estudiantes', !ini.data.cursos.some((c) => c.id === (mat2.data.id + 1)));
+
+  // Calendario y seguimiento
+  const sem = await S(`/api/alumno/calendario?desde=${lunes(c2.inicio)}&hasta=${mas(0) > c2.inicio ? c2.inicio : (() => { const d = new Date(`${lunes(c2.inicio)}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 6); return d.toISOString().slice(0, 10); })()}`);
+  check('Alumno: la semana del primer día trae las clases del curso futuro', sem.status === 200 && sem.data.clases.some((x) => x.curso === 'Barbería futura' && x.fecha === c2.inicio), JSON.stringify(sem.data).slice(0, 300));
+  check('Alumno: el rango de calendario muy largo se rechaza', (await S(`/api/alumno/calendario?desde=${hoy}&hasta=${mas(200)}`)).status === 400);
+  const det = await S(`/api/alumno/curso/${c1.id}`);
+  check('Alumno: seguimiento de su curso (clases, notas, asistencia)', det.status === 200 && det.data.clases.length === 6 && Array.isArray(det.data.evaluaciones) && 'asistencia' in det.data, JSON.stringify(det.data).slice(0, 200));
+  // La matrícula de otro estudiante (e2) no se abre
+  const idOtro = (await A.app('/api/matriculas?limit=50')).data.rows?.find((m) => m.estudiante_id === e2.data.id)?.id;
+  check('Alumno: no abre la matrícula de otro estudiante', idOtro != null && (await S(`/api/alumno/curso/${idOtro}`)).status === 404, String(idOtro));
+
+  // Pagos: cuenta de cobro con las cuotas, comprobante, revisión del equipo y recibos
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const subir = (valor, body = png, tipo = 'image/png') => S(`/api/alumno/curso/${c1.id}/comprobantes?valor=${valor}&metodo=Nequi&nombre=pago.png`, { method: 'POST', body, headers: { 'content-type': tipo } });
+  const cc = await S(`/api/alumno/curso/${c1.id}/cuenta-de-cobro`);
+  check('Alumno: ve su cuenta de cobro con una línea por cuota', cc.status === 200 && /Cuota inicial|Cuota 1|Pago único|Cuota/.test(cc.data.text || '') && (cc.data.text.match(/<tr><td class="idx">/g) || []).length === 2, String(cc.status));
+  check('Alumno: la cuenta de cobro usa los colores de la marca (rosa) y no el violeta fijo', /#be185d/i.test(cc.data.text || '') && !/#7c3aed/i.test(cc.data.text || ''));
+  check('Alumno: el comprobante debe ser imagen o PDF', (await subir(100000, new Uint8Array([1, 2, 3, 4, 5]), 'text/plain')).status === 400);
+  check('Alumno: el valor no puede superar su saldo', (await subir(999999999)).status === 400);
+  const up = await subir(200000);
+  check('Alumno: sube un comprobante y queda en revisión', up.status === 201 && up.data.estado === 'pendiente', JSON.stringify(up.data));
+  const det2 = await S(`/api/alumno/curso/${c1.id}`);
+  check('Alumno: ve sus cuotas y comprobantes', det2.data.pagos?.cuotas?.length === 2 && det2.data.pagos.comprobantes?.[0]?.estado === 'pendiente' && det2.data.pagos.saldo === 400000, JSON.stringify(det2.data.pagos).slice(0, 200));
+  check('Alumno: puede ver su archivo', (await S(`/api/alumno/comprobantes/${up.data.id}/archivo`)).status === 200);
+  check('Alumno: el equipo ve el comprobante pendiente', (await A.app('/api/cuotas/comprobantes?estado=pendiente')).data.pendientes === 1);
+  check('Alumno: otro negocio no ve ni abre el comprobante', (await B.app(`/api/cuotas/comprobantes/${up.data.id}/archivo`)).status === 404 && (await B.app(`/api/cuotas/comprobantes/${up.data.id}/aprobar`, { method: 'POST', body: {} })).status === 404);
+  const ap = await A.app(`/api/cuotas/comprobantes/${up.data.id}/aprobar`, { method: 'POST', body: {} });
+  check('Alumno: aprobar registra el pago con recibo', ap.status === 200 && ap.data.pago > 0, JSON.stringify(ap.data));
+  check('Alumno: no se aprueba dos veces', (await A.app(`/api/cuotas/comprobantes/${up.data.id}/aprobar`, { method: 'POST', body: {} })).status === 409);
+  const rec = await S(`/api/alumno/curso/${c1.id}/recibos`);
+  check('Alumno: ve su recibo y lo abre', rec.data.recibos?.length === 1 && rec.data.recibos[0].valor === 200000 && (await S(`/api/alumno/curso/${c1.id}/recibos/${rec.data.recibos[0].num}`)).data.text?.includes('Recibo de caja'), JSON.stringify(rec.data));
+  const up2 = await subir(100000);
+  check('Alumno: rechazar pide motivo y el estudiante lo ve', (await A.app(`/api/cuotas/comprobantes/${up2.data.id}/rechazar`, { method: 'POST', body: {} })).status === 400
+    && (await A.app(`/api/cuotas/comprobantes/${up2.data.id}/rechazar`, { method: 'POST', body: { motivo: 'No se ve el valor' } })).status === 200
+    && (await S('/api/alumno/inicio')).data.avisos.some((a) => /No se ve el valor/.test(a.texto)));
+  check('Alumno: el equipo no puede subir como estudiante', (await A.app(`/api/alumno/curso/${c1.id}/comprobantes?valor=1000`, { method: 'POST', body: png, headers: { 'content-type': 'image/png' } })).status === 403);
+
+  // IA Diwilo (botón flotante del panel): el equipo pregunta; el estudiante no
+  const ia = await A.app('/api/ai/asistente', { method: 'POST', body: { mensajes: [{ role: 'user', content: '[prueba] hola' }] } });
+  check('IA Diwilo: el asistente responde al equipo', ia.status === 200 && typeof ia.data.respuesta === 'string', JSON.stringify(ia.data).slice(0, 200));
+  check('IA Diwilo: el panel carga el botón flotante', (await A.app(`/${slug}`)).data.text?.includes('/js/ia-fab.js') === true);
+  check('IA Diwilo: el estudiante no usa el asistente del equipo', (await S('/api/ai/asistente', { method: 'POST', body: { mensajes: [{ role: 'user', content: 'hola' }] } })).status === 403);
+
+  // Quitar el acceso corta la sesión
+  const quitar = await A.app(`/api/estudiantes/${e1.data.id}/acceso`, { method: 'DELETE' });
+  check('Alumno: quitar el acceso cierra su sesión', quitar.status === 200 && (await S('/api/alumno/inicio')).status === 401);
+  check('Alumno: otro negocio no puede darle acceso a una ficha ajena', (await B.app(`/api/estudiantes/${e1.data.id}/acceso`, { method: 'POST', body: {} })).status === 404);
+}

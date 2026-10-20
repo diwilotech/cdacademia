@@ -148,6 +148,8 @@ export async function loadSession(req, env) {
 //   'session'  : con sesión (puede no tener negocio elegido)
 //   'tenant'   : + negocio activo con membresía. Con suscripción vencida solo deja leer (402 en escrituras).
 //   'manager'  : + rol owner/admin en el negocio
+//   'alumno'   : negocio activo con rol 'estudiante' y su ficha activa (c.estudiante). 'tenant' y 'manager' lo rechazan.
+//   'any'      : como 'tenant' pero también deja pasar al estudiante (solo para lo que es común, como el logo)
 //   'platform' : Diwilo Web por RPC (Platform.call). Desde internet siempre 401.
 // Las rutas de un módulo lo declaran después de dos puntos: 'tenant:items', 'manager:items'.
 // Así se comprueba en cada petición que el módulo esté activo para el negocio (si no, 403).
@@ -170,6 +172,14 @@ export async function authenticate(c, spec) {
   if (c.readOnly && c.req.method !== 'GET') {
     throw new HttpError(402, 'La suscripción del negocio está vencida: solo lectura.', 'READ_ONLY');
   }
+  // El estudiante solo entra a las rutas 'alumno' (y a las 'any' que declaran servirle); jamás a las del equipo.
+  if (level === 'alumno') {
+    if (s.role !== 'estudiante') throw new HttpError(403, 'Solo para estudiantes');
+    c.estudiante = await db(c.env).first('SELECT id, nombre FROM ac_estudiantes WHERE business_id = ? AND user_id = ? AND activo = 1', s.business_id, s.user_id);
+    if (!c.estudiante) throw new HttpError(403, 'Tu ficha de estudiante no está activa');
+    return;
+  }
+  if (s.role === 'estudiante' && level !== 'any') throw new HttpError(403, 'No tienes acceso a esta sección');
   if (level === 'manager' && !['owner', 'admin'].includes(s.role)) throw new HttpError(403, 'Solo el propietario o un administrador');
   if (moduleId) await requireModule(c, moduleId);
 }

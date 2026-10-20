@@ -26,6 +26,8 @@ import * as matriculasApi from './api/matriculas.js';
 import * as cuotasApi from './api/cuotas.js';
 import * as reposicionesApi from './api/reposiciones.js';
 import * as videosApi from './api/videos.js';
+import * as alumnoApi from './api/alumno.js';
+import * as comprobantesApi from './api/comprobantes.js';
 import { ver } from './lib/ver.js';
 import { isCentralApi, centralModuleOf, centralApi, centralPage, centralAsset, centralPublic } from './lib/central.js';
 import { CENTRALES } from './lib/modules.js';
@@ -33,7 +35,7 @@ import { CENTRALES } from './lib/modules.js';
 const router = new Router();
 // platform va primero. Agrega aquí cada módulo nuevo de src/api/ (y su entrada en modulos.app.json).
 // Los horizontales (Finanzas, Marketing…) no van aquí: se piden en modulos.app.json → "centrales" y viven en Diwilo Modulos.
-const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi, videosApi];
+const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi, videosApi, alumnoApi, comprobantesApi];
 for (const mod of [platformApi, platformModulesApi, authApi, meApi, settingsApi, mcpApi, teamApi, ...MODULE_APIS]) if (typeof mod.routes === 'function') mod.routes(router);
 
 const SECURITY_HEADERS = {
@@ -111,6 +113,8 @@ const worker = {
           const s = await loadSession(req, env);
           if (s?.business_id && s.role) {
             if (s.business_slug !== seg) return aPanel(url, s.business_slug);
+            // El estudiante tiene su propio inicio (nunca el panel del equipo)
+            if (s.role === 'estudiante') return withHeaders(await asset(env, req, '/alumno'), { ...SECURITY_HEADERS, 'cache-control': 'no-store' });
             return withHeaders(await asset(env, req, '/staff/panel'), { ...SECURITY_HEADERS, 'cache-control': 'no-store' });
           }
           return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
@@ -122,6 +126,7 @@ const worker = {
       if (url.pathname === '/staff' || url.pathname.startsWith('/staff/')) {
         const s = await loadSession(req, env);
         if (!s?.business_id || !s.role) return Response.redirect(`${url.origin}/`, 302);
+        if (s.role === 'estudiante') return aPanel(url, s.business_slug);
         // Una página de módulo abierta directo (enlace viejo, favorito) lleva al panel del negocio, que la carga dentro y deja la dirección fija.
         if (req.method === 'GET' && req.headers.get('sec-fetch-dest') === 'document' && (/^\/staff\/?$/.test(url.pathname) || url.pathname.endsWith('.html') || !/\.[a-z0-9]+$/i.test(url.pathname)) && !url.pathname.startsWith('/staff/panel')) {
           return aPanel(url, s.business_slug, url.pathname + url.search);

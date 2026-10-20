@@ -161,5 +161,45 @@ DW.ready.then(async (me) => {
   };
 
   // Cartera y Pagos ya no son pestañas: la cartera se filtra aquí (Cobro) y los pagos y recibos se ven por matrícula, desde Finanzas.
-  AC.vistas([['matriculas', 'Matrículas', 'bi-person-plus']], (k, view) => montar(view));
+  // Comprobantes que suben los estudiantes: se revisan aquí; al aprobar se registra el pago (y sale su recibo).
+  const comprobantes = async (view) => {
+    document.querySelector('[data-acciones]').innerHTML = '';
+    const ESTC = { pendiente: ['soon', 'En revisión'], aprobado: ['ok', 'Aprobado'], rechazado: ['bad', 'Rechazado'] };
+    let estado = 'pendiente';
+    view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-3"><select class="form-select w-auto" data-est aria-label="Estado"><option value="pendiente">En revisión</option><option value="aprobado">Aprobados</option><option value="rechazado">Rechazados</option><option value="">Todos</option></select></div><div data-lista></div>`;
+    const lista = view.querySelector('[data-lista]');
+    const load = async () => {
+      const d = await api(`/api/cuotas/comprobantes${estado ? `?estado=${estado}` : ''}`);
+      lista.innerHTML = d.rows.length ? `<div class="dw-grid">${d.rows.map((m) => `<div class="dw-card"><div class="d-flex justify-content-between gap-2"><b>${esc(m.estudiante)}</b>${C.chip(...ESTC[m.estado])}</div>
+        <div class="small text-body-secondary">${esc(m.curso)}</div><div class="fs-5 fw-semibold my-1">${C.money(m.valor)}</div>
+        <div class="small">${esc(m.metodo || '')} · ${C.day(m.fecha)}${m.nota ? `<br>${esc(m.nota)}` : ''}${m.motivo ? `<br><span class="text-danger">${esc(m.motivo)}</span>` : ''}${m.pago_num ? `<br>Pago N.º ${m.pago_num}` : ''}</div>
+        <div class="d-flex flex-wrap gap-2 mt-2"><a class="btn btn-sm btn-outline-secondary" href="/api/cuotas/comprobantes/${m.id}/archivo" target="_blank" rel="noopener"><i class="bi bi-paperclip me-1"></i>Ver comprobante</a>
+          ${m.estado === 'pendiente' && !RO ? `<button class="btn btn-sm btn-success" data-ok="${m.id}"><i class="bi bi-check2 me-1"></i>Aprobar y registrar pago</button><button class="btn btn-sm btn-outline-danger" data-no="${m.id}">Rechazar</button>` : ''}</div></div>`).join('')}</div>`
+        : `<div class="dw-card">${empty('bi-receipt', estado === 'pendiente' ? 'No hay comprobantes por revisar.' : 'No hay comprobantes.')}</div>`;
+    };
+    view.querySelector('[data-est]').onchange = (e) => { estado = e.target.value; load().catch((x) => toast(x.message, false)); };
+    lista.addEventListener('click', async (e) => {
+      const ok = e.target.closest('[data-ok]'), no = e.target.closest('[data-no]');
+      try {
+        if (ok && await confirm({ title: 'Aprobar comprobante', text: 'Se registrará el pago con su recibo y se abonará a las cuotas.', ok: 'Aprobar' })) {
+          ok.disabled = true; const r = await api(`/api/cuotas/comprobantes/${ok.dataset.ok}/aprobar`, { method: 'POST', body: {} }); toast(`Pago N.º ${r.pago} registrado`); await load();
+        }
+        if (no) {
+          const { el, m } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Rechazar comprobante</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body"><label class="form-label small">Motivo (lo verá el estudiante)</label><textarea class="form-control" rows="3" maxlength="300" data-motivo placeholder="Ej.: la imagen no se ve, falta el valor"></textarea></div>
+            <div class="modal-footer border-0 pt-0"><button class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-danger" data-enviar>Rechazar</button></div>`);
+          el.querySelector('[data-enviar]').onclick = async () => {
+            try { await api(`/api/cuotas/comprobantes/${no.dataset.no}/rechazar`, { method: 'POST', body: { motivo: el.querySelector('[data-motivo]').value } }); m.hide(); toast('Comprobante rechazado'); await load(); }
+            catch (x) { toast(x.message, false); }
+          };
+        }
+      } catch (x) { toast(x.message, false); await load().catch(() => {}); }
+    });
+    await load();
+  };
+
+  const verCompr = me.modules.some((m) => m.id === 'cuotas');
+  const pend = verCompr ? await api('/api/cuotas/comprobantes?estado=pendiente').then((d) => d.pendientes).catch(() => 0) : 0;
+  AC.vistas([['matriculas', 'Matrículas', 'bi-person-plus'], ...(verCompr ? [['comprobantes', pend ? `Comprobantes (${pend})` : 'Comprobantes', 'bi-receipt']] : [])],
+    (k, view) => (k === 'comprobantes' ? comprobantes(view) : montar(view)));
 });

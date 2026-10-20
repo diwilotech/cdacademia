@@ -47,13 +47,13 @@ export async function movimientoFinanzas(c, p) {
   } catch (x) { console.error('recibo de caja en Finanzas', x.message); return { enviado: false }; }
 }
 
-// Cuenta de cobro de una matrícula en Finanzas (una por matrícula; si cambia el valor o el plan, se actualiza). ins = { id, estudiante, documento, email, curso, total, fecha, vence }
+// Cuenta de cobro de una matrícula en Finanzas (una por matrícula; si cambia el valor o el plan, se actualiza). ins = { id, estudiante, documento, email, curso, total, fecha, vence, concepto?, items?: [{ concepto, detalle, valor }] }
 export async function cuentaDeCobro(c, ins) {
   try {
     if (!CENTRALES.includes('finanzas') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas') || !(ins.total > 0)) return null;
     const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
     const body = { ref: `academia:matricula:${ins.id}`, counterparty: ins.estudiante, tax_id: ins.documento || null, client_email: ins.email || null, issue_date: ins.fecha, due_date: ins.vence || null,
-      concept: `Matrícula · ${ins.curso}`, detail: ins.estudiante, total: ins.total, category: 'Matrículas y cuotas', centro_costo: ins.curso };
+      concept: ins.concepto || `Matrícula · ${ins.curso}`, detail: ins.estudiante, items: ins.items || undefined, total: ins.total, category: 'Matrículas y cuotas', centro_costo: ins.curso };
     const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/invoices/externo', body: JSON.stringify(body) });
     await saveAudit(c, r.audit);
     return r.status < 300 ? JSON.parse(r.body) : null;

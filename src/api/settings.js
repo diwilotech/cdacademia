@@ -48,7 +48,7 @@ export function routes(r) {
     return json(await businessSettings(c.env, c.businessId));
   });
 
-  r.get('/api/settings/logo', 'tenant', async (c) => {
+  r.get('/api/settings/logo', 'any', async (c) => {
     const s = await db(c.env).first('SELECT logo_key FROM business_settings WHERE business_id = ?', c.businessId);
     const obj = s?.logo_key && c.env.FILES ? await c.env.FILES.get(s.logo_key) : null;
     if (!obj) throw new HttpError(404, 'Sin logo');

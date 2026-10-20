@@ -19,10 +19,15 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 
 - Guía de uso por módulo para el MCP: bloque `mcp` del manifiesto (`modulos.app.json` / `modulo.json` central) → `GET /api/<módulo>/mcp`, recursos `diwilo://<módulo>/guia` y prompts `<módulo>_<flujo>` (estándar único en Diwilo Modulos: `src/lib/guias.js`; aquí `src/api/mcp.js` pide las guías por RPC y `propiasDe` en `src/lib/central.js` entrega las herramientas propias al asistente y a los agentes de la IA). Todo módulo nuevo debe traer su bloque `mcp`.
 
+- Inicio del estudiante: rol `estudiante` (membresía; ficha enlazada por `ac_estudiantes.user_id`, migración 0014). Se invita desde la ficha (Estudiantes → «Acceso a la app», `/api/estudiantes/:id/acceso`). `authenticate` (lib/auth.js): nivel `alumno` solo para él; `tenant`/`manager` lo rechazan (403) y `any` lo deja pasar. `/<slug>` le sirve `public/alumno.html` + `public/js/alumno.js` (API `src/api/alumno.js`: inicio, calendario, curso/:id); `/staff/*` lo devuelve a su inicio. Un curso → entra directo; varios → calendario general. Curso sin empezar: abre en la semana del primer día con cuenta regresiva. Avisos calculados al abrir (sin push real todavía).
+
+- Pagos del estudiante (migración 0015, `src/api/comprobantes.js`): sube foto/PDF (máx. 5 MB, tipo por bytes) a R2 → `ac_comprobantes` en revisión; el equipo (Matrículas → pestaña Comprobantes, módulo `cuotas`) aprueba (llama `registrarPago` → recibo en Finanzas) o rechaza con motivo. El estudiante ve su cuenta de cobro y recibos (`/api/alumno/curso/:id/cuenta-de-cobro|recibos`) servidos desde Finanzas. La cuenta de cobro lleva una línea por cuota (`cuentaDeMatricula`) y toma la marca del negocio (Diwilo Modulos ≥ finanzas 1.4.0: desplegar ese primero).
+- Pruebas: `DEV_LOG=1 npm test` muestra los errores del Worker. Si falla con «no such column» en la base local de Modulos, la base de `.wrangler` quedó vieja respecto a sus migraciones.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 
 ## Reglas
-- Toda consulta filtra por negocio. Roles owner/admin/staff. Vencida = solo lectura.
+- Toda consulta filtra por negocio. Roles owner/admin/staff (+ `estudiante`, solo `/api/alumno/*`). Vencida = solo lectura.
 - Migraciones nuevas: solo agregar, preservar datos (nunca DROP de tablas con datos).
 - Push/publicar solo con confirmación del usuario.

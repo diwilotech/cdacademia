@@ -1,6 +1,8 @@
 // Estudiantes (o alumnas, aprendices… según el rubro). Ver: todo el equipo; borrar: propietario y administrador.
 //   CRUD /api/estudiantes/estudiantes   ·   GET /api/estudiantes/:id/ficha   ·   GET /api/estudiantes/resumen (widget)
-import { json, HttpError } from '../lib/http.js';
+import { json, HttpError, readJson, email as emailOk } from '../lib/http.js';
+import { db, uuid } from '../lib/db.js';
+import { createInvite, invitePath } from '../lib/auth.js';
 import { crud, all, one } from '../lib/crud.js';
 import { cartera } from './cuotas.js';
 import { moraDe } from './cursos.js';
@@ -27,6 +29,7 @@ export const ENTITIES = {
       });
     },
     async afterDelete(c, before) {
+      if (before.user_id) await quitarAcceso(c, before.user_id);
       // Sus matrículas, cuotas, asistencia y notas se van con él (los pagos registrados se conservan en la bitácora).
       const ins = await all(c.env, 'SELECT id FROM ac_inscripciones WHERE business_id = ? AND estudiante_id = ?', c.businessId, before.id);
       for (const i of ins) {
@@ -34,6 +37,20 @@ export const ENTITIES = {
       }
       await c.env.DB.prepare('DELETE FROM ac_inscripciones WHERE business_id = ? AND estudiante_id = ?').bind(c.businessId, before.id).run();
     } },
+};
+
+// Acceso a la app: el estudiante entra con su correo y ve solo lo suyo (rol 'estudiante', ver api/alumno.js).
+async function quitarAcceso(c, userId) {
+  const d = db(c.env);
+  await d.batch([
+    d.prepare("DELETE FROM memberships WHERE business_id = ? AND user_id = ? AND role = 'estudiante'", c.businessId, userId),
+    d.prepare('DELETE FROM sessions WHERE business_id = ? AND user_id = ?', c.businessId, userId),
+  ]);
+}
+const accesoDe = async (c, e) => {
+  if (!e.user_id) return { estado: 'sin_acceso', email: e.email || null };
+  const u = await db(c.env).first("SELECT u.email, u.password_hash IS NOT NULL AS activo FROM users u JOIN memberships m ON m.user_id = u.id WHERE u.id = ? AND m.business_id = ? AND m.role = 'estudiante'", e.user_id, c.businessId);
+  return u ? { estado: u.activo ? 'activo' : 'invitado', email: u.email } : { estado: 'sin_acceso', email: e.email || null };
 };
 
 // Matrículas de un estudiante con su avance académico y su saldo (lo usan la ficha y la IA).
@@ -67,6 +84,42 @@ export async function fichaEstudiante(c, id) {
 export function routes(r) {
   crud(r, { base: '/api/estudiantes', modulo: MOD, entities: ENTITIES });
   r.get('/api/estudiantes/:id/ficha', `tenant:${MOD}`, async (c) => json(await fichaEstudiante(c, Number(c.params.id))));
+  r.get('/api/estudiantes/:id/acceso', `tenant:${MOD}`, async (c) => {
+    const e = await one(c.env, 'SELECT * FROM ac_estudiantes WHERE id = ? AND business_id = ?', Number(c.params.id), c.businessId);
+    if (!e) throw new HttpError(404, 'No encontrado');
+    return json(await accesoDe(c, e));
+  });
+  // Da acceso (o reenvía el enlace): crea el usuario con el correo de la ficha y devuelve el enlace para que cree su contraseña.
+  r.post('/api/estudiantes/:id/acceso', `manager:${MOD}`, async (c) => {
+    const e = await one(c.env, 'SELECT * FROM ac_estudiantes WHERE id = ? AND business_id = ?', Number(c.params.id), c.businessId);
+    if (!e) throw new HttpError(404, 'No encontrado');
+    const body = await readJson(c.req).catch(() => ({}));
+    const mail = emailOk(body.email || e.email, { required: true });
+    const d = db(c.env);
+    let user = e.user_id ? await d.first('SELECT id, email FROM users WHERE id = ?', e.user_id) : null;
+    if (!user) user = await d.first('SELECT id, email FROM users WHERE email = ?', mail);
+    if (user) {
+      const m = await d.first('SELECT role FROM memberships WHERE business_id = ? AND user_id = ?', c.businessId, user.id);
+      if (m && m.role !== 'estudiante') throw new HttpError(409, 'Ese correo ya es del equipo de la academia');
+      const otro = await one(c.env, 'SELECT 1 FROM ac_estudiantes WHERE business_id = ? AND user_id = ? AND id <> ?', c.businessId, user.id, e.id);
+      if (otro) throw new HttpError(409, 'Ese correo ya está asignado a otro estudiante');
+    } else {
+      user = { id: uuid(), email: mail };
+      await d.run('INSERT INTO users (id, email, name) VALUES (?, ?, ?)', user.id, mail, e.nombre);
+    }
+    if (user.email !== mail) throw new HttpError(409, 'Ya tiene acceso con otro correo: quítalo y vuelve a darlo con el nuevo');
+    await d.batch([
+      d.prepare("INSERT OR IGNORE INTO memberships (user_id, business_id, role, modulos) VALUES (?, ?, 'estudiante', NULL)", user.id, c.businessId),
+      d.prepare('UPDATE ac_estudiantes SET user_id = ?, email = COALESCE(email, ?), updated_at = ? WHERE id = ? AND business_id = ?', user.id, mail, Date.now(), e.id, c.businessId),
+    ]);
+    return json({ ...(await accesoDe(c, { ...e, user_id: user.id })), invite_url: new URL(invitePath(await createInvite(c.env, user.id)), c.url.origin).toString() }, 201);
+  });
+  r.delete('/api/estudiantes/:id/acceso', `manager:${MOD}`, async (c) => {
+    const e = await one(c.env, 'SELECT * FROM ac_estudiantes WHERE id = ? AND business_id = ?', Number(c.params.id), c.businessId);
+    if (!e) throw new HttpError(404, 'No encontrado');
+    if (e.user_id) { await quitarAcceso(c, e.user_id); await c.env.DB.prepare('UPDATE ac_estudiantes SET user_id = NULL, updated_at = ? WHERE id = ? AND business_id = ?').bind(Date.now(), e.id, c.businessId).run(); }
+    return json({ ok: true });
+  });
   r.get('/api/estudiantes/lista', 'tenant', async (c) => json({ estudiantes: await all(c.env, 'SELECT id, nombre, documento, telefono FROM ac_estudiantes WHERE business_id = ? AND activo = 1 ORDER BY nombre LIMIT 2000', c.businessId) }));
   r.get('/api/estudiantes/resumen', `tenant:${MOD}`, async (c) => {
     const cfg = await getConfig(c.env, c.businessId);

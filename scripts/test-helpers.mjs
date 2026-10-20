@@ -31,7 +31,7 @@ export async function startApp() {
   }
   const dev = spawn('npx', ['wrangler', 'dev', '-c', 'scripts/diwilo-local/wrangler.jsonc', '-c', 'wrangler.jsonc', ...extra, '--port', String(PORT), '--persist-to', '.wrangler/state'],
     { env: { ...process.env, CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-  dev.stderr.on('data', () => {});
+  dev.stderr.on('data', (d) => { if (process.env.DEV_LOG) process.stderr.write(d); });
   dev.stdout.on('data', () => {});
   process.on('exit', () => dev.kill());
   for (let i = 0; i < 120; i++) { try { await fetch(APP + '/'); break; } catch { await sleep(1000); } }
@@ -49,7 +49,7 @@ export function client() {
     const res = await fetch(APP + path, {
       method, redirect: 'manual',
       headers: { 'content-type': 'application/json', ...(method !== 'GET' ? { 'x-app': '1' } : {}), cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; '), ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : body instanceof Uint8Array ? body : JSON.stringify(body),   // Uint8Array = archivo crudo (el tipo va en headers)
     });
     for (const c of res.headers.getSetCookie?.() || []) { const [kv] = c.split(';'); const [k, v] = kv.split('='); jar[k] = v; }
     const text = await res.text();

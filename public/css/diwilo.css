@@ -295,3 +295,34 @@ body.dw-embed .dw-readonly { top: 0; }
 /* Colores de la app en el menú de usuario */
 .dw-tdot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: 0 0 0 1px var(--dw-borde); }
 .dw-tdot.active { border-color: var(--bs-body-bg); box-shadow: 0 0 0 2px var(--dw-p); }
+
+/* Inicio del estudiante (alumno.html): sin menú lateral; el calendario trae una marca para el primer día del curso */
+body.dw-alumno .dw-main { margin-left: 0; padding: calc(var(--dw-top-h) + 20px) 16px 40px; max-width: 1100px; }
+@media (min-width: 992px) { body.dw-alumno .dw-main { margin-left: auto; padding: calc(var(--dw-top-h) + 28px) 32px 40px; } }
+.dw-curso { display: block; color: inherit; text-decoration: none; border-left: 4px solid var(--ev, var(--dw-p)); }
+.dw-curso:hover { background: rgba(var(--dw-p-rgb), .05); color: inherit; }
+.dw-ev--inicio { --ev: #16a34a; background: rgba(22, 163, 74, .12); border-left: 3px solid var(--ev); border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; font-size: .76rem; }
+
+/* IA Diwilo: botón flotante y panel del asistente (panel del equipo) */
+.ia-fab { position: fixed; right: 22px; bottom: 20px; z-index: 1040; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border: 0; border-radius: 999px; cursor: pointer; color: #fff;
+  background: linear-gradient(135deg, var(--dw-p), var(--dw-p-osc)); box-shadow: 0 8px 24px rgba(var(--dw-p-rgb), .35); font-weight: 600; transition: transform .15s; }
+.ia-fab:hover { transform: translateY(-2px); } .ia-fab.on { opacity: 0; pointer-events: none; }
+.ia-panel { position: fixed; right: 16px; bottom: 16px; z-index: 1045; width: min(430px, calc(100vw - 32px)); height: min(640px, calc(100vh - 32px)); display: flex; flex-direction: column;
+  background: var(--dw-tarjeta); border: 1px solid var(--dw-borde); border-radius: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, .25); overflow: hidden; }
+.ia-panel[hidden] { display: none; }
+.ia-panel header { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--dw-borde); }
+.ia-panel header div { flex: 1; display: grid; gap: 2px; min-width: 0; } .ia-panel header small { font-size: 11px; color: var(--bs-secondary-color); }
+.ia-logo { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--dw-p), var(--dw-p-osc)); flex: none; }
+.ia-log { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ia-msg { max-width: 92%; padding: 10px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; background: var(--bs-tertiary-bg); }
+.ia-msg.user { align-self: flex-end; background: var(--dw-p); color: #fff; }
+.ia-msg .li { display: block; padding-left: 14px; position: relative; } .ia-msg .li::before { content: '•'; position: absolute; left: 2px; }
+.ia-used { display: block; margin-top: 6px; font-size: 11px; color: var(--bs-secondary-color); }
+.ia-pending { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(var(--dw-p-rgb), .1); border: 1px solid rgba(var(--dw-p-rgb), .35); }
+.ia-pending pre { margin: 0; font-size: 11.5px; white-space: pre-wrap; }
+.ia-sugg { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; }
+.ia-sugg .pill { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--dw-borde); background: transparent; color: inherit; cursor: pointer; }
+.ia-sugg .pill:hover { background: var(--dw-activo-bg); }
+.ia-form { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px 12px; border-top: 1px solid var(--dw-borde); }
+.ia-form textarea { flex: 1; resize: none; min-height: 40px; max-height: 140px; }
+@media (max-width: 991.98px) { .ia-fab { right: 14px; bottom: calc(var(--dw-bottom-h) + 14px); } .ia-fab span { display: none; } .ia-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); } }

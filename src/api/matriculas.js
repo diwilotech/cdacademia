@@ -43,7 +43,7 @@ async function aplicarCupon(c, cursoId, codigo, precio) {
 
 // Los pagos de una matrícula tal como están en Finanzas: un recibo de caja por pago («academia:pago:<N.º>»). El libro es Finanzas; lo local solo dice
 // qué números de pago son de esta matrícula. `faltan` = pagos que aún no se enviaron a Finanzas.
-async function pagosDeFinanzas(c, id) {
+export async function pagosDeFinanzas(c, id) {
   const ins = await one(c.env, `SELECT i.id, i.valor, i.descuento, e.nombre AS estudiante, e.documento, k.nombre AS curso FROM ac_inscripciones i
     JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
     WHERE i.id = ? AND i.business_id = ?`, id, c.businessId);
@@ -67,7 +67,12 @@ export async function cuentaDeMatricula(c, id) {
     WHERE i.id = ? AND i.business_id = ?`, id, c.businessId);
   if (!ins) return null;
   const vence = (await one(c.env, 'SELECT MAX(vence) v FROM ac_cuotas WHERE business_id = ? AND inscripcion_id = ?', c.businessId, id))?.v || null;
-  return cuentaDeCobro(c, { ...ins, total: ins.valor - ins.descuento, vence });
+  // Una línea por cuota (inicial incluida) para que la cuenta de cobro muestre el plan de pagos.
+  const cuotas = await all(c.env, 'SELECT n, etiqueta, vence, valor FROM ac_cuotas WHERE business_id = ? AND inscripcion_id = ? ORDER BY n', c.businessId, id);
+  const fmt = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const items = cuotas.map((q) => ({ concepto: `${q.etiqueta || (q.n === 0 ? 'Cuota inicial' : `Cuota ${q.n}`)} · ${ins.curso}`, detalle: `Vence el ${fmt(q.vence)}`, valor: q.valor }));
+  const concepto = `Matrícula · ${ins.curso}${cuotas.length > 1 ? ` · plan de ${cuotas.length} pagos` : ''}`;
+  return cuentaDeCobro(c, { ...ins, total: ins.valor - ins.descuento, vence, concepto, items });
 }
 
 export function routes(r) {

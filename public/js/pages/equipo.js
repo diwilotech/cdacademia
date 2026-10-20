@@ -55,9 +55,8 @@ DW.ready.then(async (me) => {
       { label: '', cls: 'text-end text-nowrap', html: (r) => {
         const u = r.user, id = esc(u?.id || '');
         return [
-          u && !r.prof && canManage ? `<button class="btn btn-sm btn-outline-info" data-hacerprof="${id}" title="Convertir en profesional (docente)"><i class="bi bi-mortarboard me-1"></i>Hacer profesional</button>` : '',
-          u && r.prof && canManage ? `<button class="btn btn-sm btn-outline-warning" data-quitarprof="${r.prof.id}" title="Dejar de ser profesional (conserva su acceso a la app)"><i class="bi bi-person-dash"></i></button>` : '',
-          me.canManage ? `<button class="btn btn-sm btn-outline-primary" data-editar="${esc(personaKey(r))}" title="Editar: datos${finanzasOn ? ', nómina' : ''}${r.prof ? ' y ficha' : ''}" aria-label="Editar persona"><i class="bi bi-person-badge"></i></button>` : '',
+          me.canManage ? `<button class="btn btn-sm btn-outline-primary" data-editar="${esc(personaKey(r))}" title="Info: datos${r.prof ? ', áreas, niveles y horario' : ' y si es profesional'}" aria-label="Info de la persona"><i class="bi bi-mortarboard"></i></button>` : '',
+          me.canManage && finanzasOn ? `<button class="btn btn-sm btn-outline-success" data-nomina="${esc(personaKey(r))}" title="Nómina: lo que se le paga" aria-label="Nómina"><i class="bi bi-currency-dollar"></i></button>` : '',
           u && u.role === 'staff' && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-mods="${id}" title="Módulos que puede abrir"><i class="bi bi-grid"></i></button>` : '',
           !u && r.prof && me.canManage ? `<button class="btn btn-sm btn-primary" data-dar="${r.prof.id}" title="Invitarlo a la app con su correo"><i class="bi bi-person-plus me-1"></i>Dar acceso</button>` : '',
           u && u.role !== 'owner' && canManage ? `<button class="btn btn-sm btn-outline-secondary" data-link="${id}" data-email="${esc(u.email)}" title="Link para crear o restablecer su contraseña"><i class="bi bi-key"></i></button>
@@ -87,7 +86,6 @@ DW.ready.then(async (me) => {
   /* ---------- Editar persona: sus datos y su nómina (lo que se le paga, los ítems del mes y el pago) ---------- */
   const TIPOS_DOC = { CC: 'Cédula de ciudadanía', NIT: 'NIT', CE: 'Cédula de extranjería', PA: 'Pasaporte' };
   const PERIODOS = { mensual: 'Mes', quincenal: 'Quincena', semanal: 'Semana', clase: 'Clase dictada', hora: 'Hora' };
-  const FACTOR = { mensual: 1, quincenal: 2, semanal: 4 }, BASE = { mensual: 'Sueldo mensual', quincenal: 'Pago de 2 quincenas', semanal: 'Pago de 4 semanas' };
   const pesos = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO');
   const refKey = (k) => String(k || '').replace(/[^\w.-]/g, '_').slice(0, 60);
   const finanzasOn = me.modules.some((m) => m.id === 'finanzas');
@@ -99,8 +97,8 @@ DW.ready.then(async (me) => {
     const mo = document.createElement('div');
     mo.className = 'modal fade'; mo.tabIndex = -1;
     mo.innerHTML = `<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl"><div class="modal-content">
-      <div class="modal-header"><div class="flex-grow-1"><h2 class="modal-title h5 mb-0">Editar · ${esc(nombre)}</h2><div class="small text-body-secondary">${esc(d0.detalle || '')}</div></div><button type="button" class="btn-close" data-cerrar aria-label="Cerrar"></button></div>
-      <div class="modal-body"><div class="dw-segb" data-tabs><button type="button" class="btn btn-sm btn-outline-secondary" data-tab="datos">Datos</button>${me.canManage && finanzasOn ? '<button type="button" class="btn btn-sm btn-outline-secondary" data-tab="nomina">Nómina</button>' : ''}</div><div data-panel></div></div>
+      <div class="modal-header"><div class="flex-grow-1"><h2 class="modal-title h5 mb-0">${tab === 'nomina' ? 'Nómina' : 'Info'} · ${esc(nombre)}</h2><div class="small text-body-secondary">${esc(d0.detalle || '')}</div></div><button type="button" class="btn-close" data-cerrar aria-label="Cerrar"></button></div>
+      <div class="modal-body"><div data-panel></div></div>
       <div class="modal-footer justify-content-between" data-pie></div></div></div>`;
     document.body.appendChild(mo);
     const m_ = new bootstrap.Modal(mo, { backdrop: 'static', keyboard: false });
@@ -109,29 +107,33 @@ DW.ready.then(async (me) => {
     let sucio = false;
     const cerrar = async () => { if (sucio && !(await confirm({ title: 'Hay cambios sin guardar', text: 'Si cierras, se pierden.', ok: 'Cerrar sin guardar' }))) return; m_.hide(); };
     mo.addEventListener('click', (e) => { if (e.target.closest('[data-cerrar]')) cerrar(); });
-    const ir = async (t) => {
-      if (sucio && !(await confirm({ title: 'Hay cambios sin guardar', text: 'Si cambias de pestaña, se pierden.', ok: 'Cambiar' }))) return;
-      sucio = false; mo.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
-      return t === 'datos' ? pestanaDatos() : pestanaNomina();
-    };
-    mo.querySelector('[data-tabs]').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) ir(b.dataset.tab); });
-
-    /* -- Datos -- */
+    /* -- Info: datos y, si es profesional, sus áreas, niveles y horario (van juntos; sin marcar no lo es) -- */
     function pestanaDatos() {
       panel.innerHTML = `<form class="row g-3" data-form><div class="col-md-6"><label class="form-label small mb-1">Nombre</label><input class="form-control" name="nombre" value="${esc(nombre)}" maxlength="100" required></div>
         <div class="col-md-6"><label class="form-label small mb-1">Correo</label><input class="form-control" value="${esc(r.user?.email || r.prof?.email || '')}" disabled></div>
         <div class="col-md-4"><label class="form-label small mb-1">Tipo de documento</label><select class="form-select" name="tipo_documento">${Object.entries(TIPOS_DOC).map(([v, l]) => `<option value="${v}" ${v === (d0.tipo_documento || 'CC') ? 'selected' : ''}>${v} · ${l}</option>`).join('')}</select></div>
         <div class="col-md-4"><label class="form-label small mb-1">Número (cédula o NIT)</label><input class="form-control" name="documento" value="${esc(d0.documento || '')}" maxlength="40" placeholder="Ej.: 1020304050"></div>
         <div class="col-md-4"><label class="form-label small mb-1">Celular</label><input class="form-control" name="celular" type="tel" value="${esc(d0.celular || '')}" maxlength="30" placeholder="Ej.: 300 123 4567"></div></form>
-        <p class="small text-body-secondary mt-3 mb-0">La cédula o NIT sale en el documento de sus pagos en Finanzas.</p>${r.prof ? '<button type="button" class="btn btn-outline-secondary btn-sm mt-3" data-ficha-prof><i class="bi bi-mortarboard me-1"></i>Áreas, niveles y horario del profesional</button>' : ''}`;
-      panel.querySelector('[data-ficha-prof]')?.addEventListener('click', () => AC.fichaProfesional({ row: r.prof, areas, changed: load }));
+        <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" id="esprof" data-esprof ${r.prof ? 'checked' : ''}><label class="form-check-label" for="esprof">Es profesional (docente)</label></div>
+        <div class="mt-2" data-prof ${r.prof ? '' : 'hidden'}></div>`;
+      const getC = AC.profCampos(panel.querySelector('[data-prof]'), r.prof || { areas: [], horario: [] }, areas);
+      panel.querySelector('[data-esprof]').addEventListener('change', (e) => { panel.querySelector('[data-prof]').hidden = !e.target.checked; sucio = true; });
+      panel.addEventListener('change', () => { sucio = true; });
       pie.innerHTML = `<span></span><span class="d-flex gap-2"><button type="button" class="btn btn-light" data-cerrar>Cerrar</button><button type="button" class="btn btn-primary" data-guardar-datos>Guardar datos</button></span>`;
       panel.querySelector('[data-form]').addEventListener('input', () => { sucio = true; });
       pie.querySelector('[data-guardar-datos]').onclick = async () => {
         const f = panel.querySelector('[data-form]'); if (!f.checkValidity()) return f.reportValidity();
-        try { await api(`/api/team/persona/${encodeURIComponent(k)}`, { method: 'PUT', body: { nombre: f.elements.nombre.value, tipo_documento: f.elements.tipo_documento.value, documento: f.elements.documento.value, celular: f.elements.celular.value } });
-          Object.assign(d0, { tipo_documento: f.elements.tipo_documento.value, documento: f.elements.documento.value, celular: f.elements.celular.value }); sucio = false; toast('Datos guardados'); }
-        catch (ex) { toast(ex.message, false); }
+        const esProf = panel.querySelector('[data-esprof]').checked;
+        if (!esProf && r.prof && !(await confirm({ title: `¿Quitar a ${nombre} como profesional?`, text: 'Conserva su acceso a la app. Los cursos que dicta quedan sin profesional.', ok: 'Quitar' }))) return;
+        try {
+          await api(`/api/team/persona/${encodeURIComponent(k)}`, { method: 'PUT', body: { nombre: f.elements.nombre.value, tipo_documento: f.elements.tipo_documento.value, documento: f.elements.documento.value, celular: f.elements.celular.value } });
+          if (esProf) {
+            const body = { ...getC(), nombre: f.elements.nombre.value, email: r.user?.email || r.prof?.email || '', telefono: r.prof?.telefono || f.elements.celular.value, activo: true };
+            if (r.prof) await api(`/api/profesionales/profesionales/${r.prof.id}`, { method: 'PATCH', body: { ...body, telefono: r.prof.telefono || f.elements.celular.value, activo: !!r.prof.activo } });
+            else await api('/api/profesionales/profesionales', { method: 'POST', body });
+          } else if (r.prof) await api(`/api/profesionales/profesionales/${r.prof.id}`, { method: 'DELETE' });
+          sucio = false; toast('Guardado'); m_.hide();
+        } catch (ex) { toast(ex.message, false); }
       };
     }
 
@@ -143,24 +145,20 @@ DW.ready.then(async (me) => {
       let mes = hoyMes(), plan = null, pagado = null, items = [], centroId = null;
       const centroDe = (nombreC) => centros.find((x) => x.name.toLowerCase() === String(nombreC || '').toLowerCase())?.id ?? null;
       const total = () => items.reduce((a, x) => a + (Number(x.valor) > 0 ? Math.round(Number(x.valor)) : 0), 0);
-      const grupoDe = (x) => x.grupo || (/^(Sueldo mensual|Pago de \d+ (quincenas|semanas))$/.test(x.concepto || '') ? 'Sueldo' : /^Clase \d+/.test(x.concepto || '') ? 'Clases' : 'Otros');
-      const GRUPOS = { Sueldo: ['bi-wallet2', 'Sueldo'], Clases: ['bi-journal-bookmark', 'Clases que dicta'], Otros: ['bi-plus-circle', 'Otros ítems (bonos, auxilios…)'] };
       const mesAnterior = (m) => { const [y, mm] = m.split('-').map(Number), t = y * 12 + mm - 2; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`; };
 
-      // Los ítems del mes: los guardados, o los que corresponden (sueldo, clases que dicta, otros) con los valores del mes anterior como punto de partida
+      // Los ítems del mes: los guardados, o los de siempre (los del mes anterior) más las clases que dicta, para ponerles valor
       async function cargarMes() {
         const pm = await api(`/api/finanzas/pagos-mes?month=${mes}`).catch(() => ({ planes: [], pagados: [] }));
         plan = pm.planes.find((x) => x.tipo === 'nomina' && x.key === k) || null; pagado = pm.pagados.find((x) => x.tipo === 'nomina' && x.key === refKey(k)) || null;
         if (plan) { items = plan.items.map((x) => ({ ...x })); centroId = plan.cost_center_id; return; }
         const prev = (await api(`/api/finanzas/pagos-mes?month=${mesAnterior(mes)}`).catch(() => ({ planes: [] }))).planes.find((x) => x.tipo === 'nomina' && x.key === k)?.items || [];
-        const sueldoPrev = prev.find((x) => grupoDe(x) === 'Sueldo')?.valor || '', clasePrev = prev.find((x) => grupoDe(x) === 'Clases')?.valor || '';
-        items = []; centroId = centroDe(def.centro);
-        if (FACTOR[def.periodicidad]) items.push({ grupo: 'Sueldo', concepto: BASE[def.periodicidad], valor: sueldoPrev });
+        const clasePrev = prev.find((x) => /^Clase \d+/.test(x.concepto || ''))?.valor || '';
+        items = prev.filter((x) => !/^Clase \d+/.test(x.concepto || '')).map((x) => ({ concepto: x.concepto, valor: x.valor })); centroId = centroDe(def.centro);
         if (d0.profesional_id || r.prof) {
           const cl = await api(`/api/team/nomina/clases?profesional=${d0.profesional_id || r.prof.id}&month=${mes}`).then((x) => x.clases).catch(() => []);
-          for (const c_ of cl) items.push({ grupo: 'Clases', concepto: `Clase ${c_.n} · ${c_.curso}`, detalle: `${c_.fecha}${c_.ini ? ` · ${c_.ini}` : ''}`, valor: clasePrev });
+          for (const c_ of cl) items.push({ auto: true, concepto: `Clase ${c_.n} · ${c_.curso}`, detalle: `${c_.fecha}${c_.ini ? ` · ${c_.ini}` : ''}`, valor: clasePrev });
         }
-        for (const o of prev.filter((x) => grupoDe(x) === 'Otros')) items.push({ grupo: 'Otros', concepto: o.concepto, valor: o.valor });
       }
       const dibuja = () => {
         const bloqueado = !!pagado;
@@ -168,15 +166,14 @@ DW.ready.then(async (me) => {
             <div class="col-md-5"><label class="form-label small mb-1">Centro de costo</label><select class="form-select" data-centro-pago ${bloqueado ? 'disabled' : ''}><option value="">Sin centro de costo</option>${centros.map((x) => `<option value="${x.id}" ${x.id === centroId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
             <div class="col-md-4"><label class="form-label small mb-1">Mes</label><input type="month" class="form-control" data-mes value="${mes}"></div></div>
           ${pagado ? `<div class="alert alert-success py-2"><i class="bi bi-check-circle-fill me-1"></i><b>Pagado ${pesos(pagado.total)}</b> este mes. Los ítems quedan cerrados.</div>` : ''}
-          ${!d0.documento ? '<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>Le falta la cédula o NIT: ponla en la pestaña <b>Datos</b> para que salga en su documento de pago.</div>' : ''}
-          <div class="d-flex align-items-baseline gap-2 mb-2"><h3 class="h6 mb-0">Ítems</h3><span class="small text-body-secondary">Lo que se le paga es el total de los ítems con valor; los vacíos no cuentan.</span></div>
-          ${['Sueldo', 'Clases', 'Otros'].filter((g) => items.some((x) => grupoDe(x) === g) || g === 'Otros').map((g) => { const its = items.map((x, i) => ({ x, i })).filter((o) => grupoDe(o.x) === g), [ico, nom] = GRUPOS[g], cv = its.filter((o) => Number(o.x.valor) > 0).length;
-            return `<div class="card mb-3"><div class="card-header bg-body-tertiary d-flex align-items-center gap-2 py-2"><i class="bi ${ico}"></i><b>${nom}</b>${its.length > 1 ? `<span class="small text-body-secondary">${cv} de ${its.length} con valor</span>` : ''}<span class="ms-auto fw-semibold" data-sub="${g}">${pesos(its.reduce((a, o) => a + (Number(o.x.valor) > 0 ? Math.round(Number(o.x.valor)) : 0), 0))}</span></div>
-              <ul class="list-group list-group-flush">${its.map(({ x, i }) => `<li class="list-group-item d-flex flex-wrap align-items-center gap-2 ${Number(x.valor) > 0 ? '' : 'opacity-75'}" data-i="${i}"><div class="flex-grow-1" style="min-width:180px">${x.detalle || g !== 'Otros' ? `<div class="fw-semibold">${esc(x.concepto)}</div>${x.detalle ? `<div class="small text-body-secondary">${esc(x.detalle)}</div>` : ''}` : `<input class="form-control form-control-sm" data-f="concepto" value="${esc(x.concepto)}" maxlength="200" placeholder="Bono, auxilio…" ${bloqueado ? 'disabled' : ''} aria-label="Concepto">`}</div>
-                <div class="input-group input-group-sm" style="width:170px"><span class="input-group-text">$</span><input class="form-control" type="number" min="0" step="1000" data-f="valor" value="${x.valor || ''}" placeholder="Sin valor" ${bloqueado ? 'disabled' : ''} aria-label="Valor"></div>
-                ${bloqueado || g !== 'Otros' ? '<span style="width:2rem"></span>' : '<button type="button" class="btn btn-sm btn-light" data-quitar aria-label="Quitar"><i class="bi bi-x-lg"></i></button>'}</li>`).join('') || '<li class="list-group-item text-body-secondary small">Aún no hay ítems aquí.</li>'}</ul>
-              ${g === 'Otros' && !bloqueado ? '<div class="card-footer bg-transparent py-2"><button type="button" class="btn btn-sm btn-outline-secondary" data-mas><i class="bi bi-plus-lg me-1"></i>Agregar ítem</button></div>' : ''}</div>`; }).join('')}`;
-        pie.innerHTML = `<span>Se le paga: <b data-total>${pesos(total())}</b>${sucio ? ' <span class="badge text-bg-warning ms-1">Sin guardar</span>' : ''}</span><span class="d-flex gap-2"><button type="button" class="btn btn-light" data-cerrar>Cerrar</button>${pagado || !canManage ? '' : '<button type="button" class="btn btn-outline-primary" data-guardar-items>Guardar</button><button type="button" class="btn btn-primary" data-pagar-fin><i class="bi bi-box-arrow-up-right me-1"></i>Pagar en Finanzas</button>'}</span>`;
+          ${!d0.documento ? '<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>Le falta la cédula o NIT: ponla en <b>Info</b> (el birrete) para que salga en su documento de pago.</div>' : ''}
+          <div class="d-flex align-items-baseline gap-2 mb-2"><h3 class="h6 mb-0">Ítems</h3><span class="small text-body-secondary">El total cubre todo el mes${def.periodicidad === 'semanal' ? ': se paga en 4 partes, una por semana' : def.periodicidad === 'quincenal' ? ': se paga en 2 partes, una por quincena' : ''}. Los ítems sin valor no cuentan.</span></div>
+          <ul class="list-group mb-2">${items.map((x, i) => { const auto = x.auto || /^Clase \d+ · /.test(x.concepto || '');
+            return `<li class="list-group-item d-flex flex-wrap align-items-center gap-2 ${Number(x.valor) > 0 ? '' : 'opacity-75'}" data-i="${i}"><div class="flex-grow-1" style="min-width:180px">${auto ? `<div class="fw-semibold">${esc(x.concepto)}</div>${x.detalle ? `<div class="small text-body-secondary">${esc(x.detalle)}</div>` : ''}` : `<input class="form-control form-control-sm" data-f="concepto" value="${esc(x.concepto)}" maxlength="200" placeholder="Sueldo, bono, auxilio…" ${bloqueado ? 'disabled' : ''} aria-label="Concepto">`}</div>
+              <div class="input-group input-group-sm" style="width:170px"><span class="input-group-text">$</span><input class="form-control" type="number" min="0" step="1000" data-f="valor" value="${x.valor || ''}" placeholder="Sin valor" ${bloqueado ? 'disabled' : ''} aria-label="Valor"></div>
+              ${bloqueado ? '<span style="width:2rem"></span>' : '<button type="button" class="btn btn-sm btn-light" data-quitar aria-label="Quitar"><i class="bi bi-x-lg"></i></button>'}</li>`; }).join('') || '<li class="list-group-item text-body-secondary small">Aún no hay ítems.</li>'}</ul>
+          ${bloqueado ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary" data-mas><i class="bi bi-plus-lg me-1"></i>Agregar ítem</button>'}`;
+        pie.innerHTML = `<span>Total del mes: <b data-total>${pesos(total())}</b>${sucio ? ' <span class="badge text-bg-warning ms-1">Sin guardar</span>' : ''}</span><span class="d-flex gap-2"><button type="button" class="btn btn-light" data-cerrar>Cerrar</button>${pagado || !canManage ? '' : '<button type="button" class="btn btn-outline-primary" data-guardar-items>Guardar</button><button type="button" class="btn btn-primary" data-pagar-fin><i class="bi bi-box-arrow-up-right me-1"></i>Pagar en Finanzas</button>'}</span>`;
       };
       // Guarda los ítems del mes (plan y presupuesto en Finanzas) y lo que se le paga (total, cada cuánto y centro de costo) en la nómina de la persona
       async function guardarItems() {
@@ -197,7 +194,6 @@ DW.ready.then(async (me) => {
         if (li && f) {
           const i = +li.dataset.i; items[i][f] = e.target.value; sucio = true;
           const tt = pie.querySelector('[data-total]'); if (tt) tt.textContent = pesos(total());
-          for (const g of ['Sueldo', 'Clases', 'Otros']) { const el_ = panel.querySelector(`[data-sub="${g}"]`); if (el_) el_.textContent = pesos(items.filter((x) => grupoDe(x) === g).reduce((a, x) => a + (Number(x.valor) > 0 ? Math.round(Number(x.valor)) : 0), 0)); }
           li.classList.toggle('opacity-75', !(Number(items[i].valor) > 0));
           if (!pie.querySelector('.badge')) tt?.insertAdjacentHTML('afterend', ' <span class="badge text-bg-warning ms-1">Sin guardar</span>');
         } else if (e.target.matches('[data-centro-pago]')) { centroId = Number(e.target.value) || null; sucio = true; }
@@ -207,8 +203,7 @@ DW.ready.then(async (me) => {
       };
       if (mo._nom) mo.removeEventListener('click', mo._nom);   // al volver a la pestaña no se duplican los clics
       mo._nom = async (e) => {
-        if (!mo.querySelector('[data-tab="nomina"]')?.classList.contains('active')) return;
-        if (e.target.closest('[data-mas]')) { items.push({ concepto: '', valor: '', grupo: 'Otros' }); sucio = true; dibuja(); return; }
+        if (e.target.closest('[data-mas]')) { items.push({ concepto: '', valor: '' }); sucio = true; dibuja(); return; }
         const q = e.target.closest('[data-quitar]'); if (q) { items.splice(+q.closest('[data-i]').dataset.i, 1); sucio = true; dibuja(); return; }
         if (e.target.closest('[data-guardar-items]')) { await guardarItems(); return; }
         if (e.target.closest('[data-pagar-fin]')) {   // el pago se hace en Finanzas: se guardan los ítems y se abre su pago
@@ -220,7 +215,6 @@ DW.ready.then(async (me) => {
       mo.addEventListener('click', mo._nom);
     }
     m_.show();
-    mo.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     tab === 'nomina' && me.canManage && finanzasOn ? pestanaNomina() : pestanaDatos();
   }
 
@@ -232,24 +226,13 @@ DW.ready.then(async (me) => {
     try { await api(`/api/team/${s.dataset.role}`, { method: 'PATCH', body: { role: s.value } }); toast('Rol actualizado'); load(); } catch (ex) { toast(ex.message, false); load(); }
   });
   list.addEventListener('click', async (e) => {
-    const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), hp = e.target.closest('[data-hacerprof]'), qp = e.target.closest('[data-quitarprof]'), da = e.target.closest('[data-dar]');
+    const l = e.target.closest('[data-link]'), d = e.target.closest('[data-del]'), mo = e.target.closest('[data-mods]'), fi = e.target.closest('[data-ficha]'), da = e.target.closest('[data-dar]');
     const ed = e.target.closest('[data-editar]');
     if (ed) { const r_ = rows().find((x) => personaKey(x) === ed.dataset.editar); if (r_) editarPersona(r_); return; }
+    const nm = e.target.closest('[data-nomina]');
+    if (nm) { const r_ = rows().find((x) => personaKey(x) === nm.dataset.nomina); if (r_) editarPersona(r_, 'nomina'); return; }
     try {
       if (fi) AC.fichaProfesional({ row: profs.find((p) => p.id === +fi.dataset.ficha), areas, changed: load });
-      if (hp) {
-        const u = users.find((x) => x.id === hp.dataset.hacerprof);
-        const r = await api('/api/profesionales/profesionales', { method: 'POST', body: { nombre: u.name || u.email, email: u.email, activo: true } });
-        toast('Ahora también es profesional'); await load();
-        const row = profs.find((p) => p.id === (r.id ?? r.row?.id)) || profs.find((p) => key(p.email) === key(u.email));
-        if (row) AC.fichaProfesional({ row, areas, changed: load });   // para ponerle áreas y horario
-      }
-      if (qp) {
-        const p = profs.find((x) => x.id === +qp.dataset.quitarprof);
-        if (await confirm({ title: `¿Quitar a ${p.nombre} como profesional?`, text: 'Conserva su acceso a la app. Los cursos que dicta quedan sin profesional.', ok: 'Quitar' })) {
-          await api(`/api/profesionales/profesionales/${p.id}`, { method: 'DELETE' }); toast('Ya no es profesional'); load();
-        }
-      }
       if (da) { const p = profs.find((x) => x.id === +da.dataset.dar); invitar({ email: p.email, name: p.nombre }, p.id); }
       if (mo) {
         const u = users.find((x) => x.id === mo.dataset.mods);

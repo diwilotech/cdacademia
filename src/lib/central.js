@@ -91,7 +91,7 @@ export async function recurrenteNomina(c, p) {
     // Próximo cobro al crearla: fin de mes (mensual, por clase u hora), el 15 o el fin de mes (quincenal) o el próximo viernes (semanal)
     const viernes = new Date(Date.parse(`${hoy}T12:00:00Z`) + ((5 - new Date(`${hoy}T12:00:00Z`).getUTCDay() + 7) % 7) * 864e5).toISOString().slice(0, 10);
     const next = p.periodicidad === 'quincenal' ? (d <= 15 ? `${hoy.slice(0, 7)}-15` : fin) : p.periodicidad === 'semanal' ? viernes : fin;
-    const body = { ref: `academia:nomina:${p.key}`, name: `Nómina · ${p.nombre}`, vendor: p.nombre, tax_id: p.documento ? `${p.tipo_documento || 'CC'} ${p.documento}` : null, category: 'nomina', amount: p.valor || 0,
+    const body = { ref: `academia:nomina:${p.key}`, name: `Nómina · ${p.nombre}`, vendor: p.nombre, tax_id: p.documento ? `${p.tipo_documento || 'CC'} ${p.documento}` : null, category: 'nomina', amount: Math.round((p.valor || 0) / ({ quincenal: 2, semanal: 4 }[p.periodicidad] || 1)),   // el total cubre el mes: cada pago es una parte
       cycle: ['quincenal', 'semanal'].includes(p.periodicidad) ? p.periodicidad : 'mensual', next_date: next, centro_costo: p.centro_costo || null,
       notes: p.periodicidad === 'clase' ? 'Pago por clase' : p.periodicidad === 'hora' ? 'Pago por hora' : null, url: `/staff/equipo.html#pago:${p.key}`, active: !!(p.valor > 0) };
     const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/recurring/externo', body: JSON.stringify(body) });

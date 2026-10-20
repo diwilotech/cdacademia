@@ -137,6 +137,11 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   check('Clase: el equipo ve el examen enviado', (await A.app(`/api/cursos/${k1.data.id}/examenes/${evp.data.id}/${c1.id}`)).data.archivos?.length === 1);
   const mes = await S(`/api/alumno/calendario?desde=${lunes(hoy)}&hasta=${mas(34)}`);
   check('Calendario: el rango de un mes completo responde', mes.status === 200 && mes.data.clases.length > 0);
+  const cal = (await S(`/api/alumno/calendario?desde=${hoy}&hasta=${hoy}`)).data.clases.find((x) => x.n === claseHoy.n);
+  check('Calendario: cada clase dice si tiene examen y cómo va', cal?.evaluaciones?.length === 2 && cal.evaluaciones.some((e) => e.nombre === 'Quiz contorno' && e.estado === 'nota' && e.nota === 5) && cal.evaluaciones.some((e) => e.nombre === 'Práctica en papel' && e.estado === 'enviado'), JSON.stringify(cal?.evaluaciones));
+  const calF = (await S(`/api/alumno/calendario?desde=${claseFut.fecha}&hasta=${claseFut.fecha}`)).data.clases.find((x) => x.n === claseFut.n);
+  check('Calendario: el examen de una clase futura sale pendiente', calF?.evaluaciones?.[0]?.estado === 'pendiente', JSON.stringify(calF?.evaluaciones));
+  check('Notas: cada evaluación dice a qué clase pertenece', (await S(`/api/alumno/curso/${c1.id}`)).data.evaluaciones.every((e) => 'clase_n' in e && 'enviado' in e));
   check('Inicio: marca la clase de hoy', (await S('/api/alumno/inicio')).data.cursos.find((c) => c.id === c1.id)?.clase_hoy?.n === claseHoy.n);
 
   // IA Diwilo (botón flotante del panel): el equipo pregunta; el estudiante no

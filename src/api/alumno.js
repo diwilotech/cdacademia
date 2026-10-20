@@ -79,7 +79,7 @@ export function routes(r) {
     const desde = DATE.test(q.get('desde') || '') ? q.get('desde') : today(), hasta = DATE.test(q.get('hasta') || '') ? q.get('hasta') : addDays(desde, 6);
     if (dias(desde, hasta) > 62) throw new HttpError(400, 'El rango es muy largo');
     const [clases, repos] = await Promise.all([
-      all(c.env, `SELECT i.id AS matricula_id, cl.n, cl.fecha, cl.ini, cl.fin, cl.tema, cl.virtual, k.nombre AS curso, k.num_clases, a.color, p.nombre AS profesional, s.estado AS asistencia
+      all(c.env, `SELECT i.id AS matricula_id, k.id AS curso_id, cl.n, cl.fecha, cl.ini, cl.fin, cl.tema, cl.virtual, k.nombre AS curso, k.num_clases, a.color, p.nombre AS profesional, s.estado AS asistencia
         FROM ac_inscripciones i JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
         JOIN ac_clases cl ON cl.curso_id = k.id AND cl.business_id = k.business_id
         LEFT JOIN ac_areas a ON a.id = k.area_id AND a.business_id = k.business_id LEFT JOIN ac_profesionales p ON p.id = k.profesional_id AND p.business_id = k.business_id
@@ -91,6 +91,14 @@ export function routes(r) {
         LEFT JOIN ac_areas a ON a.id = k.area_id AND a.business_id = k.business_id
         WHERE r.business_id = ? AND i.estudiante_id = ? AND r.estado IN ('agendada','hecha') AND e.fecha BETWEEN ? AND ? ORDER BY e.fecha, e.ini`, c.businessId, c.estudiante.id, desde, hasta),
     ]);
+    // Las evaluaciones se manejan por clase: cada clase del calendario dice si tiene examen y cómo va (pendiente, enviado o con nota)
+    if (clases.length) {
+      const evs = await all(c.env, `SELECT e.id, e.curso_id, e.clase_n, e.nombre, e.tipo, i.id AS matricula_id, x.enviado_at, n.nota FROM ac_evaluaciones e JOIN ac_inscripciones i ON i.curso_id = e.curso_id AND i.business_id = e.business_id
+        LEFT JOIN ac_examenes x ON x.evaluacion_id = e.id AND x.inscripcion_id = i.id AND x.business_id = e.business_id LEFT JOIN ac_notas n ON n.evaluacion_id = e.id AND n.inscripcion_id = i.id AND n.business_id = e.business_id
+        WHERE e.business_id = ? AND i.estudiante_id = ? AND i.estado = 'activa' AND e.clase_n IS NOT NULL`, c.businessId, c.estudiante.id);
+      for (const cl of clases) cl.evaluaciones = evs.filter((e) => e.matricula_id === cl.matricula_id && e.clase_n === cl.n)
+        .map((e) => ({ id: e.id, nombre: e.nombre, estado: e.nota != null ? 'nota' : e.enviado_at ? 'enviado' : cl.fecha < today() ? 'vencida' : 'pendiente', nota: e.nota ?? null }));
+    }
     return json({ desde, hasta, hoy: today(), clases, reposiciones: repos });
   });
 
@@ -109,11 +117,12 @@ export function routes(r) {
       comprobantesDe(c, i.id),
     ]);
     const asis = resumenAsis(marcas, new Set(repos.filter((x) => x.estado === 'hecha').map((x) => x.clase_n))), nts = resumenNotas(notas, evs);
+    const enviados = new Set((await all(c.env, 'SELECT evaluacion_id FROM ac_examenes WHERE business_id = ? AND inscripcion_id = ? AND enviado_at IS NOT NULL', c.businessId, i.id)).map((x) => x.evaluacion_id));
     const total = i.valor - i.descuento, saldo = Math.max(0, total - pag.s);
     return json({ matricula: { id: i.id, curso: i.curso, nivel: i.nivel, color: i.color, profesional: i.profesional },
       pagos: { total, pagado: pag.s, saldo, cuotas: estadoCuotas(cuotas, pag.s), comprobantes, finanzas: (await activeModuleIds(c.env, c.businessId)).includes('finanzas') && cfg.cuentaCobro !== false }, hoy: today(), escala: cfg.escala, notaMin: cfg.notaMin, asisMin: cfg.asisMin,
       clases: clases.map((x) => ({ ...x, asistencia: marcas.find((m) => m.clase_n === x.n)?.estado || null, reposicion: repos.find((m) => m.clase_n === x.n)?.estado || null })),
-      evaluaciones: evs.map((x) => ({ ...x, nota: notas.find((n) => n.evaluacion_id === x.id)?.nota ?? null })),
+      evaluaciones: evs.map((x) => ({ ...x, nota: notas.find((n) => n.evaluacion_id === x.id)?.nota ?? null, enviado: enviados.has(x.id) })),
       asistencia: asis, notas: nts, academico: estadoAcad(asis, nts, cfg) });
   });
 

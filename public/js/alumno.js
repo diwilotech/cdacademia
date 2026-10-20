@@ -69,9 +69,9 @@
     host.innerHTML = `<div class="d-flex align-items-center gap-2 mb-3 flex-wrap"><div class="btn-group" role="group" aria-label="Vista"><button class="btn btn-outline-primary" data-modo="semana">Semana</button><button class="btn btn-outline-primary" data-modo="mes">Mes</button></div>
       <button class="btn btn-light ms-auto" data-prev aria-label="Anterior"><i class="bi bi-chevron-left"></i></button><b class="text-center" style="min-width:9rem" data-rango></b><button class="btn btn-light" data-next aria-label="Siguiente"><i class="bi bi-chevron-right"></i></button><button class="btn btn-light" data-hoy>Hoy</button></div><div data-tabla></div>`;
     let datos = { clases: [], reposiciones: [] };
-    const evClase = (x, corto) => `<a class="dw-ev ${x.fecha === D.hoy ? 'dw-ev--hoy' : ''}" ${colorOk(x.color)} href="#" data-clase="${x.matricula_id}:${x.n}"><b>${esc(h12(x.ini))}${!corto && x.fin ? ` – ${esc(h12(x.fin))}` : ''}</b>
+    const evClase = (x, corto) => `<a class="dw-ev ${x.fecha === D.hoy ? 'dw-ev--hoy' : ''}" ${colorOk(x.color)} href="#" data-clase="${x.matricula_id}:${x.n}"><b>${esc(h12(x.ini))}${!corto && x.fin ? ` – ${esc(h12(x.fin))}` : ''}</b>${corto && x.evaluaciones?.length ? ` ${x.evaluaciones.map((e) => chipEval(e, true)).join('')}` : ''}
         <span class="d-block text-truncate">${esc(x.curso)}</span>${corto ? '' : `<span class="text-body-secondary">Clase ${x.n} de ${x.num_clases}${x.tema ? ` · ${esc(x.tema)}` : ''}${x.virtual ? ' · virtual' : ''}</span>
-        ${x.asistencia && ASIS[x.asistencia] ? `<span class="d-block">${C.chip(...ASIS[x.asistencia])}</span>` : ''}`}</a>`;
+        ${x.asistencia && ASIS[x.asistencia] ? `<span class="d-block">${C.chip(...ASIS[x.asistencia])}</span>` : ''}${x.evaluaciones?.length ? `<span class="d-block">${x.evaluaciones.map((e) => `<span title="${esc(e.nombre)}">${chipEval(e)}</span>`).join(' ')}</span>` : ''}`}</a>`;
     const evRepo = (x, corto) => `<a class="dw-ev dw-ev--repo" href="#" data-curso="${x.matricula_id}"><b>${esc(h12(x.ini))}${corto ? '' : ` – ${esc(h12(x.fin))}`}</b><span class="d-block text-truncate"><i class="bi bi-arrow-repeat me-1"></i>Reposición · ${esc(x.curso)}</span>${corto ? '' : `<span class="text-body-secondary">Clase ${x.clase_n}${x.modo === 'virtual' ? ' · virtual' : ''}</span>`}</a>`;
     const marcaInicio = (f) => (opts.inicios || []).filter((x) => x.fecha === f).map((x) => `<div class="dw-ev dw-ev--inicio"><i class="bi bi-flag-fill me-1"></i><b>Inicio</b> · ${esc(x.curso)}<span class="d-block">${faltan(Math.round((Date.parse(f) - Date.parse(D.hoy)) / 864e5))}</span></div>`).join('');
     const filtro = (l) => l.filter((x) => !opts.matricula || x.matricula_id === opts.matricula);
@@ -126,6 +126,11 @@
     return load();
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  // Las evaluaciones se manejan por clase: cada clase dice si tiene examen y cómo va
+  const chipEval = (e, corto) => {
+    const [tono, txt] = e.estado === 'nota' ? ['ok', `Nota ${Number(e.nota).toFixed(1)}`] : e.estado === 'enviado' ? ['soon', 'Enviado'] : e.estado === 'vencida' ? ['bad', 'Sin presentar'] : ['soon', 'Examen'];
+    return corto ? `<i class="bi bi-pencil-square ${tono === 'ok' ? 'text-success' : tono === 'bad' ? 'text-danger' : 'text-warning'}" title="${esc(`${e.nombre}: ${txt}`)}"></i>` : C.chip(tono, `${e.estado === 'pendiente' ? 'Examen' : txt}`) + (e.estado === 'pendiente' ? '' : '');
+  };
 
   /* ---------- la clase: material del día, mi trabajo y evaluaciones ---------- */
   const fmtTam = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -257,15 +262,16 @@
     const futuros = D.cursos.filter((c) => c.estado === 'por_iniciar').sort((a, b) => a.inicio.localeCompare(b.inicio));
     const enCurso = D.cursos.some((c) => c.estado === 'en_curso');
     const ancla = !enCurso && futuros.length ? futuros[0].inicio : D.hoy;
-    v.innerHTML = `<div class="dw-page-head"><h1>Hola, ${esc(D.estudiante.nombre.split(' ')[0])}</h1></div>
+    v.innerHTML = `<div class="dw-page-head"><h1>Hola, ${esc(D.estudiante.nombre.split(' ')[0])}</h1><button class="btn btn-primary" data-pagos-general><i class="bi bi-cash-coin me-1"></i>Pagos</button></div>
       ${tarjetaHoy()}
-      <div class="dw-grid mb-4">${D.cursos.map((c) => `<a href="#" class="dw-card dw-curso" ${colorOk(c.color)} data-abrir="${c.id}">
+      <div class="dw-grid mb-4">${D.cursos.map((c) => `<div class="dw-card dw-curso" ${colorOk(c.color)} data-abrir="${c.id}" role="button" tabindex="0">
         <div class="d-flex justify-content-between align-items-start gap-2"><b>${esc(c.curso)}</b>${c.estado === 'por_iniciar' ? C.chip('soon', faltan(c.empieza_en)) : C.chip(c.academico[0], c.academico[1])}</div>
         <div class="small text-body-secondary mt-1">${esc(proxima(c))}</div>
         <div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:${c.total_clases ? Math.round((c.hechas / c.total_clases) * 100) : 0}%"></div></div>
-        <div class="small text-body-secondary mt-1">${c.hechas} de ${c.total_clases} clases</div></a>`).join('')}</div>
+        <div class="d-flex align-items-center gap-2 mt-2"><span class="small text-body-secondary flex-grow-1">${c.hechas} de ${c.total_clases} clases</span>${c.vencido > 0 ? C.chip('bad', 'Pago vencido') : c.saldo > 0 ? `<span class="small text-body-secondary">Saldo ${C.money(c.saldo)}</span>` : C.chip('ok', 'Al día')}
+          <button type="button" class="btn btn-sm btn-outline-primary" data-pagos="${c.id}"><i class="bi bi-cash-coin me-1"></i>Pagos</button></div></div>`).join('')}</div>
       <h2 class="h5 mb-3">Mi calendario</h2><div data-sem></div>`;
-    v.onclick = (e) => { const a = e.target.closest('[data-abrir]'); if (a) { e.preventDefault(); abrir(Number(a.dataset.abrir)); } };
+    v.onclick = (e) => { if (e.target.closest('[data-pagos],[data-pagos-general]')) return; const a = e.target.closest('[data-abrir]'); if (a) { e.preventDefault(); abrir(Number(a.dataset.abrir)); } };
     calendario($('[data-sem]'), { ancla, inicios: futuros.map((c) => ({ fecha: c.inicio, curso: c.curso })), abrir, clase: claseModal });
   }
 
@@ -276,7 +282,7 @@
     let d; try { d = await api(`/api/alumno/curso/${id}`); } catch (x) { v.innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
     const prom = d.notas.prom == null ? '—' : Number(d.notas.prom).toFixed(1);
     const ant = d.clases.filter((x) => x.fecha && x.fecha < D.hoy);
-    v.innerHTML = `<div class="dw-page-head">${conVolver ? '<button class="btn btn-light" data-volver aria-label="Volver"><i class="bi bi-arrow-left"></i></button>' : ''}<h1>${conVolver ? esc(c.curso) : `Hola, ${esc(D.estudiante.nombre.split(' ')[0])}`}</h1>${C.chip(c.academico[0], c.academico[1])}</div>
+    v.innerHTML = `<div class="dw-page-head">${conVolver ? '<button class="btn btn-light" data-volver aria-label="Volver"><i class="bi bi-arrow-left"></i></button>' : ''}<h1>${conVolver ? esc(c.curso) : `Hola, ${esc(D.estudiante.nombre.split(' ')[0])}`}</h1>${C.chip(c.academico[0], c.academico[1])}<button class="btn btn-primary ms-auto" data-pagos="${id}"><i class="bi bi-cash-coin me-1"></i>Pagos</button></div>
       ${conVolver ? '' : `<div class="text-body-secondary mb-3">${esc(c.curso)}${c.nivel ? ` · ${esc(c.nivel)}` : ''}</div>`}
       ${cuenta(c)}${tarjetaHoy()}
       <div class="dw-grid mb-4">
@@ -292,12 +298,13 @@
       <div class="row g-4"><div class="col-lg-7"><h2 class="h5 mb-3">Mis clases</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
         ${d.clases.map((x) => `<li class="list-group-item d-flex gap-2 align-items-center ${x.fecha === D.hoy ? 'bg-body-tertiary' : ''}" ${x.fecha && x.fecha <= D.hoy ? `role="button" data-clase-hoy="${id}:${x.n}"` : ''}><span class="text-body-secondary" style="width:2rem">${x.n}</span>
           <div class="flex-grow-1"><div class="small fw-semibold">${esc(x.tema || `Clase ${x.n}`)}${x.virtual ? ' · virtual' : ''}</div><div class="small text-body-secondary">${x.fecha ? `${esc(dia(x.fecha))}${x.ini ? ` · ${esc(h12(x.ini))}` : ''}` : 'Sin fecha'}</div></div>
+          ${d.evaluaciones.filter((e) => e.clase_n === x.n).map((e) => `<span title="${esc(e.nombre)}">${chipEval({ ...e, estado: e.nota != null ? 'nota' : e.enviado ? 'enviado' : x.fecha && x.fecha < D.hoy ? 'vencida' : 'pendiente' })}</span>`).join('')}
           ${x.asistencia && ASIS[x.asistencia] ? C.chip(...ASIS[x.asistencia]) : x.fecha && x.fecha < D.hoy ? '' : x.fecha === D.hoy ? C.chip('soon', 'Hoy') : ''}
           ${x.reposicion ? C.chip(x.reposicion === 'hecha' ? 'ok' : 'soon', x.reposicion === 'hecha' ? 'Repuesta' : 'Reposición') : ''}${x.fecha && x.fecha <= D.hoy ? '<i class="bi bi-chevron-right text-body-secondary"></i>' : ''}</li>`).join('') || `<li class="list-group-item">${empty('bi-calendar-x', 'Aún no hay clases programadas.')}</li>`}
         </ul></div>${ant.length ? '' : ''}</div>
         <div class="col-lg-5"><h2 class="h5 mb-3">Mis notas</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
-        ${d.evaluaciones.map((x) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${esc(x.nombre)}<span class="small text-body-secondary d-block">${x.peso}% del curso</span></span>
-          <b class="${x.nota != null && x.nota < d.notaMin ? 'text-danger' : ''}">${x.nota == null ? '—' : Number(x.nota).toFixed(1)}</b></li>`).join('') || `<li class="list-group-item small text-body-secondary">Este curso aún no tiene evaluaciones.</li>`}
+        ${[...d.evaluaciones].sort((p, q) => (p.clase_n ?? 999) - (q.clase_n ?? 999)).map((x) => `<li class="list-group-item d-flex justify-content-between align-items-center" ${x.clase_n && d.clases.find((k) => k.n === x.clase_n)?.fecha <= D.hoy ? `role="button" data-clase-hoy="${id}:${x.clase_n}"` : ''}><span>${esc(x.nombre)}<span class="small text-body-secondary d-block">${x.clase_n ? `Clase ${x.clase_n}` : 'General'} · ${x.peso}% del curso</span></span>
+          <b class="${x.nota != null && x.nota < d.notaMin ? 'text-danger' : ''}">${x.nota == null ? (x.enviado ? '<span class="small fw-normal text-body-secondary">En revisión</span>' : '—') : Number(x.nota).toFixed(1)}</b></li>`).join('') || `<li class="list-group-item small text-body-secondary">Este curso aún no tiene evaluaciones.</li>`}
         </ul></div></div></div>`;
     const volver = $('[data-volver]'); if (volver) volver.onclick = () => vistaGeneral();
     calendario($('[data-sem]'), { matricula: id, ancla: c.estado === 'por_iniciar' ? c.inicio : D.hoy, inicios: c.estado === 'por_iniciar' ? [{ fecha: c.inicio, curso: c.curso }] : [], abrir: null, clase: claseModal });
@@ -322,9 +329,28 @@
     } catch (_) { return file; }
   }
 
-  function pagos(host, id, d, c) {
+  // «Pagos» desde cualquier parte: cuotas, subir comprobante, cuenta de cobro y recibos de un curso (o el listado si tiene varios)
+  async function pagosModal(id) {
+    const { el } = window.App.modal('<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Pagos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body" data-p><div class="placeholder-glow"><span class="placeholder col-8"></span></div></div>', { size: 'modal-lg' });
+    const c = D.cursos.find((x) => x.id === id), host = $('[data-p]', el);
+    try { const d = await api(`/api/alumno/curso/${id}`); $('.modal-title', el).textContent = `Pagos · ${c.curso}`; pagos(host, id, d, c, true); } catch (x) { host.innerHTML = `<div class="text-danger">${esc(x.message)}</div>`; }
+  }
+  function pagosGeneral() {
+    if (D.cursos.length === 1) return pagosModal(D.cursos[0].id);
+    const { el, m } = window.App.modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Pagos</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body"><p class="small text-body-secondary">Elige el curso para ver tus cuotas, subir un comprobante o abrir tus recibos.</p><ul class="list-group">${D.cursos.map((c) => `<li class="list-group-item d-flex flex-wrap gap-2 align-items-center">
+        <div class="flex-grow-1"><b>${esc(c.curso)}</b><div class="small text-body-secondary">${c.saldo > 0 ? `Saldo ${C.money(c.saldo)}${c.proxima_cuota ? ` · próxima cuota ${C.day(c.proxima_cuota.vence)}` : ''}` : 'Sin saldo pendiente'}</div></div>
+        ${c.vencido > 0 ? C.chip('bad', `Vencido ${C.money(c.vencido)}`) : c.saldo > 0 ? '' : C.chip('ok', 'Al día')}<button class="btn btn-sm btn-primary" data-ir="${c.id}">Ver pagos</button></li>`).join('')}</ul></div>`);
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-ir]'); if (b) { m.hide(); pagosModal(Number(b.dataset.ir)); } });
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pagos]'); if (b) { e.preventDefault(); pagosModal(Number(b.dataset.pagos)); return; }
+    if (e.target.closest('[data-pagos-general]')) pagosGeneral();
+  });
+
+  function pagos(host, id, d, c, soloCuerpo) {
     const p = d.pagos, ruta = `/api/alumno/curso/${id}`;
-    host.innerHTML = `<h2 class="h5 mb-3">Pagos</h2><div class="dw-card">
+    host.innerHTML = `${soloCuerpo ? '' : '<h2 class="h5 mb-3">Pagos</h2>'}<div class="dw-card">
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><div class="flex-grow-1"><div class="small text-body-secondary">Pagado ${C.money(p.pagado)} de ${C.money(p.total)}</div><div class="fw-semibold ${c.vencido > 0 ? 'text-danger' : ''}">Saldo ${C.money(p.saldo)}</div></div>
         ${p.finanzas ? `<a class="btn btn-outline-secondary" href="${ruta}/cuenta-de-cobro" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1"></i>Cuenta de cobro</a>` : ''}
         ${p.saldo > 0 ? '<button class="btn btn-primary" data-subir><i class="bi bi-upload me-1"></i>Subir comprobante</button>' : ''}</div>

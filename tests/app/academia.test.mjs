@@ -234,6 +234,14 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Centrales: el personal no ve Finanzas (403)', (await S.app('/api/finanzas/summary')).status === 403);
   const ct = await A.app('/api/marketing/contacts', { method: 'POST', body: { name: 'Lead central' } });
   check('Centrales: Marketing guarda y queda en la bitácora de la app', ct.status === 201 && (await A.app('/api/settings/bitacora')).data.items?.some((x) => x.modulo === 'marketing'));
+  // Embudo de matrícula: campaña con su link, página pública de matrícula, lead del link y paso a cliente al matricular
+  const camp = await A.app('/api/marketing/campaigns', { method: 'POST', body: { name: 'Campaña matrícula', channel: 'meta_ads', start_date: '2026-01-01' } });
+  const lk = (await A.app(`/api/marketing/campaigns/${camp.data.id}/links`)).data.links || [];
+  check('Embudo: la campaña nace con su link de rastreo a /matricula', lk.length === 1 && lk[0].target === '/matricula', JSON.stringify(lk));
+  const pw = await A.app(`/${A.created.data.slug}/matricula?ref=${lk[0]?.slug}`);
+  check('Embudo: la página pública de matrícula responde', pw.status === 200 && pw.data.text?.includes('Matrículas'));
+  const pl = await A.app(`/${A.created.data.slug}/matricula`, { method: 'POST', body: { name: 'Interesada Web', phone: '3001112233', email: 'web@ejemplo.com', ref: lk[0]?.slug } });
+  check('Embudo: quien deja sus datos queda como interesado del link', pl.status === 200 && (await A.app(`/api/marketing/campaigns/${camp.data.id}/links`)).data.links?.[0]?.leads === 1);
   check('Centrales: B no ve los contactos de A', (await B.app('/api/marketing/contacts')).data.rows?.length === 0);
 
   // IA (MCP)

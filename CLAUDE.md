@@ -30,6 +30,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 
 - Nómina (migraciones 0017/0018/0019, rutas en `src/api/team.js`, editor en `public/js/pages/equipo.js`): en **Equipo** cada persona tiene dos botones: el birrete abre **Info** (nombre, tipo de documento, número, celular y el interruptor «Es profesional», que muestra juntos áreas, niveles y horario — `AC.profCampos`; sin marcar no es profesional) y el **$** abre **Nómina** (`ac_nomina`, `persona` = `u:<usuario>` | `p:<profesional>`): una sola lista de **ítems** del mes (sueldo, bonos, clases del profesional), cada cuánto y centro de costo; el total cubre el mes. «Guardar» deja el plan en Finanzas (`/api/finanzas/pagos-mes`) y `recurrenteNomina` (lib/central.js) crea/actualiza el gasto recurrente tipo Nómina (`ref academia:nomina:<persona>`, amount = total ÷ 4 semanas o ÷ 2 quincenas, no se cobra solo). **El pago se hace en Finanzas** (botón Pagar, cuentas divididas, una parte por semana/quincena); «Pagar en Finanzas» de Equipo lo abre (`#pagar:<id>`). Solo propietario/admin.
 
+- Matrícula pública y embudo (Marketing): `/<negocio>/matricula` (`src/lib/matricula-web.js`, sin sesión; GET página con los cursos abiertos, POST interés → RPC `MODULOS.lead`). Las campañas de la academia nacen con un link `/l/<slug>` a `/matricula` (central.js lo resuelve a `/<negocio>/matricula?ref=<slug>`); al matricular (`matriculadoMarketing`) el lead pasa a cliente. Requiere Diwilo Modulos ≥ marketing 1.7.0 (migración 0017): desplegar ese primero.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

@@ -9,7 +9,7 @@ import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { generarCuotas, estadoCuotas, parse, getConfig } from '../lib/academia.js';
-import { finanzasLeer, finanzasPagina, cuentaDeCobro } from '../lib/central.js';
+import { finanzasLeer, finanzasPagina, cuentaDeCobro, matriculadoMarketing } from '../lib/central.js';
 
 const MOD = 'matriculas';
 const FREQ = ['mensual', 'quincenal', 'semanal'];
@@ -120,7 +120,7 @@ export function routes(r) {
 
   r.post('/api/matriculas', `manager:${MOD}`, async (c) => {
     const b = await readJson(c.req);
-    const est = await one(c.env, 'SELECT id, nombre FROM ac_estudiantes WHERE id = ? AND business_id = ?', cast('estudiante', 'int!', b.estudiante_id), c.businessId);
+    const est = await one(c.env, 'SELECT id, nombre, email, telefono FROM ac_estudiantes WHERE id = ? AND business_id = ?', cast('estudiante', 'int!', b.estudiante_id), c.businessId);
     const k = await one(c.env, 'SELECT id, nombre, precio FROM ac_cursos WHERE id = ? AND business_id = ?', cast('curso', 'int!', b.curso_id), c.businessId);
     if (!est || !k) throw new HttpError(400, 'Estudiante o curso no válido');
     if (await one(c.env, 'SELECT 1 FROM ac_inscripciones WHERE business_id = ? AND estudiante_id = ? AND curso_id = ?', c.businessId, est.id, k.id)) throw new HttpError(409, `${est.nombre} ya está matriculado en ${k.nombre}`);
@@ -136,6 +136,7 @@ export function routes(r) {
     if (cupon) await c.env.DB.prepare('UPDATE ac_cupones SET usos = usos + 1, updated_at = ? WHERE id = ? AND business_id = ?').bind(t, cupon.id, c.businessId).run();
     await audit(c, `Matriculó a ${est.nombre} en «${k.nombre}» por $${(valor - descuento).toLocaleString('es-CO')}${cupon ? ` (cupón ${cupon.codigo})` : ''}`, { modulo: MOD });
     const cuenta = await cuentaDeMatricula(c, ins.id);   // cuenta de cobro automática en Finanzas
+    await matriculadoMarketing(c, est);   // embudo de Marketing: el lead de esta persona pasa a cliente
     return json({ id: ins.id, total: valor - descuento, cuotas, cuenta_de_cobro: cuenta?.number || null }, 201);
   });
 

@@ -171,7 +171,13 @@ export async function centralPublic(env, url, req) {
     const biz = await env.DB.prepare("SELECT 1 FROM businesses WHERE id = ? AND status = 'active' AND archived_at IS NULL").bind(l.business_id).first();
     if (!biz || !(await activeModuleIds(env, l.business_id)).includes('marketing')) return notFound();
     await env.MODULOS.click(APP.id, l.id);
-    return new Response(null, { status: 302, headers: { location: l.url, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer-when-downgrade' } });
+    // Destino de la propia app (/matricula): va a la página de ese negocio
+    let destino = l.url;
+    if (destino.startsWith('/')) {
+      const b = await env.DB.prepare('SELECT slug FROM businesses WHERE id = ?').bind(l.business_id).first();
+      destino = `${url.origin}/${b?.slug || ''}${destino}`;
+    }
+    return new Response(null, { status: 302, headers: { location: destino, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer-when-downgrade' } });
   }
   // Tarjetas de presentación (Marketing): /c/<slug>, su foto, íconos, manifest, vCard y service worker
   if (url.pathname.startsWith('/c/') && CENTRALES.includes('marketing')) {
@@ -228,4 +234,16 @@ export async function centralTools(env) {
 export async function centralUso(env, businessId) {
   if (!CENTRALES.length || !env.MODULOS) return {};
   try { const u = await env.MODULOS.uso(APP.id, businessId); return Object.fromEntries(CENTRALES.map((id) => [id, u[id] ?? 0])); } catch { return {}; }
+}
+
+// Embudo de matrícula (Marketing): la página pública deja al interesado como lead del link; al matricularlo pasa a cliente. Nunca hace fallar la operación.
+export async function leadMatricula(env, businessId, datos) {
+  if (!env.MODULOS || !CENTRALES.includes('marketing') || !(await activeModuleIds(env, businessId)).includes('marketing')) return null;
+  return env.MODULOS.lead(APP.id, businessId, datos);
+}
+export async function matriculadoMarketing(c, est) {
+  try {
+    if (!est || !c.env.MODULOS || !CENTRALES.includes('marketing') || !(await activeModuleIds(c.env, c.businessId)).includes('marketing')) return;
+    await c.env.MODULOS.matriculado(APP.id, c.businessId, { email: est.email, phone: est.telefono });
+  } catch { /* el embudo es opcional */ }
 }

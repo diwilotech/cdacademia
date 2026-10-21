@@ -30,6 +30,7 @@ import * as alumnoApi from './api/alumno.js';
 import * as comprobantesApi from './api/comprobantes.js';
 import * as trabajoApi from './api/trabajo.js';
 import { ver } from './lib/ver.js';
+import { matriculaWeb } from './lib/matricula-web.js';
 import { isCentralApi, centralModuleOf, centralApi, centralPage, centralAsset, centralPublic } from './lib/central.js';
 import { CENTRALES } from './lib/modules.js';
 
@@ -106,6 +107,9 @@ const worker = {
         if (s?.business_id && s.role) return aPanel(url, s.business_slug);
         return withHeaders(await asset(env, req, '/'), SECURITY_HEADERS);
       }
+      // Página pública de matrícula de un negocio: /<negocio>/matricula (GET la página, POST el interés)
+      const mw = /^\/([a-z0-9][a-z0-9-]{0,39})\/matricula\/?$/.exec(url.pathname);
+      if (mw && ['GET', 'POST'].includes(req.method) && !RESERVADAS.has(mw[1])) return matriculaWeb(req, env, url, mw[1]);
       // /<dirección del negocio>: el panel (con sesión de ese negocio) o el ingreso.
       const seg = url.pathname.replace(/^\/|\/$/g, '');
       if (req.method === 'GET' && SLUG.test(seg) && !RESERVADAS.has(seg)) {

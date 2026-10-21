@@ -29,10 +29,11 @@ DW.ready.then(async (me) => {
     const clasesAntes = new Map((det?.clases || []).map((x) => [x.n, x]));
     // módulos = rangos de clases con el mismo material
     const modulos = [];
-    if (!duplicar || det) for (const cl of det?.clases || []) {
-      if (!cl.material_id) continue;
-      const u = modulos.at(-1);
-      if (u && u.material_id === cl.material_id && u.hasta === cl.n - 1) u.hasta = cl.n; else modulos.push({ material_id: cl.material_id, desde: cl.n, hasta: cl.n });
+    if (!duplicar || det) {   // por material: sus clases seguidas forman un rango (una clase puede tener hasta dos materiales)
+      const porMat = new Map();
+      for (const cl of det?.clases || []) for (const mid of [cl.material_id, cl.material2_id]) if (mid) porMat.set(mid, [...(porMat.get(mid) || []), cl.n]);
+      for (const [mid, ns] of porMat) { let u = null; for (const n of ns) { if (u && u.hasta === n - 1) u.hasta = n; else { u = { material_id: mid, desde: n, hasta: n }; modulos.push(u); } } }
+      modulos.sort((a, b) => a.desde - b.desde || a.hasta - b.hasta);
     }
     const cupones = (det?.cupones || []).map((x) => ({ id: duplicar ? null : x.id, codigo: x.codigo, tipo: x.tipo, valor: x.valor, hasta: x.hasta || '', max: x.max || '', usos: duplicar ? 0 : x.usos }));
     const quitados = [];
@@ -149,7 +150,7 @@ DW.ready.then(async (me) => {
           <select class="form-select" style="flex:1 1 240px" data-k="material_id" aria-label="Módulo">${opcionesMat(r.material_id)}</select>
           <span class="small">Clases</span><input class="form-control" style="width:78px" type="number" min="1" data-k="desde" value="${r.desde}" aria-label="Desde la clase"><span class="small">a</span><input class="form-control" style="width:78px" type="number" min="1" data-k="hasta" value="${r.hasta}" aria-label="Hasta la clase">
           <button type="button" class="btn btn-sm btn-light" data-quitar-mod aria-label="Quitar módulo"><i class="bi bi-x-lg"></i></button></div>`).join('')
-        : '<div class="small text-body-secondary">Aún no hay módulos en este curso. Agrega uno y dile en qué clases va.</div>';
+        : '<div class="small text-body-secondary">Aún no hay módulos en este curso. Agrega uno y dile en qué clases va (hasta dos por clase: cuando uno termina y otro empieza).</div>';
     };
     pintarMods();
     $('[data-add-mod]', el).addEventListener('click', () => { const u = modulos.at(-1), d = Math.min(Math.max(1, N()), (u ? u.hasta : 0) + 1); modulos.push({ material_id: '', desde: d, hasta: d }); pintarMods(); });
@@ -198,10 +199,11 @@ DW.ready.then(async (me) => {
           if (x.fecha !== b0.fecha || x.ini !== b0.ini || x.fin !== b0.fin) await api(`/api/cursos/${cursoId}/clases/${x.n}`, { method: 'PATCH', body: { fecha: x.fecha, ini: x.ini, fin: x.fin } });
         }
         // módulos: el material de cada clase
-        const quiere = {}; if (ver('clases')) for (const r2 of modulos) for (let n = r2.desde; n <= Math.min(r2.hasta, N()); n++) quiere[n] = +r2.material_id;
         if (ver('clases')) for (let n = 1; n <= N(); n++) {
-          const antes = nuevo ? null : (clasesAntes.get(n)?.material_id || null), ahora = quiere[n] || null;
-          if (antes !== ahora) await api(`/api/cursos/${cursoId}/clases/${n}`, { method: 'PATCH', body: { material_id: ahora || '' } });
+          const ahora = [...new Set(modulos.filter((r2) => n >= r2.desde && n <= r2.hasta).map((r2) => +r2.material_id))];
+          if (ahora.length > 2) throw new Error(`La clase ${n} tiene más de dos materiales: deja máximo dos por clase.`);
+          const o = nuevo ? null : clasesAntes.get(n), a1 = ahora[0] || null, a2 = ahora[1] || null;
+          if ((o?.material_id || null) !== a1 || (o?.material2_id || null) !== a2) await api(`/api/cursos/${cursoId}/clases/${n}`, { method: 'PATCH', body: { material_id: a1 || '', material2_id: a2 || '' } });
         }
         // cupones
         if (ver('inicio')) for (const id of quitados) await api(`/api/cursos/cupones/${id}`, { method: 'DELETE' });
@@ -281,7 +283,7 @@ DW.ready.then(async (me) => {
   const sub = `<p class="small text-body-secondary">${[k.area, k.nivel, k.profesional && `Profesional: ${k.profesional}`, AC.horario(k.horario), k.inicio && `${C.day(k.inicio)} – ${C.day(k.fin)}`, `${k.dictadas} de ${k.num_clases} clases dictadas`].filter(Boolean).map(esc).join(' · ')}</p>`;
   const proxClase = () => { const hoy = C.todayCo(); const c = D.clases.filter((x) => x.fecha && x.fecha <= hoy).pop() || D.clases[0]; return c?.n || 1; };
 
-  const tabs = [...(MANAGE ? [['inicio', 'Inicio', 'bi-house']] : []), ['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Notas', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
+  const tabs = [...(MANAGE ? [['inicio', 'Inicio', 'bi-house']] : []), ['inscritos', AC.cap(P), 'bi-people'], ['asistencia', 'Asistencia', 'bi-check2-square'], ['notas', 'Calificaciones', 'bi-star'], ['clases', 'Clases', 'bi-list-ol']];
   if (me.modules.some((x) => x.id === 'reposiciones')) tabs.push(['reposiciones', 'Reposiciones', 'bi-arrow-repeat']);
   const V = AC.vistas(tabs, async (t, view) => {
     await cargar();
@@ -400,7 +402,7 @@ DW.ready.then(async (me) => {
               .filter((x) => String(D.inscritos.find((i) => i.id === x.inscripcion_id).notas[ev.id] ?? '') !== String(x.nota));
             if (notas.length) { await api(`/api/cursos/${id}/notas`, { method: 'POST', body: { evaluacion_id: ev.id, notas } }); n += notas.length; }
           }
-          await cargar(); toast(n ? 'Notas guardadas' : 'No había cambios'); V.reload();
+          await cargar(); toast(n ? 'Calificaciones guardadas' : 'No había cambios'); V.reload();
         } catch (x) { toast(x.message, false); }
       });
       return;

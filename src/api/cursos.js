@@ -183,7 +183,7 @@ export function routes(r) {
     const k = await cursoDe(c, Number(c.params.id));
     const cfg = await getConfig(c.env, c.businessId);
     const [clases, evs, cupones, inscritos, area, prof] = await Promise.all([
-      all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, material_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
+      all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, material_id, material2_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
       all(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen, materiales FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
       all(c.env, 'SELECT id, codigo, tipo, valor, hasta, max, usos FROM ac_cupones WHERE business_id = ? AND curso_id = ? ORDER BY codigo', c.businessId, k.id),
       inscritosCurso(c, k.id, cfg),
@@ -213,6 +213,11 @@ export function routes(r) {
       set.material_id = mid;
       // El tema y el concepto de la clase los da el material.
       Object.assign(set, { tema: mat ? mat.titulo : '', detalle: mat ? (mat.descripcion || '') : '' });
+    }
+    if ('material2_id' in b) {   // segundo material de la clase (no cambia el tema)
+      const mid = cast('material', 'int', b.material2_id);
+      if (mid && !await one(c.env, 'SELECT 1 FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId)) throw new HttpError(400, 'Material no válido');
+      set.material2_id = mid;
     }
     if (['fecha', 'ini', 'fin'].some((x) => x in b)) {
       if (!['owner', 'admin'].includes(c.role)) throw new HttpError(403, 'Solo el propietario o un administrador mueve una clase');

@@ -168,11 +168,10 @@
       body.innerHTML = `
         ${K.hoy ? '<div class="alert alert-success py-2"><i class="bi bi-calendar-check me-1"></i><b>Hoy es tu clase.</b> Aquí tienes el material; las evaluaciones se habilitan durante la sesión.</div>' : ''}
         ${K.detalle || K.materiales ? `<div class="dw-card mb-3 small">${K.detalle ? `<div>${esc(K.detalle)}</div>` : ''}${K.materiales ? `<div class="mt-1"><b>Qué traer:</b> ${esc(K.materiales)}</div>` : ''}</div>` : ''}
-        ${K.material ? `<h3 class="h6">Material de la clase</h3><div class="dw-card mb-3 p-3" data-doc>${K.material.bloques.length ? window.AC.doc.html(K.material.bloques) : `<div class="small text-body-secondary">${esc(K.material.descripcion || 'Este material aún no tiene contenido.')}</div>`}</div>`
+        ${K.materiales_clase.length ? K.materiales_clase.map((M, j) => `<h3 class="h6">${esc(K.materiales_clase.length > 1 ? M.titulo : 'Material de la clase')}</h3><div class="dw-card mb-3 p-3" data-doc="${j}">${M.bloques.length ? window.AC.doc.html(M.bloques) : `<div class="small text-body-secondary">${esc(M.descripcion || 'Este material aún no tiene contenido.')}</div>`}</div>`).join('')
           : '<div class="small text-body-secondary mb-3">Esta clase no tiene material asignado.</div>'}
         ${K.evaluaciones.length ? `<h3 class="h6">Evaluaciones de esta clase</h3><ul class="list-group mb-3">${evs}</ul>` : ''}`;
-      const doc = $('[data-doc]', body);
-      if (doc && K.material) doc.addEventListener('click', (e) => window.AC.doc.click(e, (i) => K.material.bloques[i]));
+      body.querySelectorAll('[data-doc]').forEach((doc) => doc.addEventListener('click', (e) => window.AC.doc.click(e, (i) => K.materiales_clase[+doc.dataset.doc].bloques[i])));
     };
     body.addEventListener('click', async (e) => {
       const p = e.target.closest('[data-presentar]'); if (p) evaluacion(K.evaluaciones.find((x) => x.id === Number(p.dataset.presentar)));
@@ -298,7 +297,7 @@
           ${x.asistencia && ASIS[x.asistencia] ? C.chip(...ASIS[x.asistencia]) : x.fecha && x.fecha < D.hoy ? '' : x.fecha === D.hoy ? C.chip('soon', 'Hoy') : ''}
           ${x.reposicion ? C.chip(x.reposicion === 'hecha' ? 'ok' : 'soon', x.reposicion === 'hecha' ? 'Repuesta' : 'Reposición') : ''}${x.fecha && x.fecha <= D.hoy ? '<i class="bi bi-chevron-right text-body-secondary"></i>' : ''}</li>`).join('') || `<li class="list-group-item">${empty('bi-calendar-x', 'Aún no hay clases programadas.')}</li>`}
         </ul></div>${ant.length ? '' : ''}</div>
-        <div class="col-lg-5"><h2 class="h5 mb-3">Mis notas</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
+        <div class="col-lg-5"><h2 class="h5 mb-3">Mis calificaciones</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
         ${[...d.evaluaciones].sort((p, q) => (p.clase_n ?? 999) - (q.clase_n ?? 999)).map((x) => `<li class="list-group-item d-flex justify-content-between align-items-center" ${x.clase_n && d.clases.find((k) => k.n === x.clase_n)?.fecha <= D.hoy ? `role="button" data-clase-hoy="${id}:${x.clase_n}"` : ''}><span>${esc(x.nombre)}<span class="small text-body-secondary d-block">${x.clase_n ? `Clase ${x.clase_n}` : 'General'} · ${x.peso}% del curso</span></span>
           <b class="${x.nota != null && x.nota < d.notaMin ? 'text-danger' : ''}">${x.nota == null ? (x.enviado ? '<span class="small fw-normal text-body-secondary">En revisión</span>' : '—') : Number(x.nota).toFixed(1)}</b></li>`).join('') || `<li class="list-group-item small text-body-secondary">Este curso aún no tiene evaluaciones.</li>`}
         </ul></div></div></div>`;

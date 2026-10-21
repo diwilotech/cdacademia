@@ -72,19 +72,21 @@ export function routes(r) {
     const i = await matricula(c), cl = await claseDe(c, i, Number(c.params.n)), hoy = today();
     const base = { n: cl.n, fecha: cl.fecha, ini: cl.ini, fin: cl.fin, virtual: !!cl.virtual, hoy: cl.fecha === hoy, en_sesion: enSesion(cl) };
     if (!cl.fecha || cl.fecha > hoy) return json({ ...base, bloqueada: true, tema: cl.tema || null });
-    const mat = cl.material_id ? await one(c.env, 'SELECT titulo, descripcion, bloques FROM ac_material WHERE id = ? AND business_id = ?', cl.material_id, c.businessId) : null;
+    const mats = [];
+    for (const mid of [cl.material_id, cl.material2_id]) if (mid) { const m = await one(c.env, 'SELECT titulo, descripcion, bloques FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId); if (m) mats.push({ titulo: m.titulo, descripcion: m.descripcion, bloques: parse(m.bloques, []) }); }
+    const mat = mats[0] || null;
     const evs = await all(c.env, 'SELECT id FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? AND clase_n = ? ORDER BY id', c.businessId, i.curso_id, cl.n);
     const evaluaciones = [];
     for (const e of evs) { const x = await evDe(c, i, e.id); x.fechaClase = cl.fecha; evaluaciones.push(await vistaEv(c, i, x)); }
     return json({ ...base, bloqueada: false, tema: cl.tema || mat?.titulo || null, detalle: cl.detalle || null, metodos: parse(cl.metodos, []), materiales: cl.materiales || null,
-      material: mat ? { titulo: mat.titulo, descripcion: mat.descripcion, bloques: parse(mat.bloques, []) } : null, evaluaciones });
+      material: mat, materiales_clase: mats, evaluaciones });
   });
 
   // Archivos del material: solo los de materiales de clases que el estudiante ya tiene abiertas
   r.get('/api/alumno/material/:key', 'alumno', async (c) => {
     const key = c.params.key;
     if (!key.startsWith(`${c.businessId}/material/`)) throw new HttpError(404, 'No encontrado');
-    const ok = await one(c.env, `SELECT 1 FROM ac_inscripciones i JOIN ac_clases cl ON cl.curso_id = i.curso_id AND cl.business_id = i.business_id JOIN ac_material m ON m.id = cl.material_id AND m.business_id = cl.business_id
+    const ok = await one(c.env, `SELECT 1 FROM ac_inscripciones i JOIN ac_clases cl ON cl.curso_id = i.curso_id AND cl.business_id = i.business_id JOIN ac_material m ON m.id IN (cl.material_id, cl.material2_id) AND m.business_id = cl.business_id
       WHERE i.business_id = ? AND i.estudiante_id = ? AND i.estado = 'activa' AND cl.fecha <= ? AND m.bloques LIKE ?`, c.businessId, c.estudiante.id, today(), `%${key.replace(/[%_]/g, '')}%`);
     if (!ok) throw new HttpError(404, 'No encontrado');
     return servir(c, key, null, null, c.url.searchParams.get('dl') === '1');

@@ -59,8 +59,8 @@ export const ENTITIES = {
     },
     async decorate(c, rows) {
       if (!rows.length) return rows;
-      const uso = await all(c.env, `SELECT DISTINCT cl.material_id, k.id, k.nombre FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
-        WHERE cl.business_id = ? AND cl.material_id IN (${rows.map(() => '?').join(',')})`, c.businessId, ...rows.map((m) => m.id));
+      const uso = await all(c.env, `SELECT DISTINCT m.id AS material_id, k.id, k.nombre FROM ac_clases cl JOIN ac_material m ON m.id IN (cl.material_id, cl.material2_id) AND m.business_id = cl.business_id JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+        WHERE cl.business_id = ? AND m.id IN (${rows.map(() => '?').join(',')})`, c.businessId, ...rows.map((m) => m.id));
       return rows.map((m) => ({ ...m, bloques: parse(m.bloques, []), cursos: uso.filter((u) => u.material_id === m.id).map((u) => ({ id: u.id, nombre: u.nombre })) }));
     } },
 };

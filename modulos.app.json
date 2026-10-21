@@ -38,9 +38,11 @@
         "ac_notas"
       ],
       "mcp": {
-        "guia": "Cursos de la academia: cada curso tiene área, nivel, horario por días, número de clases, profesional, cupo, precio y fechas. Las clases del día salen de aquí (cursos.clases_de_hoy). Las evaluaciones (notas) se asignan a una clase y aparecen en el calendario del estudiante; el material de cada clase se publica el día de la clase. Esta IA solo consulta cursos: crear o cambiar cursos se hace en la pantalla Cursos.",
+        "guia": "Cursos: área, nivel, horario por días, número de clases, profesional, precio y fechas; las clases se generan solas saltando festivos. La IA tiene control total: cursos.listar_cursos / ver_detalle / calendario para consultar; crear_curso, editar_curso y borrar_curso (el curso con matrículas no se borra: se desactiva); calcular_fechas para proponer un curso sin guardar; editar_clase (tema, material, y fecha/hora solo propietario o admin); tomar_asistencia (P presente, A ausente, T tarde, J justificada) y poner_notas; evaluaciones y cupones con sus propias herramientas; ver_entregas y ver_examenes. Pide confirmación antes de cualquier escritura y resume lo que vas a cambiar. Una ausencia (A o J) genera una falla por reponer en Reposiciones.",
         "ejemplos": [
-          "Pídele: «¿Qué clases tengo hoy y con cuántos estudiantes?»"
+          "Pídele: «¿Qué clases tengo hoy y con cuántos estudiantes?»",
+          "Pídele: «Crea el curso Automaquillaje básico, lunes y miércoles 6 a 8 pm, 8 clases desde el 3 de agosto, $1.000.000»",
+          "Pídele: «Marca ausente a Laura en la clase 3 de Automaquillaje»"
         ],
         "flujos": [
           {
@@ -49,6 +51,26 @@
             "descripcion": "Ver las clases del día.",
             "pasos": [
               "cursos.clases_de_hoy"
+            ]
+          },
+          {
+            "id": "nuevo",
+            "nombre": "Crear un curso",
+            "descripcion": "Proponer las fechas y crear el curso.",
+            "pasos": [
+              "academia.listar_areas",
+              "profesionales.listar_profesionales",
+              "cursos.calcular_fechas",
+              "cursos.crear_curso"
+            ]
+          },
+          {
+            "id": "asistencia",
+            "nombre": "Tomar asistencia",
+            "descripcion": "Marcar la asistencia de una clase.",
+            "pasos": [
+              "cursos.ver_detalle",
+              "cursos.tomar_asistencia"
             ]
           }
         ]
@@ -78,10 +100,11 @@
         "ac_estudiantes"
       ],
       "mcp": {
-        "guia": "Estudiantes: ficha con documento, contacto y acudiente, sus matrículas y su acceso a la app (el estudiante entra a su inicio con el calendario, material, trabajos, evaluaciones y pagos). Busca siempre antes de crear para no duplicar (estudiantes.buscar por nombre, documento, correo o teléfono) y pide confirmación antes de estudiantes.crear. Invitar al estudiante a la app se hace desde su ficha.",
+        "guia": "Estudiantes: ficha con documento, contacto, sus matrículas y su acceso a la app (el estudiante entra a su inicio con calendario, material, trabajos, evaluaciones y pagos). Busca siempre antes de crear para no duplicar (estudiantes.buscar) y pide confirmación antes de escribir. Control total: crear, editar_estudiante (también desactivar), borrar_estudiante, resumen, y el acceso a la app: ver_acceso, dar_acceso (devuelve el enlace para crear contraseña) y quitar_acceso.",
         "ejemplos": [
           "Pídele: «¿Cuál es el teléfono de Laura Pérez y en qué cursos está?»",
-          "Pídele: «Crea al estudiante Pedro Ruiz, documento 123, teléfono 300…»"
+          "Pídele: «Crea al estudiante Pedro Ruiz, documento 123, teléfono 300…»",
+          "Pídele: «Dale acceso a la app a Laura»"
         ],
         "flujos": [
           {
@@ -100,6 +123,16 @@
             "pasos": [
               "estudiantes.buscar",
               "estudiantes.crear"
+            ]
+          },
+          {
+            "id": "acceso",
+            "nombre": "Dar acceso a la app",
+            "descripcion": "Invitar al estudiante a su inicio.",
+            "pasos": [
+              "estudiantes.buscar",
+              "estudiantes.ver_acceso",
+              "estudiantes.dar_acceso"
             ]
           }
         ]
@@ -127,9 +160,23 @@
         "ac_inscripciones"
       ],
       "mcp": {
-        "guia": "Matrículas: inscribe a un estudiante en un curso con su plan de cuotas; la cuenta de cobro queda fija aunque cambien las cuotas. Esta IA no crea matrículas: para cobros usa el módulo de cuotas y para ver el estado de la cartera cuotas.cartera.",
-        "ejemplos": [],
-        "flujos": []
+        "guia": "Matrículas: inscribe a un estudiante en un curso con su plan de cuotas (inicial, número, frecuencia, primera fecha), cupón o descuento; la cuenta de cobro queda fija en Finanzas aunque cambien las cuotas. Herramientas: matriculas.listar_matriculas (con total, pagado, saldo), matricular, editar_matricula (estado, descuento o plan; cambiar el plan rehace las cuotas y respeta lo pagado), borrar_matricula (solo sin pagos; si hay pagos, estado retirada), ver_cuotas y ver_pagos. Antes de matricular confirma estudiante, curso, valor y plan con la persona. Los cobros se hacen con el módulo cuotas.",
+        "ejemplos": [
+          "Pídele: «Matricula a Laura en Automaquillaje con inicial de 300.000 y 4 cuotas mensuales»",
+          "Pídele: «¿Cuánto debe la matrícula 12 y qué cuotas faltan?»"
+        ],
+        "flujos": [
+          {
+            "id": "matricular",
+            "nombre": "Matricular a un estudiante",
+            "descripcion": "Buscar estudiante y curso, proponer el plan y matricular.",
+            "pasos": [
+              "estudiantes.buscar",
+              "cursos.listar_cursos",
+              "matriculas.matricular"
+            ]
+          }
+        ]
       }
     },
     {
@@ -160,10 +207,11 @@
         "ac_pagos"
       ],
       "mcp": {
-        "guia": "Matrículas, cuotas y cobros: cada matrícula tiene un plan de cuotas con valor, vencimiento y estado (al día, en mora, pagada). La cuenta de cobro de la matrícula queda en Finanzas (una por matrícula, con una línea por cuota) y cada pago genera su recibo y su movimiento en Finanzas SOLO: no los registres otra vez ahí. cuotas.cartera muestra quién debe; cuotas.registrar_pago registra un abono (pide confirmación: estudiante, cuota, valor y método). Los comprobantes que sube el estudiante los aprueba o rechaza el equipo en Matrículas → Comprobantes.",
+        "guia": "Cuotas, pagos y comprobantes: cada matrícula tiene un plan de cuotas; su cuenta de cobro está en Finanzas y cada pago genera su recibo y su movimiento allá SOLO: no los registres otra vez en Finanzas. Herramientas: cuotas.cartera (quién debe), registrar_pago (abono repartido en orden; pide confirmación de estudiante, valor y método), listar_pagos, anular_pago (deja un egreso de anulación), resumen, enviar_pagos_a_finanzas, y los comprobantes que sube el estudiante: listar_comprobantes, aprobar_comprobante (registra el pago y el recibo) y rechazar_comprobante (con motivo).",
         "ejemplos": [
           "Pídele: «¿Quién tiene cuotas vencidas esta semana?»",
-          "Pídele: «Registra un pago de 150.000 por Nequi de la matrícula 12»"
+          "Pídele: «Registra un pago de 150.000 por Nequi de la matrícula 12»",
+          "Pídele: «Aprueba los comprobantes en revisión»"
         ],
         "flujos": [
           {
@@ -174,6 +222,16 @@
               "cuotas.cartera"
             ],
             "prompt": "Revisa la cartera de la academia (cuotas vencidas y que vencen hoy), ordénala por antigüedad y propón a quién escribirle primero con un mensaje corto en el tono de la marca. No registres pagos sin mi confirmación."
+          },
+          {
+            "id": "comprobantes",
+            "nombre": "Revisar comprobantes",
+            "descripcion": "Ver los comprobantes en revisión y aprobarlos o rechazarlos.",
+            "pasos": [
+              "cuotas.listar_comprobantes",
+              "cuotas.aprobar_comprobante",
+              "cuotas.rechazar_comprobante"
+            ]
           }
         ]
       }
@@ -208,9 +266,10 @@
         "ac_video_accesos"
       ],
       "mcp": {
-        "guia": "Reposiciones de clase: cuando un estudiante falta puede reponer la clase (en vivo o con la clase grabada que ve con un enlace personal). reposiciones.pendientes lista las que faltan por agendar o ver; úsala para tareas de seguimiento. Agendar o registrar la reposición se hace en la pantalla Reposiciones.",
+        "guia": "Reposiciones: cuando un estudiante falta (A o J) puede reponer la clase en un espacio o con la clase grabada que ve con un enlace personal. Herramientas: reposiciones.pendientes y listar_reposiciones (fallas), agendar (en un espacio de listar_espacios), cambiar_estado, cobrar (valor configurado) y resumen; espacios (crear_espacio, editar_espacio, borrar_espacio); videos (listar_videos, crear_enlace_video, ver_enlaces_video, revocar_enlace_video, borrar_video). Subir un video nuevo se hace desde la app.",
         "ejemplos": [
-          "Pídele: «¿Qué reposiciones están pendientes por agendar?»"
+          "Pídele: «¿Qué reposiciones están pendientes por agendar?»",
+          "Pídele: «Agenda la reposición de Laura en el espacio del viernes»"
         ],
         "flujos": [
           {
@@ -219,6 +278,16 @@
             "descripcion": "Ver las fallas sin reponer y proponer cómo cerrarlas.",
             "pasos": [
               "reposiciones.pendientes"
+            ]
+          },
+          {
+            "id": "agendar",
+            "nombre": "Agendar una reposición",
+            "descripcion": "Elegir un espacio y agendar.",
+            "pasos": [
+              "reposiciones.pendientes",
+              "reposiciones.listar_espacios",
+              "reposiciones.agendar"
             ]
           }
         ]
@@ -243,9 +312,21 @@
         "ac_material"
       ],
       "mcp": {
-        "guia": "Material de clase: documentos y archivos que se asignan a una clase y el estudiante ve el día de la clase; también recibe sus entregas (trabajos) que el equipo revisa en Cursos → Entregas. Se gestiona desde la pantalla Material.",
-        "ejemplos": [],
-        "flujos": []
+        "guia": "Material de clase: documentos de la biblioteca por área y nivel, hechos de bloques (texto, enlace, video, archivo) que se asignan a una clase (cursos.editar_clase con material_id) y el estudiante ve el día de la clase. Herramientas: material.listar_materiales, crear_material, editar_material, borrar_material y cargar_ejemplos. Los archivos (PDF, imágenes) se suben desde la pantalla Material; la IA trabaja con texto y enlaces https. Las entregas de los estudiantes se ven con cursos.ver_entregas.",
+        "ejemplos": [
+          "Pídele: «Crea un material de Técnicas de piel con una lista de productos y un video de YouTube»"
+        ],
+        "flujos": [
+          {
+            "id": "asignar",
+            "nombre": "Asignar material a una clase",
+            "descripcion": "Elegir un material y ponerlo en una clase.",
+            "pasos": [
+              "material.listar_materiales",
+              "cursos.editar_clase"
+            ]
+          }
+        ]
       }
     },
     {
@@ -268,8 +349,10 @@
         "ac_profesionales"
       ],
       "mcp": {
-        "guia": "Profesionales (docentes) y equipo: cada profesional tiene áreas, niveles, horario de disponibilidad y si hace reposiciones. En Equipo cada persona tiene su Info (datos y si es profesional) y su Nómina ($): los ítems del mes que se le pagan; el pago se hace en Finanzas con el botón Pagar. Esta IA no cambia nómina: indica ir a Equipo → $ y luego a Finanzas.",
-        "ejemplos": [],
+        "guia": "Profesionales (docentes): áreas con niveles y si reponen, y horario semanal de disponibilidad (profesionales.listar_profesionales, crear_profesional, editar_profesional, borrar_profesional). La nómina y el equipo (personas con acceso al panel) están en la guía del módulo Mi academia: equipo.* . El pago de nómina se hace en Finanzas con el botón Pagar.",
+        "ejemplos": [
+          "Pídele: «Crea a la profesional Laura, maquillaje básico, lunes y miércoles de 2 a 8 pm»"
+        ],
         "flujos": []
       }
     },
@@ -292,9 +375,24 @@
         "ac_areas"
       ],
       "mcp": {
-        "guia": "Mi academia: áreas, niveles, sedes y la configuración general de la academia. Es de consulta para la IA; los cambios se hacen en la pantalla.",
-        "ejemplos": [],
-        "flujos": []
+        "guia": "Mi academia: datos y reglas de la academia (rubro y términos, escala y nota mínima, asistencia mínima, valores de reposición, datos del recibo, consecutivo), áreas, métricas de inicio y bitácora. Herramientas: academia.ver_configuracion / editar_configuracion, listar_areas / crear_area / editar_area / borrar_area, metricas y ver_bitacora. EQUIPO Y NÓMINA (solo propietario o administrador): equipo.listar_equipo, invitar_persona (devuelve el enlace), cambiar_permisos (rol y módulos), reenviar_invitacion, quitar_persona, editar_datos_persona; nómina: ver_nomina, personas_nomina, nomina_aproximada, clases_del_profesional, guardar_nomina (deja el gasto recurrente en Finanzas; no se cobra solo) y quitar_nomina. persona = u:<id de usuario> o p:<id de profesional>. Cambiar permisos, quitar personas y nómina son acciones delicadas: confirma siempre con la persona.",
+        "ejemplos": [
+          "Pídele: «¿Cuánto se aproxima a pagar de nómina este mes?»",
+          "Pídele: «Sube la asistencia mínima al 80 %»",
+          "Pídele: «Invita a ana@correo.com como personal con acceso a Cursos»"
+        ],
+        "flujos": [
+          {
+            "id": "nomina",
+            "nombre": "Nómina del mes",
+            "descripcion": "Ver lo que se aproxima a pagar y dejar el plan.",
+            "pasos": [
+              "equipo.nomina_aproximada",
+              "equipo.clases_del_profesional",
+              "equipo.guardar_nomina"
+            ]
+          }
+        ]
       }
     }
   ]

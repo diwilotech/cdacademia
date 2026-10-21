@@ -12,7 +12,7 @@
 import { json, readJson, HttpError, str } from '../lib/http.js';
 import { db, uuid, nowIso } from '../lib/db.js';
 import { randomHex, sha256Hex, isExpired } from '../lib/auth.js';
-import { activeModuleIds, roleReaches, OWN_IDS, APP } from '../lib/modules.js';
+import { activeModuleIds, roleReaches, parseModulos, OWN_IDS, APP } from '../lib/modules.js';
 import { audit } from '../lib/audit.js';
 import { TOOLS } from '../ia/index.js';
 import { centralTools, ctxOf, propiasDe } from '../lib/central.js';
@@ -37,7 +37,7 @@ export async function guiaDeModulo(c, id, origin) {
 async function tokenContext(c) {
   const m = /^Bearer\s+(dwm_[0-9a-f]{64})$/i.exec(c.req.headers.get('authorization') || '');
   if (!m) throw new HttpError(401, 'Falta el token de conexión (Authorization: Bearer …)');
-  const t = await db(c.env).first(`SELECT t.id, t.business_id, t.user_id, mb.role, b.paid_until, u.email, u.name
+  const t = await db(c.env).first(`SELECT t.id, t.business_id, t.user_id, mb.role, mb.modulos, b.paid_until, u.email, u.name
       FROM mcp_tokens t
       JOIN businesses b ON b.id = t.business_id AND b.status = 'active' AND b.archived_at IS NULL
       JOIN memberships mb ON mb.business_id = t.business_id AND mb.user_id = t.user_id
@@ -45,7 +45,7 @@ async function tokenContext(c) {
      WHERE t.token_hash = ? AND t.revoked_at IS NULL`, await sha256Hex(m[1]));
   if (!t) throw new HttpError(401, 'Token no válido o revocado');
   await db(c.env).run('UPDATE mcp_tokens SET last_used_at = ? WHERE id = ?', nowIso(), t.id);
-  Object.assign(c, { businessId: t.business_id, role: t.role, readOnly: isExpired(t.paid_until), origin: 'mcp',
+  Object.assign(c, { businessId: t.business_id, role: t.role, modulos: parseModulos(t.modulos), readOnly: isExpired(t.paid_until), origin: 'mcp',
     session: { user_id: t.user_id, email: t.email, name: t.name } });
 }
 

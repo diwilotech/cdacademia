@@ -246,6 +246,30 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const fi = await call('estudiantes_ficha', { estudiante_id: e1.data.id });
   check('IA: ficha del estudiante', JSON.parse(fi.data.result?.content?.[0]?.text || '{}').matriculas?.[0]?.pagado === 200000);
 
+  // IA con control total: las herramientas llaman a las mismas rutas de la API (mismas reglas, roles y bitácora)
+  const sal = (r) => (r.data.result?.isError ? { error: r.data.result.content[0].text } : JSON.parse(r.data.result?.content?.[0]?.text || '{}'));
+  const lista = (await mcp(tk.data.token, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).data.result.tools.map((t) => t.name);
+  check('IA control: publica las herramientas de cursos, matrículas, equipo y academia', ['cursos_listar_cursos', 'matriculas_matricular', 'cuotas_aprobar_comprobante', 'reposiciones_agendar', 'material_listar_materiales', 'profesionales_crear_profesional', 'equipo_guardar_nomina', 'academia_editar_configuracion'].every((n) => lista.includes(n)), String(lista.length));
+  const dt = sal(await call('cursos_ver_detalle', { curso_id: k.data.id }));
+  check('IA control: detalle del curso con sus 8 clases', dt.clases?.length === 8 && dt.inscritos?.length >= 1, JSON.stringify(dt).slice(0, 200));
+  const kc = sal(await call('cursos_crear_curso', { nombre: 'Curso por IA', precio: 300000, num_clases: 2, inicio: '2026-09-01', horario: [{ dia: 2, ini: '09:00', fin: '11:00' }] }));
+  const ke = sal(await call('cursos_editar_curso', { id: kc.id, precio: 350000 }));
+  const kl = sal(await call('cursos_listar_cursos', { q: 'Curso por IA' }));
+  check('IA control: crea, edita y lista un curso', kc.id && ke.ok !== false && kl.cursos?.[0]?.precio === 350000, JSON.stringify([kc, ke, kl]).slice(0, 300));
+  check('IA control: la validación de la API se respeta (horario inválido)', !!sal(await call('cursos_crear_curso', { nombre: 'Malo', horario: [{ dia: 9, ini: '25:00', fin: '1' }] })).error);
+  check('IA control: borra el curso y queda en la bitácora', !sal(await call('cursos_borrar_curso', { id: kc.id })).error && (await A.app('/api/settings/bitacora')).data.items.some((x) => /IA: cursos\.borrar_curso|Borró el curso/.test(x.accion) && x.origen === 'mcp'));
+  check('IA control: B no alcanza datos de A por su token', !!sal(await mcp((await B.app('/api/ia/tokens', { method: 'POST', body: { name: 'B' } })).data.token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'cursos_ver_detalle', arguments: { curso_id: k.data.id } } })).error);
+  const ml = sal(await call('matriculas_listar_matriculas', { estudiante_id: e1.data.id }));
+  const mq = sal(await call('matriculas_ver_cuotas', { matricula_id: m1.data.id }));
+  check('IA control: lista matrículas y sus cuotas', ml.rows?.length >= 1 || Array.isArray(ml) || ml.matriculas?.length >= 1, JSON.stringify(ml).slice(0, 200) + JSON.stringify(mq).slice(0, 200));
+  const as = sal(await call('cursos_tomar_asistencia', { curso_id: k.data.id, clase_n: 1, marcas: [{ inscripcion_id: m1.data.id, estado: 'A' }] }));
+  const rpIA = sal(await call('reposiciones_listar_reposiciones', { estado: 'pendiente' }));
+  check('IA control: toma asistencia y aparece la falla por reponer', !as.error && JSON.stringify(rpIA).includes('Automaquillaje'), JSON.stringify([as, rpIA]).slice(0, 300));
+  const cf = sal(await call('academia_editar_configuracion', { asisMin: 70 }));
+  check('IA control: edita la configuración de la academia', !cf.error && sal(await call('academia_ver_configuracion', {})).asisMin === 70, JSON.stringify(cf));
+  const eq = sal(await call('equipo_listar_equipo', {}));
+  check('IA control: lista el equipo', eq.users?.length >= 1, JSON.stringify(eq).slice(0, 200));
+
   // Un negocio que no quiere cuentas de cobro: solo recibos de caja, sin cuenta cruzada
   const D = await newBusiness('Academia sin cuentas', { login: true });
   await D.app('/api/academia/config', { method: 'PUT', body: { cuentaCobro: false } });

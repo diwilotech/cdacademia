@@ -6,7 +6,7 @@ import { createInvite, invitePath } from '../lib/auth.js';
 import { crud, all, one } from '../lib/crud.js';
 import { cartera } from './cuotas.js';
 import { moraDe } from './cursos.js';
-import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas } from '../lib/academia.js';
+import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas, estadosAcceso } from '../lib/academia.js';
 
 const MOD = 'estudiantes';
 export const ENTITIES = {
@@ -22,10 +22,10 @@ export const ENTITIES = {
       const [car, cfg, marcas] = await Promise.all([cartera(c), getConfig(c.env, c.businessId),
         all(c.env, `SELECT i.estudiante_id, a.clase_n, a.estado FROM ac_asistencia a JOIN ac_inscripciones i ON i.id = a.inscripcion_id AND i.business_id = a.business_id
           WHERE a.business_id = ? AND i.estado <> 'retirada' AND i.estudiante_id IN (${rows.map(() => '?').join(',')})`, c.businessId, ...rows.map((r) => r.id))]);
-      const venc = car.filter((q) => q.estado === 'vencida');
+      const venc = car.filter((q) => q.estado === 'vencida'), acc = await estadosAcceso(c, rows.map((r) => r.user_id));
       return rows.map((r) => {
         const ra = resumenAsis(marcas.filter((m) => m.estudiante_id === r.id));
-        return { ...r, con_acceso: !!r.user_id, ...moraDe(venc.filter((q) => q.estudiante_id === r.id), manager), asistencia_pct: ra.pct, baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
+        return { ...r, acceso: acc.get(r.user_id) || 'sin_acceso', ...moraDe(venc.filter((q) => q.estudiante_id === r.id), manager), asistencia_pct: ra.pct, baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
       });
     },
     async afterDelete(c, before) {

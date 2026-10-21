@@ -16,7 +16,7 @@ import { crud, all, one, now, today, cast, addDays, DATE } from '../lib/crud.js'
 import { audit } from '../lib/audit.js';
 import { limpiarExamen, calificar, limpiarRespuestas } from '../lib/examen.js';
 import { cartera } from './cuotas.js';
-import { sesiones, getConfig, resumenAsis, resumenNotas, estadoAcad, NIVELES, METODOS, parse } from '../lib/academia.js';
+import { sesiones, getConfig, resumenAsis, resumenNotas, estadoAcad, estadosAcceso, NIVELES, METODOS, parse } from '../lib/academia.js';
 
 const MOD = 'cursos';
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -105,17 +105,18 @@ export async function inscritosCurso(c, cursoId, cfg) {
   const manager = ['owner', 'admin'].includes(c.role);
   const car = (await cartera(c)).filter((q) => q.estado === 'vencida');
   const [ins, asis, notas, evs, repos] = await Promise.all([
-    all(c.env, `SELECT i.id, i.estudiante_id, i.estado, e.nombre, e.documento, e.telefono, (e.user_id IS NOT NULL) AS con_acceso FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
+    all(c.env, `SELECT i.id, i.estudiante_id, i.estado, e.nombre, e.documento, e.telefono, e.user_id FROM ac_inscripciones i JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id
       WHERE i.business_id = ? AND i.curso_id = ? AND i.estado <> 'retirada' ORDER BY e.nombre`, c.businessId, cursoId),
     all(c.env, 'SELECT a.inscripcion_id, a.clase_n, a.estado FROM ac_asistencia a JOIN ac_inscripciones i ON i.id = a.inscripcion_id WHERE a.business_id = ? AND i.curso_id = ?', c.businessId, cursoId),
     all(c.env, 'SELECT n.inscripcion_id, n.evaluacion_id, n.nota FROM ac_notas n JOIN ac_inscripciones i ON i.id = n.inscripcion_id WHERE n.business_id = ? AND i.curso_id = ?', c.businessId, cursoId),
     all(c.env, 'SELECT id, nombre, peso, clase_n FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, cursoId),
     all(c.env, "SELECT r.inscripcion_id, r.clase_n FROM ac_reposiciones r JOIN ac_inscripciones i ON i.id = r.inscripcion_id WHERE r.business_id = ? AND i.curso_id = ? AND r.estado = 'hecha'", c.businessId, cursoId),
   ]);
-  return ins.map((i) => {
+  const acc = await estadosAcceso(c, ins.map((i) => i.user_id));
+  return ins.map(({ user_id, ...i }) => {
     const a = asis.filter((x) => x.inscripcion_id === i.id), n = notas.filter((x) => x.inscripcion_id === i.id);
     const ra = resumenAsis(a, new Set(repos.filter((x) => x.inscripcion_id === i.id).map((x) => x.clase_n))), rn = resumenNotas(n, evs);
-    return { ...i, asistencia: Object.fromEntries(a.map((x) => [x.clase_n, x.estado])), notas: Object.fromEntries(n.map((x) => [x.evaluacion_id, x.nota])),
+    return { ...i, acceso: acc.get(user_id) || 'sin_acceso', asistencia: Object.fromEntries(a.map((x) => [x.clase_n, x.estado])), notas: Object.fromEntries(n.map((x) => [x.evaluacion_id, x.nota])),
       resumen_asistencia: ra, resumen_notas: rn, academico: estadoAcad(ra, rn, cfg),
       ...moraDe(car.filter((q) => q.inscripcion_id === i.id), manager), baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
   });

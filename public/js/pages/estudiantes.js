@@ -16,9 +16,8 @@ DW.ready.then(async (me) => {
       { label: 'Nombre', main: true, html: (r) => `${esc(r.nombre)}${r.documento ? `<div class="text-body-secondary fw-normal" style="font-size:.75rem">CC ${esc(r.documento)}</div>` : ''}${r.en_mora ? ` <div class="mt-1">${C.chip('bad', `En mora${r.mora_dias ? ` · ${r.mora_dias} d` : ''}`)}${r.baja_asistencia ? ` ${C.chip('soon', `Asistencia ${r.asistencia_pct}%`)}` : ''}</div>` : (r.baja_asistencia ? ` <div class="mt-1">${C.chip('soon', `Asistencia ${r.asistencia_pct}%`)}</div>` : '')}` },
       { label: 'Teléfono', html: (r) => (r.telefono ? `<a href="https://wa.me/57${esc(String(r.telefono).replace(/\D/g, '').slice(-10))}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono)}</a>` : '—') },
       { label: 'Origen', html: (r) => esc(r.origen || '—') },
-      { label: 'App', html: (r) => (r.con_acceso ? C.chip('ok', 'Con acceso') : C.chip('free', 'Sin acceso')) },
       { label: 'Estado', html: (r) => (r.activo ? C.chip('ok', 'Activo') : C.chip('free', 'Inactivo')) }],
-    rowActions: (r) => `${me.canManage ? `${AC.botonesAcceso(r.con_acceso, r.id).replace(/data-acc="(\w+)"/g, 'data-act="acc-$1"')} ` : ''}<button class="btn btn-sm btn-outline-primary" data-act="ficha" title="Ficha" aria-label="Ficha"><i class="bi bi-person-vcard"></i></button>`,
+    rowActions: (r) => `${me.canManage ? `${AC.botonesAcceso(r.acceso, r.id).replace(/data-acc="(\w+)"/g, 'data-act="acc-$1"')} ` : ''}<button class="btn btn-sm btn-outline-primary" data-act="ficha" title="Ficha" aria-label="Ficha"><i class="bi bi-person-vcard"></i></button>`,
     onAction: (a, r) => {
       if (a.startsWith('acc-')) return AC.accionAcceso(a.slice(4), r.id, r.nombre).then((hecho) => hecho && T.load()).catch((x) => window.App.toast(x.message, false));
       AC.ficha(r.id, me).catch((x) => window.App.toast(x.message, false));

@@ -3,6 +3,7 @@
 // asistencia, notas y estado académico, y los datos de la academia (rubro, términos, mínimos, recibo).
 import { one } from './crud.js';
 import { todayBogota } from './auth.js';
+import { db } from './db.js';
 
 export const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 export const NIVELES = ['Básico', 'Intermedio', 'Avanzado', 'Profesional'];
@@ -142,4 +143,13 @@ export const enSesion = (cl) => {
   if (t.slice(0, 10) !== cl.fecha) return false;
   const h = t.slice(11, 16);
   return (!cl.ini || h >= cl.ini) && (!cl.fin || h <= cl.fin);
+};
+
+// Estado de acceso a la app de varios estudiantes a la vez: user_id → 'activo' (ya creó su contraseña) | 'invitado'. Sin membresía de estudiante no sale.
+export const estadosAcceso = async (c, userIds) => {
+  const ids = [...new Set(userIds.filter(Boolean))], m = new Map();
+  if (!ids.length) return m;
+  const rows = await db(c.env).all(`SELECT u.id, u.password_hash IS NOT NULL AS activo FROM users u JOIN memberships ms ON ms.user_id = u.id WHERE ms.business_id = ? AND ms.role = 'estudiante' AND u.id IN (${ids.map(() => '?').join(',')})`, c.businessId, ...ids);
+  for (const r of rows) m.set(r.id, r.activo ? 'activo' : 'invitado');
+  return m;
 };

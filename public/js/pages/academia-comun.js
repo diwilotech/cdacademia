@@ -87,16 +87,17 @@ window.AC = (function () {
     const pintar = (a, enlace) => {
       const [tono, txt] = ESTADO[a.estado];
       host.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center">${C.chip(tono, txt)}${a.email ? `<span>${esc(a.email)}</span>` : ''}
-        <span class="flex-grow-1"></span><button type="button" class="btn btn-sm btn-outline-primary" data-dar>${a.estado === 'sin_acceso' ? '<i class="bi bi-envelope-plus me-1"></i>Dar acceso' : '<i class="bi bi-key me-1"></i>Restablecer contraseña'}</button>
+        <span class="flex-grow-1"></span><button type="button" class="btn btn-sm btn-outline-primary" data-dar>${a.estado === 'sin_acceso' ? '<i class="bi bi-envelope-plus me-1"></i>Dar acceso' : (a.estado === 'activo' ? '<i class="bi bi-key me-1"></i>Cambiar contraseña' : '<i class="bi bi-send me-1"></i>Enviar enlace de nuevo')}</button>
         ${a.estado !== 'sin_acceso' ? '<button type="button" class="btn btn-sm btn-outline-danger" data-quitar><i class="bi bi-person-x me-1"></i>Quitar acceso</button>' : ''}</div>
         ${a.estado === 'sin_acceso' && !a.email ? '<div class="mt-2"><input class="form-control form-control-sm" type="email" data-mail placeholder="Correo del estudiante"></div>' : ''}
         ${enlace ? `<div class="mt-2">Envíale este enlace para que cree su nueva contraseña:<div class="input-group input-group-sm mt-1"><input class="form-control" readonly value="${esc(enlace)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>` : ''}`;
       host.querySelector('[data-dar]').onclick = async () => {
+        if (a.estado === 'activo' && !await window.App.confirm({ title: 'Cambiar contraseña', text: 'Se genera un enlace nuevo para que cree otra contraseña.', ok: 'Cambiar' })) return;
         try { const r = await api(`/api/estudiantes/${e.id}/acceso`, { method: 'POST', body: { email: host.querySelector('[data-mail]')?.value || a.email || undefined } }); pintar(r, r.invite_url); }
         catch (x) { window.App.toast(x.message, false); }
       };
       const q = host.querySelector('[data-quitar]');
-      if (q) q.onclick = async () => { try { await api(`/api/estudiantes/${e.id}/acceso`, { method: 'DELETE' }); pintar({ estado: 'sin_acceso', email: e.email }); } catch (x) { window.App.toast(x.message, false); } };
+      if (q) q.onclick = async () => { if (!await window.App.confirm({ title: 'Quitar acceso', text: 'Ya no podrá entrar a la app.', ok: 'Quitar', danger: true })) return; try { await api(`/api/estudiantes/${e.id}/acceso`, { method: 'DELETE' }); pintar({ estado: 'sin_acceso', email: e.email }); } catch (x) { window.App.toast(x.message, false); } };
       const cp = host.querySelector('[data-copiar]');
       if (cp) cp.onclick = () => { navigator.clipboard?.writeText(host.querySelector('[data-enlace]').value); window.App.toast('Enlace copiado'); };
     };
@@ -104,15 +105,19 @@ window.AC = (function () {
   }
 
   // Botones con icono para dar acceso, restablecer contraseña y quitar acceso (lista de estudiantes y de un curso). Solo propietario/administrador.
-  const botonesAcceso = (conAcceso, id) => `<span class="btn-group btn-group-sm" role="group" aria-label="Acceso a la app">${conAcceso
-    ? `<button class="btn btn-outline-secondary" data-acc="reset" data-eid="${id}" title="Restablecer contraseña" aria-label="Restablecer contraseña"><i class="bi bi-key"></i></button><button class="btn btn-outline-danger" data-acc="quitar" data-eid="${id}" title="Quitar acceso" aria-label="Quitar acceso"><i class="bi bi-person-x"></i></button>`
-    : `<button class="btn btn-outline-success" data-acc="dar" data-eid="${id}" title="Dar acceso a la app" aria-label="Dar acceso a la app"><i class="bi bi-person-check"></i></button>`}</span>`;
+  const botonesAcceso = (estado, id) => {
+    const b = (acc, tono, icono, titulo) => `<button class="btn btn-outline-${tono}" data-acc="${acc}" data-eid="${id}" title="${titulo}" aria-label="${titulo}"><i class="bi ${icono}"></i></button>`;
+    return `<span class="btn-group btn-group-sm" role="group" aria-label="Acceso a la app">${estado === 'activo' ? b('reset', 'secondary', 'bi-key', 'Cambiar contraseña') + b('quitar', 'danger', 'bi-person-x', 'Quitar acceso')
+      : estado === 'invitado' ? b('dar', 'primary', 'bi-send', 'Enviar enlace de nuevo (aún no crea su contraseña)') + b('quitar', 'danger', 'bi-person-x', 'Quitar acceso')
+      : b('dar', 'success', 'bi-person-check', 'Dar acceso a la app')}</span>`;
+  };
   async function accionAcceso(accion, id, nombre) {
     const { api, toast, confirm, modal } = window.App;
     if (accion === 'quitar') {
       if (!await confirm({ title: 'Quitar acceso', text: `${nombre} ya no podrá entrar a la app.`, ok: 'Quitar', danger: true })) return false;
       await api(`/api/estudiantes/${id}/acceso`, { method: 'DELETE' }); toast('Acceso quitado'); return true;
     }
+    if (accion === 'reset' && !await confirm({ title: 'Cambiar contraseña', text: `Se genera un enlace nuevo para que ${nombre} cree otra contraseña.`, ok: 'Cambiar' })) return false;
     let r;
     try { r = await api(`/api/estudiantes/${id}/acceso`, { method: 'POST', body: {} }); }
     catch (x) {
@@ -121,7 +126,7 @@ window.AC = (function () {
       if (!mail) return false;
       r = await api(`/api/estudiantes/${id}/acceso`, { method: 'POST', body: { email: mail } });
     }
-    const { el } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${accion === 'reset' ? 'Restablecer contraseña' : 'Acceso a la app'} · ${esc(nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+    const { el } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${accion === 'reset' ? 'Cambiar contraseña' : 'Enlace de acceso'} · ${esc(nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
       <div class="modal-body small">Envíale este enlace para que cree su contraseña:<div class="input-group input-group-sm mt-2"><input class="form-control" readonly value="${esc(r.invite_url)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>`);
     el.querySelector('[data-copiar]').onclick = () => { navigator.clipboard?.writeText(r.invite_url); toast('Enlace copiado'); };
     return true;

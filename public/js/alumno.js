@@ -264,7 +264,7 @@
       <div class="dw-grid mb-4">${D.cursos.map((c) => `<div class="dw-card dw-curso" ${colorOk(c.color)} data-abrir="${c.id}" role="button" tabindex="0">
         <div class="d-flex justify-content-between align-items-start gap-2"><b>${esc(c.curso)}</b>${c.estado === 'por_iniciar' ? C.chip('soon', faltan(c.empieza_en)) : C.chip(c.academico[0], c.academico[1])}</div>
         <div class="small text-body-secondary mt-1">${esc(proxima(c))}</div>
-        <div class="mt-2">${barras(c)}</div>`).join('')}</div>
+        <div class="mt-2">${barras(c)}</div></div>`).join('')}</div>
       <h2 class="h5 mb-3">Mi calendario</h2><div data-sem></div>`;
     v.onclick = (e) => { if (e.target.closest('[data-pagos],[data-pagos-general]')) return; const a = e.target.closest('[data-abrir]'); if (a) { e.preventDefault(); abrir(Number(a.dataset.abrir)); } };
     calendario($('[data-sem]'), { ancla, inicios: futuros.map((c) => ({ fecha: c.inicio, curso: c.curso })), abrir, clase: claseModal });

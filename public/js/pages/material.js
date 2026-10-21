@@ -39,7 +39,7 @@ DW.ready.then(async (me) => {
     view.querySelector('[data-limpiar]').hidden = !(st.area || st.nivel || st.curso || st.uso || st.arch || st.q);
     view.querySelector('[data-grid]').innerHTML = lista.map((m) => {
       const ar = area(m.area_id), arc = archivos(m), tm = temas(m);
-      return `<div class="col-md-6 col-xl-4"><div class="dw-card h-100 d-flex flex-column mat-card" data-id="${m.id}">
+      return `<div class="col-md-4"><div class="dw-card h-100 d-flex flex-column mat-card" data-id="${m.id}">
         <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
           ${ar ? `<span class="badge text-bg-primary badge-area">${esc(ar.nombre)}</span>` : '<span class="badge text-bg-light border">Sin área</span>'}
           <span class="small text-body-secondary">${m.nivel ? `${esc(m.nivel)} · ` : ''}${arc.length} ${arc.length === 1 ? 'archivo' : 'archivos'}</span></div>

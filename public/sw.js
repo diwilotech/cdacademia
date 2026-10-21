@@ -2,7 +2,7 @@
 // NUNCA guarda /staff/*, /api/* ni /mcp: los datos siempre salen del servidor, para no romper el aislamiento
 // por negocio ni mostrar datos viejos de otra sesión. Sin modo offline ni notificaciones push por ahora.
 // Sube VERSION en cada cambio de archivos estáticos para que los celulares tomen la versión nueva.
-const VERSION = 'dw-v12';
+const VERSION = 'dw-v13';
 const SHELL = ['/css/diwilo.css', '/js/app.js', '/js/crud.js', '/js/shell.js', '/js/login.js', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/assets/logo-diwilo.svg', '/manifest.json'];
 const PRIVATE = /^\/(staff|api|mcp)(\/|$)/;
 

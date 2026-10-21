@@ -7,7 +7,7 @@ DW.ready.then(async (me) => {
   const S = cfg.termS, P = AC.cap(cfg.termP);
   document.querySelector('[data-h1]').textContent = P;
   document.querySelector('[data-view]').innerHTML = '<div data-tabla></div>';
-  C.table({ el: document.querySelector('[data-tabla]'), base: '/api/estudiantes', entity: 'estudiantes', title: S, newText: `Nuevo ${S}`, emptyIcon: 'bi-people', empty: `Aún no hay ${cfg.termP}. Registra el primero.`,
+  const T = C.table({ el: document.querySelector('[data-tabla]'), base: '/api/estudiantes', entity: 'estudiantes', title: S, newText: `Nuevo ${S}`, emptyIcon: 'bi-people', empty: `Aún no hay ${cfg.termP}. Registra el primero.`,
     filters: [{ k: 'activo', options: [['', 'Todos'], ['1', 'Activos'], ['0', 'Inactivos']] }],
     fields: [{ k: 'nombre', label: 'Nombre completo', required: true, full: true }, { k: 'documento', label: 'Documento' }, { k: 'telefono', label: 'Teléfono / WhatsApp' },
       { k: 'email', label: 'Correo', type: 'email' }, { k: 'origen', label: '¿Cómo nos conoció?', placeholder: 'Instagram, referido…' }, { k: 'notas', label: 'Notas', type: 'long' },
@@ -18,7 +18,11 @@ DW.ready.then(async (me) => {
       { label: 'Origen', html: (r) => esc(r.origen || '—') },
       { label: 'App', html: (r) => (r.con_acceso ? C.chip('ok', 'Con acceso') : C.chip('free', 'Sin acceso')) },
       { label: 'Estado', html: (r) => (r.activo ? C.chip('ok', 'Activo') : C.chip('free', 'Inactivo')) }],
-    rowActions: () => '<button class="btn btn-sm btn-outline-primary" data-act="ficha"><i class="bi bi-person-vcard me-1"></i>Ficha</button>',
-    onAction: (a, r) => AC.ficha(r.id, me).catch((x) => window.App.toast(x.message, false)),
-  }).load();
+    rowActions: (r) => `${me.canManage ? `${AC.botonesAcceso(r.con_acceso, r.id).replace(/data-acc="(\w+)"/g, 'data-act="acc-$1"')} ` : ''}<button class="btn btn-sm btn-outline-primary" data-act="ficha" title="Ficha" aria-label="Ficha"><i class="bi bi-person-vcard"></i></button>`,
+    onAction: (a, r) => {
+      if (a.startsWith('acc-')) return AC.accionAcceso(a.slice(4), r.id, r.nombre).then((hecho) => hecho && T.load()).catch((x) => window.App.toast(x.message, false));
+      AC.ficha(r.id, me).catch((x) => window.App.toast(x.message, false));
+    },
+  });
+  T.load();
 });

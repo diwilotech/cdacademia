@@ -294,9 +294,13 @@ DW.ready.then(async (me) => {
         { label: 'Asistencia', html: (i) => `${i.resumen_asistencia.pct == null ? '—' : `${i.resumen_asistencia.pct}%`}${i.resumen_asistencia.por_reponer ? `<div class="small text-body-secondary">${i.resumen_asistencia.por_reponer} por reponer</div>` : ''}` },
         { label: 'Promedio', html: (i) => `${i.resumen_notas.prom ?? '—'}<div class="small text-body-secondary">${i.resumen_notas.evaluado}% evaluado</div>` },
         { label: 'Estado', html: (i) => C.chip(...i.academico) },
-        { label: '', cls: 'text-end', html: (i) => `<button class="btn btn-sm btn-outline-primary" data-ficha="${i.estudiante_id}"><i class="bi bi-person-vcard me-1"></i>Ficha</button>` }], D.inscritos)}</div>`
+        { label: '', cls: 'text-end', html: (i) => `${MANAGE ? `${AC.botonesAcceso(i.con_acceso, i.estudiante_id)} ` : ''}<button class="btn btn-sm btn-outline-primary" data-ficha="${i.estudiante_id}" title="Ficha" aria-label="Ficha"><i class="bi bi-person-vcard"></i></button>` }], D.inscritos)}</div>`
         : empty('bi-people', `Aún no hay ${P} matriculados en este curso.`));
-      view.addEventListener('click', (e) => { const b = e.target.closest('[data-ficha]'); if (b) AC.ficha(b.dataset.ficha, me).catch((x) => toast(x.message, false)); });
+      view.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-ficha]'); if (b) AC.ficha(b.dataset.ficha, me).catch((x) => toast(x.message, false));
+        const a = e.target.closest('[data-acc]');
+        if (a) AC.accionAcceso(a.dataset.acc, a.dataset.eid, D.inscritos.find((x) => String(x.estudiante_id) === a.dataset.eid)?.nombre || '').then((hecho) => hecho && V.reload()).catch((x) => toast(x.message, false));
+      });
       return;
     }
     const activos = () => D.inscritos.filter((i) => i.estado === 'activa');

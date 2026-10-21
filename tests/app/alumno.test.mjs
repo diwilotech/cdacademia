@@ -104,6 +104,10 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   check('Clase: hay clases de prueba', claseFut.fecha > hoy, JSON.stringify(clases1.map((x) => x.fecha)));
   // Ponemos la clase de hoy (la movemos a hoy) con material y dos evaluaciones: una en línea y una en papel
   await A.app(`/api/cursos/${k1.data.id}/clases/${claseHoy.n}`, { method: 'PATCH', body: { fecha: hoy, ini: '00:00', fin: '23:59', material_id: mat.data.id } });
+  const matB = await A.app('/api/material/material', { method: 'POST', body: { titulo: 'Visagismo 2', descripcion: 'Segunda parte', bloques: [{ tipo: 'texto', texto: 'Parte 2' }] } });
+  check('Clase: guarda un segundo material en la misma clase', (await A.app(`/api/cursos/${k1.data.id}/clases/${claseHoy.n}`, { method: 'PATCH', body: { material_id: mat.data.id, material2_id: matB.data.id } })).status === 200
+    && (await A.app(`/api/cursos/${k1.data.id}/detalle`)).data.clases.find((x) => x.n === claseHoy.n)?.material2_id === matB.data.id);
+  check('Clase: el estudiante recibe los dos materiales', (await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}`)).data.materiales_clase?.length === 2);
   const evq = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Quiz contorno', peso: 20, clase_n: claseHoy.n, tipo: 'multiple',
     examen: JSON.stringify({ instrucciones: 'Responde', preguntas: [{ tipo: 'unica', enunciado: '¿Dónde va el contorno?', puntos: 2, opciones: [{ texto: 'Pómulos', ok: true }, { texto: 'Frente' }] }, { tipo: 'vf', enunciado: 'El contorno se difumina', puntos: 1, vf: true }] }) } });
   const evp = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Práctica en papel', peso: 10, clase_n: claseHoy.n, tipo: 'examen' } });

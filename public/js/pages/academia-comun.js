@@ -103,6 +103,30 @@ window.AC = (function () {
     try { pintar(await api(`/api/estudiantes/${e.id}/acceso`)); } catch (x) { host.textContent = x.message; }
   }
 
+  // Botones con icono para dar acceso, restablecer contraseña y quitar acceso (lista de estudiantes y de un curso). Solo propietario/administrador.
+  const botonesAcceso = (conAcceso, id) => `<span class="btn-group btn-group-sm" role="group" aria-label="Acceso a la app">${conAcceso
+    ? `<button class="btn btn-outline-secondary" data-acc="reset" data-eid="${id}" title="Restablecer contraseña" aria-label="Restablecer contraseña"><i class="bi bi-key"></i></button><button class="btn btn-outline-danger" data-acc="quitar" data-eid="${id}" title="Quitar acceso" aria-label="Quitar acceso"><i class="bi bi-person-x"></i></button>`
+    : `<button class="btn btn-outline-success" data-acc="dar" data-eid="${id}" title="Dar acceso a la app" aria-label="Dar acceso a la app"><i class="bi bi-person-check"></i></button>`}</span>`;
+  async function accionAcceso(accion, id, nombre) {
+    const { api, toast, confirm, modal } = window.App;
+    if (accion === 'quitar') {
+      if (!await confirm({ title: 'Quitar acceso', text: `${nombre} ya no podrá entrar a la app.`, ok: 'Quitar', danger: true })) return false;
+      await api(`/api/estudiantes/${id}/acceso`, { method: 'DELETE' }); toast('Acceso quitado'); return true;
+    }
+    let r;
+    try { r = await api(`/api/estudiantes/${id}/acceso`, { method: 'POST', body: {} }); }
+    catch (x) {
+      if (!/correo|email/i.test(x.message)) throw x;
+      const mail = await new Promise((ok) => { const { el, m } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">Correo de ${esc(nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><input class="form-control" type="email" data-mail placeholder="correo@ejemplo.com"><button class="btn btn-primary mt-3" data-ok>Continuar</button></div>`); el.addEventListener('hidden.bs.modal', () => ok(null)); el.querySelector('[data-ok]').onclick = () => { ok(el.querySelector('[data-mail]').value.trim()); m.hide(); }; });
+      if (!mail) return false;
+      r = await api(`/api/estudiantes/${id}/acceso`, { method: 'POST', body: { email: mail } });
+    }
+    const { el } = modal(`<div class="modal-header border-0 pb-0"><h2 class="modal-title h5">${accion === 'reset' ? 'Restablecer contraseña' : 'Acceso a la app'} · ${esc(nombre)}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body small">Envíale este enlace para que cree su contraseña:<div class="input-group input-group-sm mt-2"><input class="form-control" readonly value="${esc(r.invite_url)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>`);
+    el.querySelector('[data-copiar]').onclick = () => { navigator.clipboard?.writeText(r.invite_url); toast('Enlace copiado'); };
+    return true;
+  }
+
   async function ficha(id, me) {
     const [f, c] = await Promise.all([api(`/api/estudiantes/${id}/ficha`), cfg()]);
     const e = f.estudiante, dinero = me.canManage;
@@ -227,5 +251,5 @@ window.AC = (function () {
       <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button></div>`, { size: 'modal-lg' });
   }
 
-  return { verPagos, DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, semana, mes, calendario };
+  return { verPagos, DIAS, NIVELES, METODOS_PAGO, CUOTA, cfg, cap, listas, opts, horario, vistas, horarioEditor, pagar, reciboListo, ficha, botonesAcceso, accionAcceso, semana, mes, calendario };
 })();

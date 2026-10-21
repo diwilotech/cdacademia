@@ -5,7 +5,7 @@
 import { json, HttpError } from '../lib/http.js';
 import { activeModuleIds } from '../lib/modules.js';
 import { all, one, today, addDays, DATE } from '../lib/crud.js';
-import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas } from '../lib/academia.js';
+import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas, enSesion } from '../lib/academia.js';
 import { businessSettings } from './me.js';
 import { cuentaDeMatricula, pagosDeFinanzas } from './matriculas.js';
 import { finanzasPagina } from '../lib/central.js';
@@ -47,12 +47,12 @@ export function routes(r) {
       const estado = !primera ? 'sin_fecha' : primera > hoy ? 'por_iniciar' : ultima < hoy ? 'terminado' : 'en_curso';
       const cu = estadoCuotas(cuotas, pag.s), vencidas = cu.filter((x) => x.estado === 'vencida'), sig = cu.find((x) => x.estado !== 'pagada' && x.estado !== 'vencida') || null;
       // Si hoy hay clase: cuántas evaluaciones de esa clase le faltan por presentar
-      const pendHoy = proxima && proxima.fecha === hoy ? (await all(c.env, `SELECT e.id, e.nombre FROM ac_evaluaciones e LEFT JOIN ac_examenes x ON x.evaluacion_id = e.id AND x.inscripcion_id = ? AND x.business_id = e.business_id
+      const pendHoy = proxima && enSesion(proxima) ? (await all(c.env, `SELECT e.id, e.nombre FROM ac_evaluaciones e LEFT JOIN ac_examenes x ON x.evaluacion_id = e.id AND x.inscripcion_id = ? AND x.business_id = e.business_id
         WHERE e.business_id = ? AND e.curso_id = ? AND e.clase_n = ? AND x.enviado_at IS NULL`, i.id, c.businessId, i.curso_id, proxima.n)) : [];
       cursos.push({ id: i.id, clase_hoy: proxima && proxima.fecha === hoy ? { n: proxima.n, ini: proxima.ini, fin: proxima.fin, tema: proxima.tema, pendientes: pendHoy.map((e) => e.nombre) } : null, curso_id: i.curso_id, curso: i.curso, nivel: i.nivel, color: i.color, profesional: i.profesional, jornada: i.jornada,
         inicio: primera, fin: ultima, estado, empieza_en: estado === 'por_iniciar' ? dias(hoy, primera) : null, total_clases: total, hechas, proxima,
         asistencia: { pct: asis.pct, fallas: asis.fallas, por_reponer: asis.por_reponer }, notas: nts, academico: estadoAcad(asis, nts, cfg),
-        saldo: Math.max(0, i.valor - i.descuento - pag.s), vencido: vencidas.reduce((s, x) => s + x.falta, 0), proxima_cuota: sig ? { etiqueta: sig.etiqueta, vence: sig.vence, falta: sig.falta } : null });
+        total_pago: i.valor - i.descuento, pagado: pag.s, saldo: Math.max(0, i.valor - i.descuento - pag.s), vencido: vencidas.reduce((s, x) => s + x.falta, 0), proxima_cuota: sig ? { etiqueta: sig.etiqueta, vence: sig.vence, falta: sig.falta } : null });
 
       // Avisos (se calculan al abrir; no se guardan)
       if (estado === 'por_iniciar' && dias(hoy, primera) <= 30) avisos.push({ tipo: 'inicio', icono: 'bi-flag', tono: 'info', fecha: primera, texto: `${i.curso} empieza ${dias(hoy, primera) === 1 ? 'mañana' : `en ${dias(hoy, primera)} días`}` });

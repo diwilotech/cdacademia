@@ -132,7 +132,7 @@
     return corto ? `<i class="bi bi-pencil-square ${tono === 'ok' ? 'text-success' : tono === 'bad' ? 'text-danger' : 'text-warning'}" title="${esc(`${e.nombre}: ${txt}`)}"></i>` : C.chip(tono, `${e.estado === 'pendiente' ? 'Examen' : txt}`) + (e.estado === 'pendiente' ? '' : '');
   };
 
-  /* ---------- la clase: material del día, mi trabajo y evaluaciones ---------- */
+  /* ---------- la clase: material del día, y evaluaciones ---------- */
   const fmtTam = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
   async function subirArchivo(url, file) {
     const blob = await preparar(file);
@@ -158,36 +158,23 @@
     const pintar = () => {
       $('[data-t]', el).textContent = `Clase ${n}${K.tema ? ` · ${K.tema}` : ''}`;
       $('[data-s]', el).textContent = `${curso?.curso || ''} · ${K.fecha ? dia(K.fecha) : 'Sin fecha'}${K.ini ? ` · ${h12(K.ini)}${K.fin ? ` – ${h12(K.fin)}` : ''}` : ''}${K.virtual ? ' · virtual' : ''}`;
-      if (K.bloqueada) { body.innerHTML = `<div class="alert alert-info mb-0"><i class="bi bi-lock me-1"></i>El material, la entrega de trabajos y las evaluaciones de esta clase se abren el día de la clase${K.fecha ? ` (${esc(dia(K.fecha))})` : ''}.</div>`; return; }
+      if (K.bloqueada) { body.innerHTML = `<div class="alert alert-info mb-0"><i class="bi bi-lock me-1"></i>El material de esta clase se abre el día de la clase y las evaluaciones solo durante la sesión${K.fecha ? ` (${esc(dia(K.fecha))})` : ''}.</div>`; return; }
       const evs = K.evaluaciones.map((e) => {
-        const est = e.enviado ? (e.nota != null ? C.chip('ok', `Nota ${Number(e.nota).toFixed(1)} / ${e.escala}`) : C.chip('soon', 'Enviada · en revisión')) : e.abierta ? C.chip('soon', 'Disponible hoy') : C.chip('bad', 'No presentada');
+        const est = e.enviado ? (e.nota != null ? C.chip('ok', `Nota ${Number(e.nota).toFixed(1)} / ${e.escala}`) : C.chip('soon', 'Enviada · en revisión')) : e.abierta ? C.chip('soon', 'Disponible ahora') : K.hoy && !K.en_sesion ? C.chip('free', 'Se habilita en la sesión de la clase') : C.chip('bad', 'No presentada');
         return `<li class="list-group-item d-flex gap-2 align-items-center flex-wrap"><div class="flex-grow-1"><b>${esc(e.nombre)}</b><div class="small text-body-secondary">${e.peso}% del curso${e.resultado ? ` · ${e.resultado.obtenido} de ${e.resultado.total} puntos` : ''}</div></div>${est}
-          ${e.abierta ? `<button class="btn btn-sm btn-primary" data-presentar="${e.id}"><i class="bi bi-pencil-square me-1"></i>${e.tipo === 'examen' ? 'Subir mi examen' : 'Presentar'}</button>` : ''}
+          ${e.abierta ? `<button class="btn btn-sm btn-primary" data-presentar="${e.id}"><i class="bi bi-pencil-square me-1"></i>${e.tipo === 'examen' && !e.examen ? 'Subir mi examen' : 'Presentar'}</button>` : ''}
           ${e.enviado && e.archivos.length ? e.archivos.map((a, k) => `<a class="btn btn-sm btn-light" href="/api/alumno/examen-archivo/${encodeURIComponent(a.key)}" target="_blank" rel="noopener" aria-label="Ver archivo ${k + 1}"><i class="bi bi-paperclip"></i></a>`).join('') : ''}</li>`;
       }).join('');
       body.innerHTML = `
-        ${K.hoy ? '<div class="alert alert-success py-2"><i class="bi bi-calendar-check me-1"></i><b>Hoy es tu clase.</b> Aquí tienes el material y puedes subir tu trabajo o presentar la evaluación.</div>' : ''}
+        ${K.hoy ? '<div class="alert alert-success py-2"><i class="bi bi-calendar-check me-1"></i><b>Hoy es tu clase.</b> Aquí tienes el material; las evaluaciones se habilitan durante la sesión.</div>' : ''}
         ${K.detalle || K.materiales ? `<div class="dw-card mb-3 small">${K.detalle ? `<div>${esc(K.detalle)}</div>` : ''}${K.materiales ? `<div class="mt-1"><b>Qué traer:</b> ${esc(K.materiales)}</div>` : ''}</div>` : ''}
         ${K.material ? `<h3 class="h6">Material de la clase</h3><div class="dw-card mb-3 p-3" data-doc>${K.material.bloques.length ? window.AC.doc.html(K.material.bloques) : `<div class="small text-body-secondary">${esc(K.material.descripcion || 'Este material aún no tiene contenido.')}</div>`}</div>`
           : '<div class="small text-body-secondary mb-3">Esta clase no tiene material asignado.</div>'}
-        ${K.evaluaciones.length ? `<h3 class="h6">Evaluaciones de esta clase</h3><ul class="list-group mb-3">${evs}</ul>` : ''}
-        <h3 class="h6">Mi trabajo</h3><div class="dw-card mb-1" data-trabajo>
-          ${K.entregas.length ? `<ul class="list-group list-group-flush mb-2">${K.entregas.map((x) => `<li class="list-group-item px-0 d-flex gap-2 align-items-center"><i class="bi ${iconoMime(x.mime)}"></i><a class="flex-grow-1 text-truncate" href="/api/alumno/entregas/${x.id}/archivo" target="_blank" rel="noopener">${esc(x.nombre)}</a>
-            <small class="text-body-secondary">${fmtTam(x.size)}</small><button class="btn btn-sm btn-light text-danger" data-quitar="${x.id}" aria-label="Quitar"><i class="bi bi-trash"></i></button></li>`).join('')}</ul>` : '<div class="small text-body-secondary mb-2">Aún no has subido nada en esta clase.</div>'}
-          <label class="btn btn-outline-primary mb-0"><i class="bi bi-upload me-1"></i>Subir archivos<input type="file" multiple hidden data-subir accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,video/mp4,video/webm,audio/*"></label>
-          <span class="small text-body-secondary ms-2">Fotos, PDF, Office, video o audio · máx. 20 MB cada uno</span></div>`;
+        ${K.evaluaciones.length ? `<h3 class="h6">Evaluaciones de esta clase</h3><ul class="list-group mb-3">${evs}</ul>` : ''}`;
       const doc = $('[data-doc]', body);
       if (doc && K.material) doc.addEventListener('click', (e) => window.AC.doc.click(e, (i) => K.material.bloques[i]));
     };
-    body.addEventListener('change', async (e) => {
-      const inp = e.target.closest('[data-subir]'); if (!inp) return;
-      inp.disabled = true;
-      for (const f of [...inp.files]) { try { await subirArchivo(`${ruta}/clase/${n}/entregas`, f); toast(`«${f.name}» subido`); } catch (x) { toast(`${f.name}: ${x.message}`, false); } }
-      await cargar();
-    });
     body.addEventListener('click', async (e) => {
-      const q = e.target.closest('[data-quitar]');
-      if (q && await window.App.confirm({ title: 'Quitar archivo', text: 'Se borrará el archivo que subiste.', ok: 'Quitar', danger: true })) { try { await api(`/api/alumno/entregas/${q.dataset.quitar}`, { method: 'DELETE' }); await cargar(); } catch (x) { toast(x.message, false); } }
       const p = e.target.closest('[data-presentar]'); if (p) evaluacion(K.evaluaciones.find((x) => x.id === Number(p.dataset.presentar)));
     });
 
@@ -241,12 +228,12 @@
     cargar();
   }
 
-  // Tarjeta «Hoy»: si hay clase hoy, el acceso directo al material, a subir trabajo y a las evaluaciones.
+  // Tarjeta «Hoy»: si hay clase hoy, el acceso directo al material y a las evaluaciones.
   const tarjetaHoy = () => {
     const hoy = D.cursos.filter((c) => c.clase_hoy);
     return hoy.map((c) => `<div class="dw-card dw-hoy mb-3" ${colorOk(c.color)}><div class="d-flex flex-wrap align-items-center gap-3"><span class="dw-kpi__icon"><i class="bi bi-calendar-check"></i></span>
       <div class="flex-grow-1"><div class="small text-body-secondary">Hoy tienes clase${c.clase_hoy.ini ? ` · ${esc(h12(c.clase_hoy.ini))}${c.clase_hoy.fin ? ` – ${esc(h12(c.clase_hoy.fin))}` : ''}` : ''}</div><b>${esc(c.curso)}</b> · Clase ${c.clase_hoy.n}${c.clase_hoy.tema ? ` · ${esc(c.clase_hoy.tema)}` : ''}
-        ${c.clase_hoy.pendientes.length ? `<div class="small text-warning-emphasis"><i class="bi bi-pencil-square me-1"></i>Evaluación disponible hoy: ${c.clase_hoy.pendientes.map(esc).join(', ')}</div>` : ''}</div>
+        ${c.clase_hoy.pendientes.length ? `<div class="small text-warning-emphasis"><i class="bi bi-pencil-square me-1"></i>Evaluación en tu sesión: ${c.clase_hoy.pendientes.map(esc).join(', ')}</div>` : ''}</div>
       <button class="btn btn-primary" data-clase-hoy="${c.id}:${c.clase_hoy.n}"><i class="bi bi-folder2-open me-1"></i>Abrir la clase</button></div></div>`).join('');
   };
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-clase-hoy]'); if (b) { const [m, n] = b.dataset.claseHoy.split(':').map(Number); claseModal(m, n); } });
@@ -256,20 +243,29 @@
   const tarjeta = (label, valor, icono) => `<div class="dw-card dw-kpi"><span class="dw-kpi__icon"><i class="bi ${icono}"></i></span><span><span class="dw-kpi__v d-block">${valor}</span><span class="dw-kpi__l d-block">${esc(label)}</span></span></div>`;
   const proxima = (c) => (c.proxima ? `${esc(dia(c.proxima.fecha))}${c.proxima.ini ? ` · ${esc(h12(c.proxima.ini))}` : ''}` : c.estado === 'terminado' ? 'Curso terminado' : 'Sin clases programadas');
 
+  // Dos barras por curso: clases dadas y pagos; al final de la de pagos, solo el icono $ (abre los pagos).
+  const barras = (c) => {
+    const pc = c.total_clases ? Math.round((c.hechas / c.total_clases) * 100) : 0, pp = c.total_pago > 0 ? Math.min(100, Math.round((c.pagado / c.total_pago) * 100)) : 100;
+    const tono = c.vencido > 0 ? 'bg-danger' : pp >= 100 ? 'bg-success' : '';
+    return `<div class="small text-body-secondary d-flex justify-content-between"><span>${c.hechas} de ${c.total_clases} clases</span><span>${pc}%</span></div>
+      <div class="progress mb-2" style="height:6px"><div class="progress-bar" style="width:${pc}%"></div></div>
+      <div class="d-flex align-items-center gap-2"><div class="flex-grow-1"><div class="small ${c.vencido > 0 ? 'text-danger' : 'text-body-secondary'} d-flex justify-content-between"><span>${c.vencido > 0 ? `Pago vencido ${C.money(c.vencido)}` : c.saldo > 0 ? `Pagado ${C.money(c.pagado)} · saldo ${C.money(c.saldo)}` : 'Pagos al día'}</span><span>${pp}%</span></div>
+        <div class="progress" style="height:6px"><div class="progress-bar ${tono}" style="width:${pp}%"></div></div></div>
+        <button type="button" class="btn btn-sm btn-outline-primary px-2" data-pagos="${c.id}" title="Pagos" aria-label="Pagos"><i class="bi bi-cash-coin"></i></button></div>`;
+  };
+
   /* ---------- vista general (varios cursos) ---------- */
   function vistaGeneral() {
     const v = $('[data-vista]');
     const futuros = D.cursos.filter((c) => c.estado === 'por_iniciar').sort((a, b) => a.inicio.localeCompare(b.inicio));
     const enCurso = D.cursos.some((c) => c.estado === 'en_curso');
     const ancla = !enCurso && futuros.length ? futuros[0].inicio : D.hoy;
-    v.innerHTML = `<div class="dw-page-head"><h1>Hola, ${esc(D.estudiante.nombre.split(' ')[0])}</h1><button class="btn btn-primary" data-pagos-general><i class="bi bi-cash-coin me-1"></i>Pagos</button></div>
+    v.innerHTML = `<div class="dw-page-head"><h1>Hola, ${esc(D.estudiante.nombre.split(' ')[0])}</h1></div>
       ${tarjetaHoy()}
       <div class="dw-grid mb-4">${D.cursos.map((c) => `<div class="dw-card dw-curso" ${colorOk(c.color)} data-abrir="${c.id}" role="button" tabindex="0">
         <div class="d-flex justify-content-between align-items-start gap-2"><b>${esc(c.curso)}</b>${c.estado === 'por_iniciar' ? C.chip('soon', faltan(c.empieza_en)) : C.chip(c.academico[0], c.academico[1])}</div>
         <div class="small text-body-secondary mt-1">${esc(proxima(c))}</div>
-        <div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:${c.total_clases ? Math.round((c.hechas / c.total_clases) * 100) : 0}%"></div></div>
-        <div class="d-flex align-items-center gap-2 mt-2"><span class="small text-body-secondary flex-grow-1">${c.hechas} de ${c.total_clases} clases</span>${c.vencido > 0 ? C.chip('bad', 'Pago vencido') : c.saldo > 0 ? `<span class="small text-body-secondary">Saldo ${C.money(c.saldo)}</span>` : C.chip('ok', 'Al día')}
-          <button type="button" class="btn btn-sm btn-outline-primary" data-pagos="${c.id}"><i class="bi bi-cash-coin me-1"></i>Pagos</button></div></div>`).join('')}</div>
+        <div class="mt-2">${barras(c)}</div>`).join('')}</div>
       <h2 class="h5 mb-3">Mi calendario</h2><div data-sem></div>`;
     v.onclick = (e) => { if (e.target.closest('[data-pagos],[data-pagos-general]')) return; const a = e.target.closest('[data-abrir]'); if (a) { e.preventDefault(); abrir(Number(a.dataset.abrir)); } };
     calendario($('[data-sem]'), { ancla, inicios: futuros.map((c) => ({ fecha: c.inicio, curso: c.curso })), abrir, clase: claseModal });
@@ -282,9 +278,10 @@
     let d; try { d = await api(`/api/alumno/curso/${id}`); } catch (x) { v.innerHTML = `<div class="dw-card text-danger">${esc(x.message)}</div>`; return; }
     const prom = d.notas.prom == null ? '—' : Number(d.notas.prom).toFixed(1);
     const ant = d.clases.filter((x) => x.fecha && x.fecha < D.hoy);
-    v.innerHTML = `<div class="dw-page-head">${conVolver ? '<button class="btn btn-light" data-volver aria-label="Volver"><i class="bi bi-arrow-left"></i></button>' : ''}<h1>${conVolver ? esc(c.curso) : `Hola, ${esc(D.estudiante.nombre.split(' ')[0])}`}</h1>${C.chip(c.academico[0], c.academico[1])}<button class="btn btn-primary ms-auto" data-pagos="${id}"><i class="bi bi-cash-coin me-1"></i>Pagos</button></div>
+    v.innerHTML = `<div class="dw-page-head">${conVolver ? '<button class="btn btn-light" data-volver aria-label="Volver"><i class="bi bi-arrow-left"></i></button>' : ''}<h1>${conVolver ? esc(c.curso) : `Hola, ${esc(D.estudiante.nombre.split(' ')[0])}`}</h1>${C.chip(c.academico[0], c.academico[1])}</div>
       ${conVolver ? '' : `<div class="text-body-secondary mb-3">${esc(c.curso)}${c.nivel ? ` · ${esc(c.nivel)}` : ''}</div>`}
       ${cuenta(c)}${tarjetaHoy()}
+      <div class="dw-card mb-3">${barras(c)}</div>
       <div class="dw-grid mb-4">
         ${tarjeta('Próxima clase', `<span class="fs-6">${proxima(c)}</span>`, 'bi-calendar-event')}
         ${tarjeta('Clases', `${c.hechas} / ${c.total_clases}`, 'bi-journal-bookmark')}
@@ -293,7 +290,6 @@
         ${c.saldo > 0 ? tarjeta(c.vencido > 0 ? `Saldo · vencido ${C.money(c.vencido)}` : c.proxima_cuota ? `Saldo · próxima cuota ${C.day(c.proxima_cuota.vence)}` : 'Saldo', `<span class="${c.vencido > 0 ? 'text-danger' : ''}">${C.money(c.saldo)}</span>`, 'bi-cash-coin') : ''}
         ${d.asistencia.por_reponer > 0 ? tarjeta('Clases por reponer', d.asistencia.por_reponer, 'bi-arrow-repeat') : ''}
       </div>
-      <div data-pagos class="mb-4"></div>
       <h2 class="h5 mb-3">Calendario</h2><div data-sem class="mb-4"></div>
       <div class="row g-4"><div class="col-lg-7"><h2 class="h5 mb-3">Mis clases</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
         ${d.clases.map((x) => `<li class="list-group-item d-flex gap-2 align-items-center ${x.fecha === D.hoy ? 'bg-body-tertiary' : ''}" ${x.fecha && x.fecha <= D.hoy ? `role="button" data-clase-hoy="${id}:${x.n}"` : ''}><span class="text-body-secondary" style="width:2rem">${x.n}</span>
@@ -308,7 +304,6 @@
         </ul></div></div></div>`;
     const volver = $('[data-volver]'); if (volver) volver.onclick = () => vistaGeneral();
     calendario($('[data-sem]'), { matricula: id, ancla: c.estado === 'por_iniciar' ? c.inicio : D.hoy, inicios: c.estado === 'por_iniciar' ? [{ fecha: c.inicio, curso: c.curso }] : [], abrir: null, clase: claseModal });
-    pagos($('[data-pagos]'), id, d, c);
     window.scrollTo(0, 0);
   }
 

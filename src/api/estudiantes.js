@@ -25,7 +25,7 @@ export const ENTITIES = {
       const venc = car.filter((q) => q.estado === 'vencida');
       return rows.map((r) => {
         const ra = resumenAsis(marcas.filter((m) => m.estudiante_id === r.id));
-        return { ...r, ...moraDe(venc.filter((q) => q.estudiante_id === r.id), manager), asistencia_pct: ra.pct, baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
+        return { ...r, con_acceso: !!r.user_id, ...moraDe(venc.filter((q) => q.estudiante_id === r.id), manager), asistencia_pct: ra.pct, baja_asistencia: ra.pct != null && ra.pct < cfg.asisMin };
       });
     },
     async afterDelete(c, before) {

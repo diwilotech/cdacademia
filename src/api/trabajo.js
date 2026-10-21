@@ -1,20 +1,18 @@
-// Lo que hace el estudiante en cada clase: ve el material del día, sube su trabajo (entregas) y presenta las evaluaciones de esa clase.
-// El material y el examen se abren el día de la clase (el material queda disponible después); el examen solo ese día y se envía una vez.
-//   GET  /api/alumno/curso/:id/clase/:n                  la clase: material, evaluaciones y entregas
-//   POST /api/alumno/curso/:id/clase/:n/entregas?nombre=  (cuerpo = archivo)  ·  DELETE /api/alumno/entregas/:eid  ·  GET /api/alumno/entregas/:eid/archivo
+// Lo que hace el estudiante en cada clase: ve el material del día y presenta las evaluaciones de esa clase.
+// El material se abre el día de la clase (y queda disponible después); la evaluación solo durante la sesión de la clase (día y franja horaria) y se envía una vez.
+// No hay «subir mi trabajo»: solo se sube archivo en un examen con subida (foto o PDF del examen en papel).
+//   GET  /api/alumno/curso/:id/clase/:n                  la clase: material y evaluaciones
 //   GET  /api/alumno/material/:key                       archivo de un material de una clase ya abierta
 //   PUT  /api/alumno/curso/:id/evaluaciones/:ev          guarda borrador  ·  POST …/:ev/enviar  envía (y califica si todo se califica solo)
 //   POST /api/alumno/curso/:id/evaluaciones/:ev/archivo?nombre=  foto o PDF del examen en papel  ·  GET /api/alumno/examen-archivo/:key
-//   Equipo: GET /api/cursos/:id/entregas  ·  GET /api/cursos/entregas/:eid/archivo
 import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
-import { getConfig, parse } from '../lib/academia.js';
+import { getConfig, parse, enSesion } from '../lib/academia.js';
 import { calificar, limpiarRespuestas } from '../lib/examen.js';
 import { matriculas } from './alumno.js';
 
 const MAX = 20 * 1024 * 1024;
-const OK_ENTREGA = /^(image\/(png|jpe?g|gif|webp)|application\/(pdf|zip|msword|vnd\.openxmlformats-officedocument\.[\w.]+|vnd\.ms-(excel|powerpoint))|video\/(mp4|webm)|audio\/(mpeg|mp4|wav|ogg|webm)|text\/plain)$/;
 const INLINE = /^(image\/(png|jpe?g|gif|webp)|application\/pdf|video\/(mp4|webm)|audio\/(mpeg|mp4|wav|ogg|webm))$/;
 const need = (env) => { if (!env.FILES) throw new HttpError(501, 'Esta app no tiene almacenamiento de archivos configurado'); return env.FILES; };
 const limpioNombre = (n, d) => String(n || d).replace(/[^\w.\- ]+/g, '_').slice(0, 100);
@@ -53,8 +51,8 @@ export function routes(r) {
   const evDe = async (c, i, evId) => {
     const ev = await one(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen FROM ac_evaluaciones WHERE id = ? AND business_id = ? AND curso_id = ?', evId, c.businessId, i.curso_id);
     if (!ev) throw new HttpError(404, 'Evaluación no encontrada');
-    const cl = ev.clase_n ? await one(c.env, 'SELECT fecha FROM ac_clases WHERE business_id = ? AND curso_id = ? AND n = ?', c.businessId, i.curso_id, ev.clase_n) : null;
-    const hoy = today(), abierta = ev.clase_n ? cl?.fecha === hoy : false;
+    const cl = ev.clase_n ? await one(c.env, 'SELECT fecha, ini, fin FROM ac_clases WHERE business_id = ? AND curso_id = ? AND n = ?', c.businessId, i.curso_id, ev.clase_n) : null;
+    const hoy = today(), abierta = ev.clase_n ? enSesion(cl) : false;
     const row = await one(c.env, 'SELECT resp, archivos, enviado_at FROM ac_examenes WHERE business_id = ? AND inscripcion_id = ? AND evaluacion_id = ?', c.businessId, i.id, ev.id);
     return { ev: { ...ev, examen: parse(ev.examen, null) }, abierta, hoy, ex: { resp: parse(row?.resp, {}), archivos: parse(row?.archivos, []), enviado_at: row?.enviado_at || null } };
   };
@@ -72,15 +70,14 @@ export function routes(r) {
   /* ---- la clase ---- */
   r.get('/api/alumno/curso/:id/clase/:n', 'alumno', async (c) => {
     const i = await matricula(c), cl = await claseDe(c, i, Number(c.params.n)), hoy = today();
-    const base = { n: cl.n, fecha: cl.fecha, ini: cl.ini, fin: cl.fin, virtual: !!cl.virtual, hoy: cl.fecha === hoy };
+    const base = { n: cl.n, fecha: cl.fecha, ini: cl.ini, fin: cl.fin, virtual: !!cl.virtual, hoy: cl.fecha === hoy, en_sesion: enSesion(cl) };
     if (!cl.fecha || cl.fecha > hoy) return json({ ...base, bloqueada: true, tema: cl.tema || null });
     const mat = cl.material_id ? await one(c.env, 'SELECT titulo, descripcion, bloques FROM ac_material WHERE id = ? AND business_id = ?', cl.material_id, c.businessId) : null;
     const evs = await all(c.env, 'SELECT id FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? AND clase_n = ? ORDER BY id', c.businessId, i.curso_id, cl.n);
     const evaluaciones = [];
     for (const e of evs) { const x = await evDe(c, i, e.id); x.fechaClase = cl.fecha; evaluaciones.push(await vistaEv(c, i, x)); }
-    const entregas = await all(c.env, 'SELECT id, nombre, mime, size, created_at FROM ac_entregas WHERE business_id = ? AND inscripcion_id = ? AND clase_n = ? ORDER BY id', c.businessId, i.id, cl.n);
     return json({ ...base, bloqueada: false, tema: cl.tema || mat?.titulo || null, detalle: cl.detalle || null, metodos: parse(cl.metodos, []), materiales: cl.materiales || null,
-      material: mat ? { titulo: mat.titulo, descripcion: mat.descripcion, bloques: parse(mat.bloques, []) } : null, evaluaciones, entregas });
+      material: mat ? { titulo: mat.titulo, descripcion: mat.descripcion, bloques: parse(mat.bloques, []) } : null, evaluaciones });
   });
 
   // Archivos del material: solo los de materiales de clases que el estudiante ya tiene abiertas
@@ -93,31 +90,6 @@ export function routes(r) {
     return servir(c, key, null, null, c.url.searchParams.get('dl') === '1');
   });
 
-  /* ---- entregas ---- */
-  r.post('/api/alumno/curso/:id/clase/:n/entregas', 'alumno', async (c) => {
-    const i = await matricula(c), cl = await claseDe(c, i, Number(c.params.n));
-    if (!cl.fecha || cl.fecha > today()) throw new HttpError(409, 'Esta clase aún no empieza');
-    if ((await one(c.env, 'SELECT COUNT(*) n FROM ac_entregas WHERE business_id = ? AND inscripcion_id = ? AND clase_n = ?', c.businessId, i.id, cl.n)).n >= 10) throw new HttpError(409, 'Máximo 10 archivos por clase');
-    const { body, type } = await leerArchivo(c, OK_ENTREGA, 'Sube una foto, PDF, documento de Office, ZIP, video o audio');
-    const nombre = limpioNombre(c.url.searchParams.get('nombre'), 'trabajo'), key = `${c.businessId}/entrega/${crypto.randomUUID()}-${nombre}`;
-    await need(c.env).put(key, body, { httpMetadata: { contentType: type } });
-    const res = await c.env.DB.prepare('INSERT INTO ac_entregas (business_id, inscripcion_id, clase_n, r2_key, nombre, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(c.businessId, i.id, cl.n, key, nombre, type, body.byteLength, now()).run();
-    await audit(c, `${c.estudiante.nombre} subió «${nombre}» (${i.curso}, clase ${cl.n})`, { modulo: 'cursos' });
-    return json({ id: res.meta.last_row_id, nombre, mime: type, size: body.byteLength }, 201);
-  });
-  const entregaPropia = async (c) => {
-    const e = await one(c.env, `SELECT e.* FROM ac_entregas e JOIN ac_inscripciones i ON i.id = e.inscripcion_id AND i.business_id = e.business_id WHERE e.id = ? AND e.business_id = ? AND i.estudiante_id = ?`, Number(c.params.eid), c.businessId, c.estudiante.id);
-    if (!e) throw new HttpError(404, 'No encontrado');
-    return e;
-  };
-  r.get('/api/alumno/entregas/:eid/archivo', 'alumno', async (c) => { const e = await entregaPropia(c); return servir(c, e.r2_key, e.mime, e.nombre, c.url.searchParams.get('dl') === '1'); });
-  r.delete('/api/alumno/entregas/:eid', 'alumno', async (c) => {
-    const e = await entregaPropia(c);
-    await c.env.DB.prepare('DELETE FROM ac_entregas WHERE id = ? AND business_id = ?').bind(e.id, c.businessId).run();
-    await c.env.FILES?.delete(e.r2_key);
-    return json({ ok: true });
-  });
-
   /* ---- evaluaciones ---- */
   const abrir = async (c) => {
     const i = await matricula(c), x = await evDe(c, i, Number(c.params.ev));
@@ -127,7 +99,7 @@ export function routes(r) {
   };
   const exigirAbierta = (x) => {
     if (x.ex.enviado_at) throw new HttpError(409, 'Ya enviaste esta evaluación');
-    if (!x.abierta) throw new HttpError(409, 'Esta evaluación solo se presenta el día de su clase');
+    if (!x.abierta) throw new HttpError(409, 'Esta evaluación solo se presenta durante la sesión de su clase');
   };
   r.put('/api/alumno/curso/:id/evaluaciones/:ev', 'alumno', async (c) => {
     const { i, x } = await abrir(c); exigirAbierta(x);
@@ -173,18 +145,5 @@ export function routes(r) {
       c.businessId, c.estudiante.id, `%${key.replace(/[%_]/g, '')}%`);
     if (!mio) throw new HttpError(404, 'No encontrado');
     return servir(c, key, null, null, false);
-  });
-
-  /* ---- equipo: ver lo que subieron ---- */
-  r.get('/api/cursos/:id/entregas', 'tenant:cursos', async (c) => {
-    const k = await one(c.env, 'SELECT id FROM ac_cursos WHERE id = ? AND business_id = ?', Number(c.params.id), c.businessId);
-    if (!k) throw new HttpError(404, 'Curso no encontrado');
-    return json({ rows: await all(c.env, `SELECT e.id, e.clase_n, e.nombre, e.mime, e.size, e.created_at, s.nombre AS estudiante FROM ac_entregas e JOIN ac_inscripciones i ON i.id = e.inscripcion_id AND i.business_id = e.business_id
-      JOIN ac_estudiantes s ON s.id = i.estudiante_id AND s.business_id = i.business_id WHERE e.business_id = ? AND i.curso_id = ? ORDER BY e.clase_n DESC, e.id DESC LIMIT 500`, c.businessId, k.id) });
-  });
-  r.get('/api/cursos/entregas/:eid/archivo', 'tenant:cursos', async (c) => {
-    const e = await one(c.env, 'SELECT * FROM ac_entregas WHERE id = ? AND business_id = ?', Number(c.params.eid), c.businessId);
-    if (!e) throw new HttpError(404, 'No encontrado');
-    return servir(c, e.r2_key, e.mime, e.nombre, c.url.searchParams.get('dl') === '1');
   });
 }

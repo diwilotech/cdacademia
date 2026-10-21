@@ -134,3 +134,12 @@ export function estadoAcad(asis, notas, cfg) {
 
 // JSON guardado en una columna de texto (horario, plan, áreas…) con valor por defecto.
 export const parse = (txt, fallback) => { try { const v = JSON.parse(txt); return v ?? fallback; } catch { return fallback; } };
+
+// ¿La clase está en sesión ahora? Día de la clase y hora de Colombia entre su inicio y su fin (sin hora: todo el día; sin fin: hasta el final del día).
+export const enSesion = (cl) => {
+  if (!cl?.fecha) return false;
+  const t = new Date(Date.now() - 5 * 3600000).toISOString();
+  if (t.slice(0, 10) !== cl.fecha) return false;
+  const h = t.slice(11, 16);
+  return (!cl.ini || h >= cl.ini) && (!cl.fin || h <= cl.fin);
+};

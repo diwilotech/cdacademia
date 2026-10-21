@@ -103,7 +103,7 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   const claseFut = clases1.at(-1), claseHoy = clases1.find((x) => x.fecha >= hoy && x.n !== claseFut.n) || clases1.at(-2);
   check('Clase: hay clases de prueba', claseFut.fecha > hoy, JSON.stringify(clases1.map((x) => x.fecha)));
   // Ponemos la clase de hoy (la movemos a hoy) con material y dos evaluaciones: una en línea y una en papel
-  await A.app(`/api/cursos/${k1.data.id}/clases/${claseHoy.n}`, { method: 'PATCH', body: { fecha: hoy, material_id: mat.data.id } });
+  await A.app(`/api/cursos/${k1.data.id}/clases/${claseHoy.n}`, { method: 'PATCH', body: { fecha: hoy, ini: '00:00', fin: '23:59', material_id: mat.data.id } });
   const evq = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Quiz contorno', peso: 20, clase_n: claseHoy.n, tipo: 'multiple',
     examen: JSON.stringify({ instrucciones: 'Responde', preguntas: [{ tipo: 'unica', enunciado: '¿Dónde va el contorno?', puntos: 2, opciones: [{ texto: 'Pómulos', ok: true }, { texto: 'Frente' }] }, { tipo: 'vf', enunciado: 'El contorno se difumina', puntos: 1, vf: true }] }) } });
   const evp = await A.app('/api/cursos/evaluaciones', { method: 'POST', body: { curso_id: k1.data.id, nombre: 'Práctica en papel', peso: 10, clase_n: claseHoy.n, tipo: 'examen' } });
@@ -119,12 +119,7 @@ export default async function ({ check, client, newBusiness, TS_TOKEN }) {
   check('Clase: no presenta el examen de una clase futura', (await S(`/api/alumno/curso/${c1.id}/evaluaciones/${evf.data.id}/enviar`, { method: 'POST', body: { resp: {} } })).status === 409);
   check('Clase: el equipo no usa la API del estudiante', (await A.app(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}`)).status === 403);
   const mfile = Object.assign(new Uint8Array(png));
-  const tri = await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}/entregas?nombre=trabajo.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } });
-  check('Clase: sube su trabajo', tri.status === 201, JSON.stringify(tri.data));
-  check('Clase: no sube ejecutables', (await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}/entregas?nombre=a.exe`, { method: 'POST', body: mfile, headers: { 'content-type': 'application/x-msdownload' } })).status === 400);
-  check('Clase: no sube trabajo a una clase futura', (await S(`/api/alumno/curso/${c1.id}/clase/${claseFut.n}/entregas?nombre=a.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } })).status === 409);
-  check('Clase: el equipo ve lo que subió', (await A.app(`/api/cursos/${k1.data.id}/entregas`)).data.rows?.some((x) => x.estudiante === 'Sofía Alumna' && x.nombre === 'trabajo.png'));
-  check('Clase: el otro estudiante no abre su archivo', (await A.app(`/api/cursos/entregas/${tri.data.id}/archivo`)).status === 200 && (await B.app(`/api/cursos/entregas/${tri.data.id}/archivo`)).status === 404);
+  check('Clase: ya no hay «subir mi trabajo»', (await S(`/api/alumno/curso/${c1.id}/clase/${claseHoy.n}/entregas?nombre=trabajo.png`, { method: 'POST', body: mfile, headers: { 'content-type': 'image/png' } })).status === 404 && cl.data.entregas === undefined);
   const op = q1.examen.preguntas[0].opciones.find((o) => o.texto === 'Pómulos').id;
   const env = await S(`/api/alumno/curso/${c1.id}/evaluaciones/${q1.id}/enviar`, { method: 'POST', body: { resp: { [q1.examen.preguntas[0].id]: op, [q1.examen.preguntas[1].id]: true } } });
   check('Clase: envía el examen y se califica solo', env.status === 200 && env.data.evaluacion.enviado && env.data.evaluacion.nota === 5, JSON.stringify(env.data).slice(0, 300));

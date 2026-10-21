@@ -32,7 +32,6 @@ export default [
   H({ name: 'cursos.poner_notas', modulo: 'cursos', tipo: 'escritura', description: 'Registra las notas de una evaluación (null borra la nota).',
     props: { curso_id: id(), evaluacion_id: id(), notas: lista({ type: 'object', properties: { inscripcion_id: id(), nota: { type: ['number', 'null'] } }, required: ['inscripcion_id', 'nota'] }) },
     required: ['curso_id', 'evaluacion_id', 'notas'], ruta: ['POST', '/api/cursos/:curso_id/notas'] }),
-  H({ name: 'cursos.ver_entregas', modulo: 'cursos', tipo: 'lectura', description: 'Trabajos que los estudiantes han subido en un curso.', props: { curso_id: id() }, required: ['curso_id'], ruta: ['GET', '/api/cursos/:curso_id/entregas'] }),
   H({ name: 'cursos.ver_examenes', modulo: 'cursos', tipo: 'lectura', description: 'Exámenes de un curso con el estado de cada estudiante.', props: { curso_id: id() }, required: ['curso_id'], ruta: ['GET', '/api/cursos/:curso_id/examenes'] }),
   H({ name: 'cursos.ver_examen', modulo: 'cursos', tipo: 'lectura', description: 'El examen de un estudiante: respuestas, archivos y calificación.', props: { curso_id: id(), evaluacion_id: id(), inscripcion_id: id() }, required: ['curso_id', 'evaluacion_id', 'inscripcion_id'],
     ruta: ['GET', '/api/cursos/:curso_id/examenes/:evaluacion_id/:inscripcion_id'] }),

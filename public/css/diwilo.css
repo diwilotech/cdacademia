@@ -312,3 +312,10 @@ body.dw-alumno .dw-main { margin-left: 0; padding: calc(var(--dw-top-h) + 20px) 
 .dw-hoy { border-left: 4px solid var(--ev, var(--dw-p)); background: rgba(var(--dw-p-rgb), .05); }
 /* Clase con evaluación (parcial): otro color en los calendarios */
 .dw-ev--parcial { --ev: #d97706; background: rgba(217, 119, 6, .14); } .dw-ev--parcial:hover { background: rgba(217, 119, 6, .24); }
+
+/* Formulario en solo lectura (p. ej. curso sin pulsar «Editar»): se lee como una ficha, no como un formulario apagado */
+.dw-lectura .form-control, .dw-lectura .form-select { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; opacity: 1; color: var(--bs-body-color); box-shadow: none; resize: none; -webkit-appearance: none; appearance: none; background-image: none; }
+.dw-lectura .form-label { color: var(--bs-secondary-color); font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; }
+.dw-lectura .form-text, .dw-lectura [data-add-mod], .dw-lectura [data-add-cup], .dw-lectura [data-calcular] { display: none; }
+.dw-lectura .form-check-input:disabled { opacity: 1; }
+.dw-lectura .form-check-input:disabled ~ .form-check-label { opacity: 1; }

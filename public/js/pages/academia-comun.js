@@ -87,10 +87,10 @@ window.AC = (function () {
     const pintar = (a, enlace) => {
       const [tono, txt] = ESTADO[a.estado];
       host.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center">${C.chip(tono, txt)}${a.email ? `<span>${esc(a.email)}</span>` : ''}
-        <span class="flex-grow-1"></span><button type="button" class="btn btn-sm btn-outline-primary" data-dar>${a.estado === 'sin_acceso' ? '<i class="bi bi-envelope-plus me-1"></i>Dar acceso' : '<i class="bi bi-link-45deg me-1"></i>Nuevo enlace'}</button>
-        ${a.estado !== 'sin_acceso' ? '<button type="button" class="btn btn-sm btn-outline-danger" data-quitar><i class="bi bi-person-x me-1"></i>Quitar</button>' : ''}</div>
+        <span class="flex-grow-1"></span><button type="button" class="btn btn-sm btn-outline-primary" data-dar>${a.estado === 'sin_acceso' ? '<i class="bi bi-envelope-plus me-1"></i>Dar acceso' : '<i class="bi bi-key me-1"></i>Restablecer contraseña'}</button>
+        ${a.estado !== 'sin_acceso' ? '<button type="button" class="btn btn-sm btn-outline-danger" data-quitar><i class="bi bi-person-x me-1"></i>Quitar acceso</button>' : ''}</div>
         ${a.estado === 'sin_acceso' && !a.email ? '<div class="mt-2"><input class="form-control form-control-sm" type="email" data-mail placeholder="Correo del estudiante"></div>' : ''}
-        ${enlace ? `<div class="mt-2">Envíale este enlace para que cree su contraseña:<div class="input-group input-group-sm mt-1"><input class="form-control" readonly value="${esc(enlace)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>` : ''}`;
+        ${enlace ? `<div class="mt-2">Envíale este enlace para que cree su nueva contraseña:<div class="input-group input-group-sm mt-1"><input class="form-control" readonly value="${esc(enlace)}" data-enlace><button class="btn btn-outline-secondary" type="button" data-copiar>Copiar</button></div></div>` : ''}`;
       host.querySelector('[data-dar]').onclick = async () => {
         try { const r = await api(`/api/estudiantes/${e.id}/acceso`, { method: 'POST', body: { email: host.querySelector('[data-mail]')?.value || a.email || undefined } }); pintar(r, r.invite_url); }
         catch (x) { window.App.toast(x.message, false); }

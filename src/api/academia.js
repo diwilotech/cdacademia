@@ -36,7 +36,7 @@ export function routes(r) {
     }
     if (act.has('matriculas') && money) {
       const m = await one(c.env, "SELECT COALESCE(SUM(CASE WHEN estado = 'activa' THEN 1 ELSE 0 END), 0) AS activas, COALESCE(SUM(CASE WHEN fecha >= ? THEN 1 ELSE 0 END), 0) AS mes FROM ac_inscripciones WHERE business_id = ?", `${mes}-01`, B);
-      tile('matriculas', 'Matrículas activas', m.activas, { fmt: 'num', detalle: `${m.mes} nuevas este mes`, icono: 'bi-person-plus', ruta: '/staff/matriculas.html' });
+      tile('matriculas', 'Matrículas activas', m.activas, { fmt: 'num', detalle: `${m.mes} nuevas este mes`, icono: 'bi-person-plus', ruta: '/staff/estudiantes.html#matriculas' });
     }
     if (act.has('cursos')) {
       const k = await one(c.env, `SELECT COALESCE(SUM(CASE WHEN k.inicio <= ? AND f.fin >= ? THEN 1 ELSE 0 END), 0) AS en_curso, COALESCE(SUM(CASE WHEN k.inicio > ? THEN 1 ELSE 0 END), 0) AS por_iniciar
@@ -64,9 +64,9 @@ export function routes(r) {
       const rows = await cartera(c);
       const venc = rows.filter((q) => q.estado === 'vencida'), deMes = rows.filter((q) => q.falta > 0 && q.vence.startsWith(mes));
       const rec = await one(c.env, 'SELECT COALESCE(SUM(valor), 0) AS v, COUNT(*) AS n FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND fecha >= ? AND fecha <= ?', B, `${mes}-01`, hoy);
-      tile('recaudo', 'Recaudado este mes', rec.v, { fmt: 'money', detalle: `${rec.n} ${rec.n === 1 ? 'pago' : 'pagos'}`, icono: 'bi-cash-stack', ruta: '/staff/matriculas.html#pagos' });
-      tile('por_cobrar', 'Por cobrar este mes', deMes.reduce((s, q) => s + q.falta, 0), { fmt: 'money', detalle: `${deMes.length} cuotas`, icono: 'bi-calendar-month', ruta: '/staff/matriculas.html#cartera' });
-      tile('vencido', 'Cartera vencida', venc.reduce((s, q) => s + q.falta, 0), { fmt: 'money', detalle: `${venc.length} cuotas vencidas`, icono: 'bi-exclamation-circle', tono: venc.length ? 'bad' : '', ruta: '/staff/matriculas.html#cartera' });
+      tile('recaudo', 'Recaudado este mes', rec.v, { fmt: 'money', detalle: `${rec.n} ${rec.n === 1 ? 'pago' : 'pagos'}`, icono: 'bi-cash-stack', ruta: '/staff/estudiantes.html#matriculas#pagos' });
+      tile('por_cobrar', 'Por cobrar este mes', deMes.reduce((s, q) => s + q.falta, 0), { fmt: 'money', detalle: `${deMes.length} cuotas`, icono: 'bi-calendar-month', ruta: '/staff/estudiantes.html#matriculas#cartera' });
+      tile('vencido', 'Cartera vencida', venc.reduce((s, q) => s + q.falta, 0), { fmt: 'money', detalle: `${venc.length} cuotas vencidas`, icono: 'bi-exclamation-circle', tono: venc.length ? 'bad' : '', ruta: '/staff/estudiantes.html#matriculas#cartera' });
       // últimos 6 meses: matrículas nuevas y recaudo
       const meses = Array.from({ length: 6 }, (_, i) => { const x = new Date(`${mes}-01T12:00:00Z`); x.setUTCMonth(x.getUTCMonth() - (5 - i)); return x.toISOString().slice(0, 7); });
       const [mm, pp] = await Promise.all([

@@ -53,7 +53,7 @@ export async function activeModuleIds(env, businessId) {
 }
 
 // Lo que el personal NO ve mientras no se le asigne (propietario y administradores ven todo).
-export const STAFF_SIN_ACCESO = ['matriculas', 'cuotas', 'finanzas', 'marketing'];
+export const STAFF_SIN_ACCESO = ['matriculas', 'cuotas', 'finanzas', 'marketing', 'nomina'];
 export const parseModulos = (raw) => { try { const a = JSON.parse(raw); return Array.isArray(a) ? a : null; } catch { return null; } };
 // ¿Esta persona puede abrir el módulo? `modulos` = lista elegida para ella (null = la de su rol).
 // «profesionales» ya vive dentro de Equipo (y los cursos lo usan para elegir docente): siempre permitido.

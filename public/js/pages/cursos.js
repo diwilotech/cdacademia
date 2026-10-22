@@ -274,7 +274,7 @@ DW.ready.then(async (me) => {
   const parseEx = (x) => { if (!x) return null; if (typeof x === 'object') return x; try { return JSON.parse(x); } catch { return null; } };
   const preguntasDe = (ev) => parseEx(ev.examen)?.preguntas || [];
   $('[data-h1]').innerHTML = `${esc(k.nombre)} ${C.chip(ESTADO[k.estado] || 'free', k.estado)}`;
-  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-primary" data-edicion><i class="bi bi-pencil me-1"></i>Editar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/matriculas.html?curso=${k.id}"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
+  $('[data-acciones]').innerHTML = `<a class="btn btn-light" href="/staff/cursos.html"><i class="bi bi-arrow-left me-1"></i>Cursos</a>${MANAGE ? '<button class="btn btn-outline-primary" data-edicion><i class="bi bi-pencil me-1"></i>Editar</button>' : ''}${MANAGE && me.modules.some((m) => m.id === 'matriculas') ? `<a class="btn btn-primary" href="/staff/estudiantes.html?curso=${k.id}#matriculas"><i class="bi bi-person-plus me-1"></i>Matrículas</a>` : ''}`;
   // Modo edición: todo bloqueado hasta que se pulsa «Editar» (arriba); «Listo» vuelve a bloquear.
   let edicion = false;
   const pintaEdicion = () => { const b = $('[data-edicion]'); if (!b) return; b.className = `btn ${edicion ? 'btn-primary' : 'btn-outline-primary'}`; b.innerHTML = edicion ? '<i class="bi bi-check-lg me-1"></i>Listo' : '<i class="bi bi-pencil me-1"></i>Editar'; };

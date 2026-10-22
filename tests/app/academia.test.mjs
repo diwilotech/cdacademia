@@ -115,7 +115,9 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   check('Personal: ve los cursos', (await S.app('/api/cursos/cursos')).status === 200);
   check('Personal: toma asistencia', (await S.app(`/api/cursos/${k.data.id}/asistencia`, { method: 'POST', body: { clase_n: 2, marcas } })).status === 200);
   check('Personal: no ve cuotas (403)', (await S.app('/api/cuotas/cartera')).status === 403);
-  check('Personal: no ve matrículas (403)', (await S.app('/api/matriculas')).status === 403);
+  const mS = await S.app('/api/matriculas');
+  check('Personal: ve quién está matriculado, pero sin valores', mS.status === 200 && mS.data.sin_valores === true && mS.data.rows.every((x) => !('valor' in x) && !('total' in x) && !('pagado' in x)));
+  check('Personal: no matricula ni ve cuotas (403)', (await S.app('/api/matriculas', { method: 'POST', body: {} })).status === 403);
   check('Personal: no crea cursos (403)', (await S.app('/api/cursos/cursos', { method: 'POST', body: { nombre: 'X' } })).status === 403);
   check('Personal: no mueve una clase (403)', (await S.app(`/api/cursos/${k.data.id}/clases/3`, { method: 'PATCH', body: { fecha: '2026-09-01' } })).status === 403);
   check('Personal: sí edita el tema de una clase', (await S.app(`/api/cursos/${k.data.id}/clases/3`, { method: 'PATCH', body: { tema: 'Piel y preparación' } })).status === 200);

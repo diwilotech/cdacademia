@@ -9,6 +9,7 @@ import { json, readJson, HttpError } from '../lib/http.js';
 import { all, one, now, today, cast, DATE } from '../lib/crud.js';
 import { audit } from '../lib/audit.js';
 import { generarCuotas, estadoCuotas, parse, getConfig } from '../lib/academia.js';
+import { moduleAllowed } from '../lib/modules.js';
 import { finanzasLeer, finanzasPagina, cuentaDeCobro, matriculadoMarketing } from '../lib/central.js';
 
 const MOD = 'matriculas';
@@ -98,13 +99,16 @@ export function routes(r) {
     return finanzasPagina(c, `/api/finanzas/receipts/${p.recibo_id}/pdf`);
   });
 
-  r.get('/api/matriculas', `tenant:${MOD}`, async (c) => {
+  // La lista se ve desde Estudiantes (donde viven las matrículas); sin el permiso de Matrículas llega sin valores, cuotas ni pagos.
+  r.get('/api/matriculas', 'tenant:estudiantes', async (c) => {
+    const conValores = moduleAllowed(c.role, c.modulos, MOD);
     const q = c.url.searchParams, where = ['i.business_id = ?'], args = [c.businessId];
     for (const [k, col] of [['curso_id', 'i.curso_id'], ['estudiante_id', 'i.estudiante_id'], ['estado', 'i.estado']]) if (q.get(k)) { where.push(`${col} = ?`); args.push(q.get(k)); }
     if (q.get('q')) { where.push('(e.nombre LIKE ? OR k.nombre LIKE ? OR e.documento LIKE ?)'); args.push(...Array(3).fill(`%${q.get('q')}%`)); }
     const rows = await all(c.env, `SELECT i.*, e.nombre AS estudiante, e.telefono, k.nombre AS curso FROM ac_inscripciones i
       JOIN ac_estudiantes e ON e.id = i.estudiante_id AND e.business_id = i.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
       WHERE ${where.join(' AND ')} ORDER BY i.fecha DESC, i.id DESC LIMIT 1000`, ...args);
+    if (!conValores) return json({ sin_valores: true, rows: rows.map((x) => ({ id: x.id, estudiante_id: x.estudiante_id, curso_id: x.curso_id, estudiante: x.estudiante, curso: x.curso, fecha: x.fecha, estado: x.estado })) });
     const ids = rows.map((x) => x.id);
     const [cuotas, pagos] = ids.length ? await Promise.all([
       all(c.env, `SELECT inscripcion_id, n, etiqueta, vence, valor FROM ac_cuotas WHERE business_id = ? AND inscripcion_id IN (${ids.map(() => '?').join(',')})`, c.businessId, ...ids),

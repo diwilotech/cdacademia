@@ -5,6 +5,7 @@
   "centrales": [
     "finanzas",
     "marketing",
+    "nomina",
     "marca",
     "ai"
   ],
@@ -143,8 +144,9 @@
       "nombre": "Matrículas",
       "icono": "bi-person-plus",
       "menu": {
-        "ruta": "/staff/matriculas.html",
-        "orden": 30
+        "ruta": "/staff/estudiantes.html#matriculas",
+        "orden": 30,
+        "oculto": true
       },
       "permisos": {
         "ver": "admin",

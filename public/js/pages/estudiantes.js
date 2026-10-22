@@ -1,4 +1,5 @@
 // Estudiantes (o alumnas, aprendices… según el rubro): lista, buscar, crear y editar; la ficha muestra sus cursos, avance y pagos.
+// Aquí también viven las Matrículas y los Comprobantes (pestañas, de matriculas.js): sin el permiso de Matrículas no se ven los valores.
 DW.ready.then(async (me) => {
   if (!me.pageAllowed) return;
   const { esc } = window.App;
@@ -6,8 +7,10 @@ DW.ready.then(async (me) => {
   const cfg = await AC.cfg();
   const S = cfg.termS, P = AC.cap(cfg.termP);
   document.querySelector('[data-h1]').textContent = P;
-  document.querySelector('[data-view]').innerHTML = '<div data-tabla></div>';
-  const T = C.table({ el: document.querySelector('[data-tabla]'), base: '/api/estudiantes', entity: 'estudiantes', title: S, newText: `Nuevo ${S}`, emptyIcon: 'bi-people', empty: `Aún no hay ${cfg.termP}. Registra el primero.`,
+  const tabla = (host) => {
+  document.querySelector('[data-acciones]').innerHTML = '';
+  host.innerHTML = '<div data-tabla></div>';
+  const T = C.table({ el: host.querySelector('[data-tabla]'), base: '/api/estudiantes', entity: 'estudiantes', title: S, newText: `Nuevo ${S}`, emptyIcon: 'bi-people', empty: `Aún no hay ${cfg.termP}. Registra el primero.`,
     filters: [{ k: 'activo', options: [['', 'Todos'], ['1', 'Activos'], ['0', 'Inactivos']] }],
     fields: [{ k: 'nombre', label: 'Nombre completo', required: true, full: true }, { k: 'documento', label: 'Documento' }, { k: 'telefono', label: 'Teléfono / WhatsApp' },
       { k: 'email', label: 'Correo', type: 'email' }, { k: 'origen', label: '¿Cómo nos conoció?', placeholder: 'Instagram, referido…' }, { k: 'notas', label: 'Notas', type: 'long' },
@@ -24,4 +27,8 @@ DW.ready.then(async (me) => {
     },
   });
   T.load();
+  };
+  const extra = await window.AC.matriculasVista(me);
+  const vistas = [['estudiantes', AC.cap(cfg.termP), 'bi-people', tabla], ...extra];
+  AC.vistas(vistas.map((v) => v.slice(0, 3)), (k, host) => vistas.find((v) => v[0] === k)[3](host));
 });

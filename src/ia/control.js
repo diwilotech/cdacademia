@@ -1,5 +1,5 @@
 // Control total de la academia por IA: cursos, estudiantes, matrículas, cuotas y comprobantes, reposiciones y videos, material,
-// profesionales, la academia y el equipo con su nómina. Cada herramienta llama a la MISMA ruta de la API (ver interno.js), así que
+// profesionales, la academia y el equipo y su docencia. Cada herramienta llama a la MISMA ruta de la API (ver interno.js), así que
 // respeta roles, módulos activos, suscripción vencida y bitácora. Las de escritura se marcan para que el asistente pida confirmación.
 import { herramienta as H, crudHerramientas as CRUD } from './interno.js';
 
@@ -102,19 +102,14 @@ export default [
   ...CRUD({ modulo: 'academia', base: 'academia', entidad: 'areas', singular: 'area', plural: 'areas', escribe: 'admin', required: ['nombre'], props: { nombre: txt(), color: txt() } }),
   H({ name: 'academia.ver_bitacora', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Últimas 200 acciones del negocio: quién hizo qué, cuándo y desde dónde (app, mcp o diwilo).', ruta: ['GET', '/api/settings/bitacora'] }),
 
-  // ───────────────────────── Equipo y nómina ─────────────────────────
+  // ───────────────────────── Equipo ─────────────────────────
   H({ name: 'equipo.listar_equipo', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Personas del equipo con su rol, estado (activo o invitado) y módulos permitidos.', ruta: ['GET', '/api/team'] }),
   H({ name: 'equipo.invitar_persona', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Agrega una persona al equipo y devuelve su enlace de invitación.', props: { email: txt(), name: txt(), role: { type: 'string', enum: ['admin', 'staff'] }, modulos: lista(txt(), 'Solo para staff: ids de módulos permitidos') }, required: ['email'], ruta: ['POST', '/api/team'] }),
   H({ name: 'equipo.cambiar_permisos', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Cambia el rol o los módulos permitidos de una persona del equipo.', props: { user_id: txt(), role: { type: 'string', enum: ['admin', 'staff'] }, modulos: lista(txt()) }, required: ['user_id'], ruta: ['PATCH', '/api/team/:user_id'] }),
   H({ name: 'equipo.reenviar_invitacion', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Genera un nuevo enlace de invitación para una persona del equipo.', props: { user_id: txt() }, required: ['user_id'], ruta: ['POST', '/api/team/:user_id/invite'] }),
   H({ name: 'equipo.quitar_persona', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Quita a una persona del equipo y cierra sus sesiones.', props: { user_id: txt() }, required: ['user_id'], ruta: ['DELETE', '/api/team/:user_id'] }),
+  H({ name: 'equipo.docencia', modulo: 'academia', rol: 'staff', tipo: 'lectura', description: 'Docencia por profesional: sus cursos con el avance de clases, las clases que ha dictado y las que le faltan en el mes.', props: { month: txt('AAAA-MM; por defecto este mes') }, ruta: ['GET', '/api/team/docencia'] }),
+  H({ name: 'equipo.enviar_a_nomina', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Pasa el equipo (personal y profesionales) al módulo Nómina sin duplicar; quien cobra por clase u hora entra como contratista con sus honorarios del mes.', ruta: ['POST', '/api/team/nomina/sincronizar'] }),
   H({ name: 'equipo.editar_datos_persona', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Datos de una persona del equipo o profesional: nombre, tipo y número de documento y celular. persona = u:<usuario> o p:<profesional>.',
     props: { persona: txt('u:<id de usuario> o p:<id de profesional>'), nombre: txt(), tipo_documento: { type: 'string', enum: ['CC', 'NIT', 'CE', 'PA'] }, documento: txt(), celular: txt() }, required: ['persona'], ruta: ['PUT', '/api/team/persona/:persona'] }),
-  H({ name: 'equipo.ver_nomina', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Plan de nómina de cada persona (valor, periodicidad, centro de costo).', ruta: ['GET', '/api/team/nomina'] }),
-  H({ name: 'equipo.personas_nomina', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Personas a las que se les puede asignar nómina, con su pago actual.', ruta: ['GET', '/api/team/nomina/personas'] }),
-  H({ name: 'equipo.nomina_aproximada', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Lo que se aproxima a pagar en un mes a cada persona: lo fijo más las clases que dicta.', props: { month: txt('AAAA-MM') }, ruta: ['GET', '/api/team/nomina/aproximado'] }),
-  H({ name: 'equipo.clases_del_profesional', modulo: 'academia', rol: 'admin', tipo: 'lectura', description: 'Clases que dicta un profesional en un mes (para armar su pago).', props: { profesional: id(), month: txt('AAAA-MM') }, required: ['profesional', 'month'], ruta: ['GET', '/api/team/nomina/clases'] }),
-  H({ name: 'equipo.guardar_nomina', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Guarda el plan de nómina de una persona y lo deja como gasto recurrente en Finanzas (no se cobra solo; el pago se hace en Finanzas).',
-    props: { persona: txt('u:<id de usuario> o p:<id de profesional>'), valor: num('Pesos'), periodicidad: txt('mensual, quincenal o semanal'), centro_costo: txt(), notas: txt(), documento: txt() }, required: ['persona', 'valor'], ruta: ['PUT', '/api/team/nomina/:persona'] }),
-  H({ name: 'equipo.quitar_nomina', modulo: 'academia', rol: 'admin', tipo: 'escritura', description: 'Elimina el plan de nómina de una persona.', props: { persona: txt('u:<id> o p:<id>') }, required: ['persona'], ruta: ['DELETE', '/api/team/nomina/:persona'] }),
 ];

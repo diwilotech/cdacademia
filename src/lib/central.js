@@ -80,24 +80,10 @@ export async function finanzasLeer(c, path) {
   try { return JSON.parse(r.body); } catch { throw new HttpError(502, 'Finanzas respondió algo que no se entiende'); }
 }
 
-// La nómina de cada persona vive en Equipo y se registra en Finanzas como un gasto recurrente de tipo «Nómina» (nombre, cédula, valor, ciclo, centro de costo);
-// Finanzas no la cobra sola: se paga desde Equipo (url). Es un efecto automático con permisos de titular y nunca hace fallar el guardado si Finanzas no responde.
-export async function recurrenteNomina(c, p) {
-  try {
-    if (!CENTRALES.includes('finanzas') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas')) return { enviado: false };
-    const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
-    const hoy = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10), y = +hoy.slice(0, 4), m = +hoy.slice(5, 7), d = +hoy.slice(8);
-    const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate(), fin = `${hoy.slice(0, 7)}-${String(ultimo).padStart(2, '0')}`;
-    // Próximo cobro al crearla: fin de mes (mensual, por clase u hora), el 15 o el fin de mes (quincenal) o el próximo viernes (semanal)
-    const viernes = new Date(Date.parse(`${hoy}T12:00:00Z`) + ((5 - new Date(`${hoy}T12:00:00Z`).getUTCDay() + 7) % 7) * 864e5).toISOString().slice(0, 10);
-    const next = p.periodicidad === 'quincenal' ? (d <= 15 ? `${hoy.slice(0, 7)}-15` : fin) : p.periodicidad === 'semanal' ? viernes : fin;
-    const body = { ref: `academia:nomina:${p.key}`, name: `Nómina · ${p.nombre}`, vendor: p.nombre, tax_id: p.documento ? `${p.tipo_documento || 'CC'} ${p.documento}` : null, category: 'nomina', amount: p.valor || 0,   // el total del mes, que se paga de una vez o en cuotas
-      cycle: 'mensual', partes: { quincenal: 2, semanal: 4 }[p.periodicidad] || 1, next_date: next, centro_costo: p.centro_costo || null,
-      notes: p.periodicidad === 'clase' ? 'Pago por clase' : p.periodicidad === 'hora' ? 'Pago por hora' : null, url: `/staff/equipo.html#pago:${p.key}`, active: !!(p.valor > 0) };
-    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: '/api/finanzas/recurring/externo', body: JSON.stringify(body) });
-    await saveAudit(c, r.audit);
-    return { enviado: r.status < 300 };
-  } catch (x) { console.error('nómina en Finanzas', x.message); return { enviado: false }; }
+// Nómina (módulo central): la app le pasa su equipo (personas y honorarios del mes). null = el módulo no está activo. Nunca hace fallar a quien llama por una caída del módulo.
+export async function nominaSincronizar(c, datos) {
+  if (!CENTRALES.includes('nomina') || !c.env.MODULOS || !(await activeModuleIds(c.env, c.businessId)).includes('nomina')) return null;
+  try { return await c.env.MODULOS.nominaImportar(APP.id, c.businessId, datos); } catch (x) { console.error('nómina', x.message); throw new HttpError(502, 'El módulo Nómina no respondió: intenta de nuevo'); }
 }
 
 // Escribe en la bitácora del negocio lo que hizo el módulo central.

@@ -377,21 +377,20 @@
         "ac_areas"
       ],
       "mcp": {
-        "guia": "Mi academia: datos y reglas de la academia (rubro y términos, escala y nota mínima, asistencia mínima, valores de reposición, datos del recibo, consecutivo), áreas, métricas de inicio y bitácora. Herramientas: academia.ver_configuracion / editar_configuracion, listar_areas / crear_area / editar_area / borrar_area, metricas y ver_bitacora. EQUIPO Y NÓMINA (solo propietario o administrador): equipo.listar_equipo, invitar_persona (devuelve el enlace), cambiar_permisos (rol y módulos), reenviar_invitacion, quitar_persona, editar_datos_persona; nómina: ver_nomina, personas_nomina, nomina_aproximada, clases_del_profesional, guardar_nomina (deja el gasto recurrente en Finanzas; no se cobra solo) y quitar_nomina. persona = u:<id de usuario> o p:<id de profesional>. Cambiar permisos, quitar personas y nómina son acciones delicadas: confirma siempre con la persona.",
+        "guia": "Mi academia: datos y reglas de la academia (rubro y términos, escala y nota mínima, asistencia mínima, valores de reposición, datos del recibo, consecutivo), áreas, métricas de inicio y bitácora. Herramientas: academia.ver_configuracion / editar_configuracion, listar_areas / crear_area / editar_area / borrar_area, metricas y ver_bitacora. EQUIPO (solo propietario o administrador): equipo.listar_equipo, invitar_persona (devuelve el enlace), cambiar_permisos (rol y módulos), reenviar_invitacion, quitar_persona, editar_datos_persona; docencia: equipo.docencia (cursos, clases dictadas y por dictar de cada profesional) y enviar_a_nomina (pasa el equipo al módulo Nómina, que define el pago, los aportes y la liquidación). persona = u:<id de usuario> o p:<id de profesional>. Cambiar permisos y quitar personas son acciones delicadas: confirma siempre con la persona.",
         "ejemplos": [
-          "Pídele: «¿Cuánto se aproxima a pagar de nómina este mes?»",
+          "Pídele: «¿Cuántas clases ha dictado cada profesional este mes?»",
           "Pídele: «Sube la asistencia mínima al 80 %»",
           "Pídele: «Invita a ana@correo.com como personal con acceso a Cursos»"
         ],
         "flujos": [
           {
-            "id": "nomina",
-            "nombre": "Nómina del mes",
-            "descripcion": "Ver lo que se aproxima a pagar y dejar el plan.",
+            "id": "docencia",
+            "nombre": "Docencia del mes",
+            "descripcion": "Ver cuántas clases ha dictado cada profesional y pasar el equipo a Nómina.",
             "pasos": [
-              "equipo.nomina_aproximada",
-              "equipo.clases_del_profesional",
-              "equipo.guardar_nomina"
+              "equipo.docencia",
+              "equipo.enviar_a_nomina"
             ]
           }
         ]

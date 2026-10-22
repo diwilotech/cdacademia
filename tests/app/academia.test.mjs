@@ -259,7 +259,7 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   // IA con control total: las herramientas llaman a las mismas rutas de la API (mismas reglas, roles y bitácora)
   const sal = (r) => (r.data.result?.isError ? { error: r.data.result.content[0].text } : JSON.parse(r.data.result?.content?.[0]?.text || '{}'));
   const lista = (await mcp(tk.data.token, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).data.result.tools.map((t) => t.name);
-  check('IA control: publica las herramientas de cursos, matrículas, equipo y academia', ['cursos_listar_cursos', 'matriculas_matricular', 'cuotas_aprobar_comprobante', 'reposiciones_agendar', 'material_listar_materiales', 'profesionales_crear_profesional', 'equipo_guardar_nomina', 'academia_editar_configuracion'].every((n) => lista.includes(n)), String(lista.length));
+  check('IA control: publica las herramientas de cursos, matrículas, equipo y academia', ['cursos_listar_cursos', 'matriculas_matricular', 'cuotas_aprobar_comprobante', 'reposiciones_agendar', 'material_listar_materiales', 'profesionales_crear_profesional', 'equipo_docencia', 'academia_editar_configuracion'].every((n) => lista.includes(n)), String(lista.length));
   const dt = sal(await call('cursos_ver_detalle', { curso_id: k.data.id }));
   check('IA control: detalle del curso con sus 8 clases', dt.clases?.length === 8 && dt.inscritos?.length >= 1, JSON.stringify(dt).slice(0, 200));
   const kc = sal(await call('cursos_crear_curso', { nombre: 'Curso por IA', precio: 300000, num_clases: 2, inicio: '2026-09-01', horario: [{ dia: 2, ini: '09:00', fin: '11:00' }] }));

@@ -38,7 +38,7 @@ DW.ready.then(async (me) => {
     areas = await AC.listas.areas().catch(() => []);
     const nombreArea = (id) => areas.find((a) => a.id === id)?.nombre || '—';
     const all = rows();
-    list.innerHTML = kpisDocencia(all) + (all.length ? table([
+    list.innerHTML = kpisDocencia(all) + docGrid(all) + (all.length ? table([
       { label: 'Nombre', main: true, html: (r) => { const n = r.user?.name || r.prof?.nombre || r.user?.email; const e = r.user?.email || r.prof?.email || '';
         return `<div>${esc(n)}</div><div class="small text-body-secondary fw-normal">${esc(e)}</div>`; } },
       ...(me.canManage ? [{ label: 'Documento y celular', html: (r) => { const d = datos.get(personaKey(r)), tel = d?.celular || r.prof?.telefono;
@@ -53,7 +53,6 @@ DW.ready.then(async (me) => {
         const ars = r.prof ? `<div class="small">${r.prof.areas.map((a) => esc(nombreArea(a.area_id))).join(', ') || 'Sin áreas'}${r.prof.activo ? '' : ' · inactivo'}</div>` : '';
         const st = r.user?.status === 'invited' ? '<span class="badge text-bg-warning">Invitación pendiente</span>' : '';
         return mods + ars + st; } },
-      { label: 'Docencia', html: (r) => docCard(r) },
       { label: '', cls: 'text-end text-nowrap', html: (r) => {
         const u = r.user, id = esc(u?.id || '');
         return [
@@ -70,16 +69,22 @@ DW.ready.then(async (me) => {
   /* ---------- Docencia: cuántas clases han dado y qué cursos tienen (visual) ---------- */
   const fechaCorta = (f) => (f ? new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
   const docDe = (r) => (r.prof ? docencia.profesionales.find((x) => x.profesional_id === r.prof.id) : null);
+  const iniciales = (n) => String(n || '?').split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
   function docCard(r) {
-    if (!r.prof) return '<span class="text-body-secondary">—</span>';
-    const d = docDe(r);
-    if (!d || !d.cursos.length) return '<span class="small text-body-secondary">Sin cursos asignados</span>';
-    const num = (n, l) => `<div class="text-center px-2"><div class="fs-5 fw-bold lh-1">${n}</div><div class="text-body-secondary" style="font-size:.7rem">${l}</div></div>`;
-    return `<div style="min-width:240px"><div class="d-flex justify-content-between mb-2">${num(d.mes_dictadas, 'dadas este mes')}${num(d.mes_faltan, 'por dar')}${num(d.dictadas, 'en total')}${d.horas_mes ? num(`${d.horas_mes} h`, 'este mes') : ''}</div>
-      ${d.cursos.map((k) => { const pct = k.total ? Math.min(100, Math.round((k.dictadas / k.total) * 100)) : 0, col = /^#[0-9a-f]{3,8}$/i.test(k.color || '') ? `;background:${k.color}` : '';
-        return `<div class="mb-1"><div class="d-flex justify-content-between small"><span class="text-truncate me-2">${esc(k.nombre)}</span><span class="text-body-secondary text-nowrap">${k.dictadas}/${k.total}</span></div>
-          <div class="progress" style="height:6px" role="progressbar" aria-label="Avance de ${esc(k.nombre)}" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:${pct}%${col}"></div></div>
-          ${k.proxima ? `<div class="text-body-secondary" style="font-size:.7rem">Próxima: ${esc(fechaCorta(k.proxima.fecha))}${k.proxima.ini ? ` · ${esc(k.proxima.ini)}` : ''}</div>` : '<div class="text-body-secondary" style="font-size:.7rem">Curso dictado</div>'}</div>`; }).join('')}</div>`;
+    const d = docDe(r), nombre = r.user?.name || r.prof?.nombre || r.user?.email;
+    const stat = (n, l, tono = '') => `<div class="eq-stat ${tono}"><b>${n}</b><span>${l}</span></div>`;
+    const cursos = d?.cursos || [];
+    return `<div class="eq-card"><div class="eq-head"><span class="eq-av">${esc(iniciales(nombre))}</span><div class="flex-grow-1" style="min-width:0"><b class="d-block text-truncate">${esc(nombre)}</b>
+        <span class="small text-body-secondary">${cursos.length ? `${cursos.length} ${cursos.length === 1 ? 'curso' : 'cursos'}` : 'Sin cursos asignados'}${d?.proxima ? ` · próxima ${esc(fechaCorta(d.proxima.fecha))}${d.proxima.ini ? ` ${esc(d.proxima.ini)}` : ''}` : ''}</span></div></div>
+      ${d ? `<div class="eq-stats">${stat(d.mes_dictadas, 'dadas este mes', 'eq-ok')}${stat(d.mes_faltan, 'por dar')}${stat(d.dictadas, 'en total')}${d.horas_mes ? stat(`${d.horas_mes} h`, 'este mes') : ''}</div>` : ''}
+      ${cursos.map((k) => { const pct = k.total ? Math.min(100, Math.round((k.dictadas / k.total) * 100)) : 0, col = /^#[0-9a-f]{3,8}$/i.test(k.color || '') ? `;background:${k.color}` : '';
+        return `<div class="eq-curso"><div class="d-flex justify-content-between gap-2"><span class="text-truncate">${esc(k.nombre)}</span><span class="text-body-secondary text-nowrap small">${k.dictadas} de ${k.total} clases</span></div>
+          <div class="progress" style="height:8px" role="progressbar" aria-label="Avance de ${esc(k.nombre)}" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:${pct}%${col}"></div></div>
+          <div class="eq-sub">${k.proxima ? `Próxima: ${esc(fechaCorta(k.proxima.fecha))}${k.proxima.ini ? ` · ${esc(k.proxima.ini)}` : ''} · clase ${k.proxima.n}` : 'Curso dictado completo'}</div></div>`; }).join('')}</div>`;
+  }
+  function docGrid(all) {
+    const prof = all.filter((r) => r.prof).sort((x, y) => (docDe(y)?.mes_dictadas || 0) - (docDe(x)?.mes_dictadas || 0));
+    return prof.length ? `<h2 class="h6 mb-2"><i class="bi bi-mortarboard me-1"></i>Docencia</h2><div class="eq-grid mb-4">${prof.map(docCard).join('')}</div><h2 class="h6 mb-2"><i class="bi bi-people me-1"></i>Personas</h2>` : '';
   }
   function kpisDocencia(all) {
     const ds = all.map(docDe).filter(Boolean);

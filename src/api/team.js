@@ -83,18 +83,19 @@ export function routes(r) {
   r.post('/api/team/nomina/sincronizar', 'manager', async (c) => {
     const personas = (await personasEquipo(c)).filter((p) => p.role !== 'owner');
     const hoy = hoyCo(), mes = hoy.slice(0, 7), FACTOR = { mensual: 1, quincenal: 2, semanal: 4.33 };
-    const clases = await db(c.env).all(`SELECT k.profesional_id AS prof, cl.ini, cl.fin FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
-      WHERE cl.business_id = ? AND k.profesional_id IS NOT NULL AND cl.fecha BETWEEN ? AND ?`, c.businessId, `${mes}-01`, hoy);
+    const clases = await db(c.env).all(`SELECT k.profesional_id AS prof, k.nombre AS curso, cl.n, cl.fecha, cl.ini, cl.fin FROM ac_clases cl JOIN ac_cursos k ON k.id = cl.curso_id AND k.business_id = cl.business_id
+      WHERE cl.business_id = ? AND k.profesional_id IS NOT NULL AND cl.fecha BETWEEN ? AND ? ORDER BY cl.fecha, cl.ini`, c.businessId, `${mes}-01`, hoy);
     const empleados = [], novedades = [];
     for (const p of personas) {
       const variable = p.pago && ['clase', 'hora'].includes(p.pago.periodicidad), soloDocente = p.key.startsWith('p:');
       empleados.push({ ref: p.key, name: p.nombre, doc_type: p.tipo_documento || 'CC', doc_number: p.documento, email: p.email, phone: p.celular, position: p.profesional_id ? 'Docente' : p.role === 'admin' ? 'Administrador' : 'Personal',
         contract_type: variable || soloDocente ? 'prestacion' : 'indefinido', salary: p.pago && FACTOR[p.pago.periodicidad] ? Math.round(p.pago.valor * FACTOR[p.pago.periodicidad]) : 0,
         start_date: p.desde || hoy, cost_center: p.pago?.centro_costo || null, notes: 'Traído de Equipo: confirma la fecha de ingreso, el tipo de contrato y el valor.' });
-      if (variable && p.profesional_id) {
-        const mias = clases.filter((x) => x.prof === p.profesional_id), horas = mias.reduce((a, x) => a + Math.max(0, (minutos(x.fin) ?? 0) - (minutos(x.ini) ?? 0)), 0) / 60;
-        const amount = Math.round(p.pago.periodicidad === 'clase' ? p.pago.valor * mias.length : p.pago.valor * horas);
-        novedades.push({ ref: p.key, period: mes, amount });
+      if (variable && p.profesional_id) {   // una línea por clase dictada: así la cuenta de cobro lleva cada cargo separado
+        for (const x of clases.filter((y) => y.prof === p.profesional_id)) {
+          const horas = Math.max(0, (minutos(x.fin) ?? 0) - (minutos(x.ini) ?? 0)) / 60, amount = Math.round(p.pago.periodicidad === 'clase' ? p.pago.valor : p.pago.valor * horas);
+          if (amount > 0) novedades.push({ ref: p.key, period: mes, amount, note: `Clase ${x.n} · ${x.curso} · ${x.fecha}${p.pago.periodicidad === 'hora' ? ` (${Math.round(horas * 10) / 10} h)` : ''}` });
+        }
       }
     }
     const res = await nominaSincronizar(c, { empleados, novedades });

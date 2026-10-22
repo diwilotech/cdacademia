@@ -319,3 +319,16 @@ body.dw-alumno .dw-main { margin-left: 0; padding: calc(var(--dw-top-h) + 20px) 
 .dw-lectura .form-text, .dw-lectura [data-add-mod], .dw-lectura [data-add-cup], .dw-lectura [data-calcular] { display: none; }
 .dw-lectura .form-check-input:disabled { opacity: 1; }
 .dw-lectura .form-check-input:disabled ~ .form-check-label { opacity: 1; }
+
+/* Equipo: tarjetas de docencia por profesional */
+.eq-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.eq-card { border: 1px solid var(--dw-borde); border-radius: 16px; background: var(--dw-tarjeta); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.eq-head { display: flex; align-items: center; gap: 12px; }
+.eq-av { width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--dw-p); }
+.eq-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 8px; }
+.eq-stat { background: rgba(128, 128, 128, .08); border-radius: 12px; padding: 8px 4px; text-align: center; }
+.eq-stat b { display: block; font-size: 1.35rem; line-height: 1.1; }
+.eq-stat span { display: block; font-size: .7rem; color: var(--bs-secondary-color); }
+.eq-stat.eq-ok { background: rgba(var(--dw-p-rgb), .14); }
+.eq-curso { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+.eq-sub { font-size: .75rem; color: var(--bs-secondary-color); }

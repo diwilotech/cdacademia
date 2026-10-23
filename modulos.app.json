@@ -74,6 +74,12 @@
               "cursos.tomar_asistencia"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Qué clases hay hoy?",
+          "¿Quién dicta hoy?",
+          "¿Cómo van los cursos?",
+          "¿Qué curso empieza pronto?"
         ]
       }
     },
@@ -136,6 +142,12 @@
               "estudiantes.dar_acceso"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Cuántos estudiantes hay?",
+          "¿Quién está en mora?",
+          "Busca a un estudiante",
+          "¿Quién falta mucho?"
         ]
       }
     },
@@ -178,6 +190,11 @@
               "matriculas.matricular"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Cuántas matrículas hay?",
+          "¿Cuánto se debe en total?",
+          "Matricula a un estudiante"
         ]
       }
     },
@@ -235,6 +252,11 @@
               "cuotas.rechazar_comprobante"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Qué cuotas vencen hoy?",
+          "¿Quién está en mora?",
+          "¿Hay comprobantes por revisar?"
         ]
       }
     },
@@ -292,6 +314,10 @@
               "reposiciones.agendar"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Hay reposiciones pendientes?",
+          "Agenda una reposición"
         ]
       }
     },
@@ -328,6 +354,10 @@
               "cursos.editar_clase"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Qué material tengo?",
+          "¿Qué clases no tienen material?"
         ]
       }
     },
@@ -355,7 +385,11 @@
         "ejemplos": [
           "Pídele: «Crea a la profesional Laura, maquillaje básico, lunes y miércoles de 2 a 8 pm»"
         ],
-        "flujos": []
+        "flujos": [],
+        "preguntas": [
+          "¿Quién es profesional?",
+          "¿Cuántas clases dio cada uno?"
+        ]
       }
     },
     {
@@ -393,6 +427,10 @@
               "equipo.enviar_a_nomina"
             ]
           }
+        ],
+        "preguntas": [
+          "¿Cómo va mi academia?",
+          "¿Qué hice esta semana?"
         ]
       }
     }

@@ -70,7 +70,7 @@ export function routes(r) {
   /* ---- la clase ---- */
   r.get('/api/alumno/curso/:id/clase/:n', 'alumno', async (c) => {
     const i = await matricula(c), cl = await claseDe(c, i, Number(c.params.n)), hoy = today();
-    const base = { n: cl.n, fecha: cl.fecha, ini: cl.ini, fin: cl.fin, virtual: !!cl.virtual, hoy: cl.fecha === hoy, en_sesion: enSesion(cl) };
+    const base = { n: cl.n, fecha: cl.fecha, ini: cl.ini, fin: cl.fin, virtual: !!cl.virtual, enlace: cl.virtual ? cl.enlace : null, grabacion: cl.virtual ? cl.grabacion : null, hoy: cl.fecha === hoy, en_sesion: enSesion(cl) };
     if (!cl.fecha || cl.fecha > hoy) return json({ ...base, bloqueada: true, tema: cl.tema || null });
     const mats = [];
     for (const mid of [cl.material_id, cl.material2_id]) if (mid) { const m = await one(c.env, 'SELECT titulo, descripcion, bloques FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId); if (m) mats.push({ titulo: m.titulo, descripcion: m.descripcion, bloques: parse(m.bloques, []) }); }

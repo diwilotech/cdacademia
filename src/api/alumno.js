@@ -107,7 +107,7 @@ export function routes(r) {
     if (!i) throw new HttpError(404, 'No encontrado');
     const [cfg, clases, marcas, evs, notas, repos, cuotas, pag, comprobantes] = await Promise.all([
       getConfig(c.env, c.businessId),
-      all(c.env, 'SELECT n, fecha, ini, fin, tema, virtual FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, i.curso_id),
+      all(c.env, 'SELECT n, fecha, ini, fin, tema, virtual, enlace, grabacion FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, i.curso_id),
       all(c.env, 'SELECT clase_n, estado FROM ac_asistencia WHERE business_id = ? AND inscripcion_id = ?', c.businessId, i.id),
       all(c.env, 'SELECT id, nombre, peso, clase_n FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY id', c.businessId, i.curso_id),
       all(c.env, 'SELECT evaluacion_id, nota FROM ac_notas WHERE business_id = ? AND inscripcion_id = ?', c.businessId, i.id),

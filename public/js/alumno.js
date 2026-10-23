@@ -158,14 +158,15 @@
     const pintar = () => {
       $('[data-t]', el).textContent = `Clase ${n}${K.tema ? ` · ${K.tema}` : ''}`;
       $('[data-s]', el).textContent = `${curso?.curso || ''} · ${K.fecha ? dia(K.fecha) : 'Sin fecha'}${K.ini ? ` · ${h12(K.ini)}${K.fin ? ` – ${h12(K.fin)}` : ''}` : ''}${K.virtual ? ' · virtual' : ''}`;
-      if (K.bloqueada) { body.innerHTML = `<div class="alert alert-info mb-0"><i class="bi bi-lock me-1"></i>El material de esta clase se abre el día de la clase y las evaluaciones solo durante la sesión${K.fecha ? ` (${esc(dia(K.fecha))})` : ''}.</div>`; return; }
+      const enl = K.virtual && (K.enlace || K.grabacion) ? `<div class="d-flex flex-wrap gap-2 mb-3">${K.enlace ? `<a class="btn btn-primary" href="${esc(K.enlace)}" target="_blank" rel="noopener"><i class="bi bi-camera-video me-1"></i>Entrar a la clase</a>` : ''}${K.grabacion ? `<a class="btn btn-outline-primary" href="${esc(K.grabacion)}" target="_blank" rel="noopener"><i class="bi bi-play-circle me-1"></i>Ver la grabación</a>` : ''}</div>` : '';
+      if (K.bloqueada) { body.innerHTML = enl + `<div class="alert alert-info mb-0"><i class="bi bi-lock me-1"></i>El material de esta clase se abre el día de la clase y las evaluaciones solo durante la sesión${K.fecha ? ` (${esc(dia(K.fecha))})` : ''}.</div>`; return; }
       const evs = K.evaluaciones.map((e) => {
         const est = e.enviado ? (e.nota != null ? C.chip('ok', `Nota ${Number(e.nota).toFixed(1)} / ${e.escala}`) : C.chip('soon', 'Enviada · en revisión')) : e.abierta ? C.chip('soon', 'Disponible ahora') : K.hoy && !K.en_sesion ? C.chip('free', 'Se habilita en la sesión de la clase') : C.chip('bad', 'No presentada');
         return `<li class="list-group-item d-flex gap-2 align-items-center flex-wrap"><div class="flex-grow-1"><b>${esc(e.nombre)}</b><div class="small text-body-secondary">${e.peso}% del curso${e.resultado ? ` · ${e.resultado.obtenido} de ${e.resultado.total} puntos` : ''}</div></div>${est}
           ${e.abierta ? `<button class="btn btn-sm btn-primary" data-presentar="${e.id}"><i class="bi bi-pencil-square me-1"></i>${e.tipo === 'examen' && !e.examen ? 'Subir mi examen' : 'Presentar'}</button>` : ''}
           ${e.enviado && e.archivos.length ? e.archivos.map((a, k) => `<a class="btn btn-sm btn-light" href="/api/alumno/examen-archivo/${encodeURIComponent(a.key)}" target="_blank" rel="noopener" aria-label="Ver archivo ${k + 1}"><i class="bi bi-paperclip"></i></a>`).join('') : ''}</li>`;
       }).join('');
-      body.innerHTML = `
+      body.innerHTML = enl + `
         ${K.hoy ? '<div class="alert alert-success py-2"><i class="bi bi-calendar-check me-1"></i><b>Hoy es tu clase.</b> Aquí tienes el material; las evaluaciones se habilitan durante la sesión.</div>' : ''}
         ${K.detalle || K.materiales ? `<div class="dw-card mb-3 small">${K.detalle ? `<div>${esc(K.detalle)}</div>` : ''}${K.materiales ? `<div class="mt-1"><b>Qué traer:</b> ${esc(K.materiales)}</div>` : ''}</div>` : ''}
         ${K.materiales_clase.length ? K.materiales_clase.map((M, j) => `<h3 class="h6">${esc(K.materiales_clase.length > 1 ? M.titulo : 'Material de la clase')}</h3><div class="dw-card mb-3 p-3" data-doc="${j}">${M.bloques.length ? window.AC.doc.html(M.bloques) : `<div class="small text-body-secondary">${esc(M.descripcion || 'Este material aún no tiene contenido.')}</div>`}</div>`).join('')
@@ -235,7 +236,7 @@
         ${c.clase_hoy.pendientes.length ? `<div class="small text-warning-emphasis"><i class="bi bi-pencil-square me-1"></i>Evaluación en tu sesión: ${c.clase_hoy.pendientes.map(esc).join(', ')}</div>` : ''}</div>
       <button class="btn btn-primary" data-clase-hoy="${c.id}:${c.clase_hoy.n}"><i class="bi bi-folder2-open me-1"></i>Abrir la clase</button></div></div>`).join('');
   };
-  document.addEventListener('click', (e) => { const b = e.target.closest('[data-clase-hoy]'); if (b) { const [m, n] = b.dataset.claseHoy.split(':').map(Number); claseModal(m, n); } });
+  document.addEventListener('click', (e) => { if (e.target.closest('a[href]')) return; const b = e.target.closest('[data-clase-hoy]'); if (b) { const [m, n] = b.dataset.claseHoy.split(':').map(Number); claseModal(m, n); } });
 
   /* ---------- piezas ---------- */
   const cuenta = (c) => (c.estado === 'por_iniciar' ? `<div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3"><i class="bi bi-hourglass-split fs-5"></i><div><b>${faltan(c.empieza_en)}</b> para que empiece ${esc(c.curso)}<div class="small">Primera clase: ${esc(dia(c.inicio))}</div></div></div>` : '');
@@ -293,6 +294,7 @@
       <div class="row g-4"><div class="col-lg-7"><h2 class="h5 mb-3">Mis clases</h2><div class="dw-card p-0"><ul class="list-group list-group-flush">
         ${d.clases.map((x) => `<li class="list-group-item d-flex gap-2 align-items-center ${x.fecha === D.hoy ? 'bg-body-tertiary' : ''}" ${x.fecha && x.fecha <= D.hoy ? `role="button" data-clase-hoy="${id}:${x.n}"` : ''}><span class="text-body-secondary" style="width:2rem">${x.n}</span>
           <div class="flex-grow-1"><div class="small fw-semibold">${esc(x.tema || `Clase ${x.n}`)}${x.virtual ? ' · virtual' : ''}</div><div class="small text-body-secondary">${x.fecha ? `${esc(dia(x.fecha))}${x.ini ? ` · ${esc(h12(x.ini))}` : ''}` : 'Sin fecha'}</div></div>
+          ${x.virtual && x.enlace ? `<a class="btn btn-sm btn-outline-primary" href="${esc(x.enlace)}" target="_blank" rel="noopener" aria-label="Entrar a la clase ${x.n}"><i class="bi bi-camera-video"></i></a>` : ''}${x.virtual && x.grabacion ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(x.grabacion)}" target="_blank" rel="noopener" aria-label="Ver la grabación de la clase ${x.n}"><i class="bi bi-play-circle"></i></a>` : ''}
           ${d.evaluaciones.filter((e) => e.clase_n === x.n).map((e) => `<span title="${esc(e.nombre)}">${chipEval({ ...e, estado: e.nota != null ? 'nota' : e.enviado ? 'enviado' : x.fecha && x.fecha < D.hoy ? 'vencida' : 'pendiente' })}</span>`).join('')}
           ${x.asistencia && ASIS[x.asistencia] ? C.chip(...ASIS[x.asistencia]) : x.fecha && x.fecha < D.hoy ? '' : x.fecha === D.hoy ? C.chip('soon', 'Hoy') : ''}
           ${x.reposicion ? C.chip(x.reposicion === 'hecha' ? 'ok' : 'soon', x.reposicion === 'hecha' ? 'Repuesta' : 'Reposición') : ''}${x.fecha && x.fecha <= D.hoy ? '<i class="bi bi-chevron-right text-body-secondary"></i>' : ''}</li>`).join('') || `<li class="list-group-item">${empty('bi-calendar-x', 'Aún no hay clases programadas.')}</li>`}

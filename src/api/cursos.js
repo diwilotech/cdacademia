@@ -184,7 +184,7 @@ export function routes(r) {
     const k = await cursoDe(c, Number(c.params.id));
     const cfg = await getConfig(c.env, c.businessId);
     const [clases, evs, cupones, inscritos, area, prof] = await Promise.all([
-      all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, material_id, material2_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
+      all(c.env, 'SELECT n, fecha, ini, fin, movida, tema, detalle, metodos, materiales, virtual, enlace, grabacion, material_id, material2_id FROM ac_clases WHERE business_id = ? AND curso_id = ? ORDER BY n', c.businessId, k.id),
       all(c.env, 'SELECT id, nombre, peso, clase_n, tipo, examen, materiales FROM ac_evaluaciones WHERE business_id = ? AND curso_id = ? ORDER BY COALESCE(clase_n, 999), id', c.businessId, k.id),
       all(c.env, 'SELECT id, codigo, tipo, valor, hasta, max, usos FROM ac_cupones WHERE business_id = ? AND curso_id = ? ORDER BY codigo', c.businessId, k.id),
       inscritosCurso(c, k.id, cfg),
@@ -207,6 +207,11 @@ export function routes(r) {
     for (const [key, type] of [['tema', 'text'], ['detalle', 'long'], ['materiales', 'long']]) if (key in b) set[key] = cast(key, type, b[key]);
     if ('metodos' in b) set.metodos = JSON.stringify((Array.isArray(b.metodos) ? b.metodos : []).filter((m) => METODOS.includes(m)));
     if ('virtual' in b) set.virtual = b.virtual ? 1 : 0;
+    for (const key of ['enlace', 'grabacion']) if (key in b) {   // enlaces de la clase y de su grabación (https)
+      const u = String(b[key] || '').trim();
+      if (u && !/^https:\/\/[^\s]{4,500}$/i.test(u)) throw new HttpError(400, `El enlace de ${key === 'enlace' ? 'la clase' : 'la grabación'} debe empezar por https://`);
+      set[key] = u || null;
+    }
     if ('material_id' in b) {
       const mid = cast('material', 'int', b.material_id);
       const mat = mid && await one(c.env, 'SELECT titulo, descripcion FROM ac_material WHERE id = ? AND business_id = ?', mid, c.businessId);

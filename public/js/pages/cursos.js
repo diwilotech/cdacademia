@@ -482,6 +482,9 @@ DW.ready.then(async (me) => {
           <input type="hidden" name="material_id" value="${c.material_id ?? ''}"><input type="hidden" name="material2_id" value="${c.material2_id ?? ''}">
           <div class="row g-2 mat-pick" data-pick style="max-height:260px;overflow:auto"></div></div>
         <div class="col-sm-4 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="c_virtual" name="virtual" ${c.virtual ? 'checked' : ''}><label class="form-check-label" for="c_virtual">Virtual</label></div></div>
+        <div class="col-sm-8" data-virt ${c.virtual ? '' : 'hidden'}><div class="row g-2">
+          <div class="col-12"><label class="form-label small mb-1" for="c_enlace">Enlace de la clase <span class="text-body-secondary fw-normal">(Zoom, Meet…)</span></label><input class="form-control" id="c_enlace" name="enlace" type="url" placeholder="https://zoom.us/j/…" value="${esc(c.enlace || '')}"></div>
+          <div class="col-12"><label class="form-label small mb-1" for="c_grab">Enlace de la grabación</label><input class="form-control" id="c_grab" name="grabacion" type="url" placeholder="https://…" value="${esc(c.grabacion || '')}"></div></div></div>
         ${me.canManage ? `<div class="col-12"><h3 class="h6 mt-2 mb-0">Mover la clase</h3></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_fecha">Fecha</label><input class="form-control" id="c_fecha" name="fecha" type="date" value="${esc(c.fecha || '')}"></div>
           <div class="col-sm-4"><label class="form-label small mb-1" for="c_ini">Desde</label><input class="form-control" id="c_ini" name="ini" type="time" value="${esc(c.ini || '')}"></div>
@@ -508,9 +511,10 @@ DW.ready.then(async (me) => {
       f.material_id.value = cur[0] || ''; f.material2_id.value = cur[1] || ''; pinta();
     };
     areaSel.onchange = pinta; pinta();
+    f.virtual.onchange = () => { $('[data-virt]', el).hidden = !f.virtual.checked; };
     f.onsubmit = async (e) => {
       e.preventDefault();
-      const body = { virtual: f.virtual.checked, material_id: f.material_id.value, material2_id: f.material2_id.value };
+      const body = { virtual: f.virtual.checked, material_id: f.material_id.value, material2_id: f.material2_id.value, enlace: f.enlace.value, grabacion: f.grabacion.value };
       if (me.canManage && (f.fecha.value !== (c.fecha || '') || f.ini.value !== (c.ini || '') || f.fin.value !== (c.fin || ''))) Object.assign(body, { fecha: f.fecha.value, ini: f.ini.value, fin: f.fin.value });
       try { await api(`/api/cursos/${id}/clases/${c.n}`, { method: 'PATCH', body }); m.hide(); toast('Clase guardada'); done(); } catch (x) { $('[data-err]', el).textContent = x.message; }
     };

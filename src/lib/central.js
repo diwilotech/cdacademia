@@ -47,6 +47,19 @@ export async function movimientoFinanzas(c, p) {
   } catch (x) { console.error('recibo de caja en Finanzas', x.message); return { enviado: false }; }
 }
 
+// Recibo de caja en Finanzas de un cobro de eventos, certificaciones o asesorías (ref propia, no duplica; anulado = anula el recibo).
+export async function reciboExterno(c, p) {
+  try {
+    if (!CENTRALES.includes('finanzas') || !(await activeModuleIds(c.env, c.businessId)).includes('finanzas') || !c.env.MODULOS) return { enviado: false };
+    const ctx = { ...(await ctxOf(c)), role: 'owner', readOnly: false };
+    const body = p.anulado ? { ref: p.ref } : { ref: p.ref, date: p.fecha, amount: p.valor, method: p.metodo || null, counterparty: p.tercero || null, centro_costo: p.centro || null, concept: p.concepto, notes: p.notas || null };
+    const r = await c.env.MODULOS.call(ctx, { method: 'POST', path: `/api/finanzas/receipts/externo${p.anulado ? '/void' : ''}`, body: JSON.stringify(body) });
+    await saveAudit(c, r.audit);
+    let j = {}; try { j = JSON.parse(r.body); } catch (_) {}
+    return { enviado: r.status < 300, recibo: j.number || null };
+  } catch (x) { console.error('recibo de caja en Finanzas', x.message); return { enviado: false }; }
+}
+
 // Cuenta de cobro de una matrícula en Finanzas (una por matrícula; si cambia el valor o el plan, se actualiza). ins = { id, estudiante, documento, email, curso, total, fecha, vence, concepto?, items?: [{ concepto, detalle, valor }] }
 export async function cuentaDeCobro(c, ins) {
   try {

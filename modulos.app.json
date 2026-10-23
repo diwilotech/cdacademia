@@ -433,6 +433,108 @@
           "¿Qué hice esta semana?"
         ]
       }
+    },
+    {
+      "id": "eventos",
+      "nombre": "Eventos",
+      "icono": "bi-calendar-event",
+      "descripcion": "Eventos con cupo, lista de espera, inscripción pública y cobro opcional por Finanzas.",
+      "menu": {
+        "ruta": "/staff/eventos.html",
+        "orden": 70
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_eventos",
+        "ac_evento_asistentes"
+      ],
+      "mcp": {
+        "guia": "Eventos: conversación semanal, cine, ferias, charlas. Cada evento tiene fecha, hora, lugar o enlace, cupo (0 = sin límite), precio (0 = gratis) y si es público (página /<negocio>/eventos con inscripción que también crea un lead en Marketing). eventos.listar_eventos / crear_evento (repetir_semanas crea una copia por semana) / editar_evento (estado cancelado en vez de borrar); asistentes con listar_asistentes / crear_asistente (si el evento está lleno queda en espera) / editar_asistente (estado inscrito, espera, asistio, no_asistio). Cobro: eventos.registrar_cobro envía un recibo a Finanzas; con ya_pagado=true y una nota solo se marca pagado sin recibo. Pide confirmación antes de escribir.",
+        "ejemplos": [
+          "Pídele: «Crea el Stammtisch todos los jueves 6:30 pm durante 8 semanas, cupo 25»",
+          "Pídele: «¿Cuántos inscritos tiene el Oktoberfest y quién está en lista de espera?»"
+        ],
+        "flujos": [],
+        "preguntas": [
+          "¿Qué eventos hay esta semana?",
+          "¿Cuánta gente asistió este mes?"
+        ]
+      }
+    },
+    {
+      "id": "certificaciones",
+      "nombre": "Certificaciones",
+      "icono": "bi-patch-check",
+      "descripcion": "Exámenes oficiales externos (ÖSD, DELE, TOEFL…): convocatorias, inscripción con cobro, hoja escaneada, doble evaluador y resultado.",
+      "menu": {
+        "ruta": "/staff/certificaciones.html",
+        "orden": 72
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_cert_examenes",
+        "ac_cert_convocatorias",
+        "ac_cert_candidatos"
+      ],
+      "mcp": {
+        "guia": "Certificaciones son exámenes OFICIALES externos, distintos de las evaluaciones de clase de Cursos. Un examen = entidad + nivel + partes con puntos máximos + mínimos por grupo (reglas configurables) + el curso que prepara para él. Una convocatoria = fecha, cierre, cupo, precio y modalidad. Un candidato = inscripción con pago (registrar_cobro), documento con foto, condiciones aceptadas, hoja escaneada (se sube desde la app), puntos de dos evaluadores y un tercero, y resultado. certificaciones.estudiantes_elegibles lista a los del curso que prepara ese examen. calcular_resultado guarda los puntos finales y decide aprobado o no según los mínimos. cargar_ejemplos crea ÖSD A1, A2 y B2 (verifica contra la versión vigente). Pide confirmación antes de escribir.",
+        "ejemplos": [
+          "Pídele: «Abre la convocatoria ÖSD B2 el 26 de noviembre, cupo 15, cierre 3 de noviembre»",
+          "Pídele: «Inscribe a los estudiantes elegibles de Intensivo B1»"
+        ],
+        "flujos": [],
+        "preguntas": [
+          "¿Quién está inscrito al próximo examen?",
+          "¿Qué candidatos no han pagado o no tienen documento?"
+        ]
+      }
+    },
+    {
+      "id": "asesorias",
+      "nombre": "Asesorías",
+      "icono": "bi-airplane",
+      "descripcion": "Acompañamiento por pasos (plantillas definidas por el negocio): documentos por paso, historial, próxima acción y cobro.",
+      "menu": {
+        "ruta": "/staff/asesorias.html",
+        "orden": 74
+      },
+      "permisos": {
+        "ver": "staff",
+        "configurar": "admin"
+      },
+      "widgets": [],
+      "depende_de": [],
+      "tipo": "propio",
+      "tablas": [
+        "ac_asesoria_tipos",
+        "ac_asesorias",
+        "ac_asesoria_docs",
+        "ac_asesoria_avances"
+      ],
+      "mcp": {
+        "guia": "Asesorías: procesos largos por pasos (estudiar o trabajar en el exterior, visas, becas). El negocio define tipos (plantillas): pasos en orden y, por paso, los documentos que se piden; al crear un proceso se copian los pasos. asesorias.listar_asesorias / crear_asesoria (tipo_id + persona + asesor), ver_detalle (pasos, documentos e historial), mover_paso (avanzar, retroceder, ir; avanzar desde el último lo termina), agregar_nota, marcar_documento (pendiente, recibido, aprobado; los archivos se suben desde la app), resumen (activas, con acción esta semana, sin avance en 14 días). Cobro: registrar_cobro (Finanzas) o ya_pagado=true con nota. Pide confirmación antes de escribir.",
+        "ejemplos": [
+          "Pídele: «Crea el tipo Ausbildung con los pasos Diagnóstico, Plan, Documentos, Solicitud y Viaje»",
+          "Pídele: «Pasa el proceso de Tomás al paso Documentos»"
+        ],
+        "flujos": [],
+        "preguntas": [
+          "¿Qué procesos llevan más de 14 días sin avance?",
+          "¿Qué documentos faltan por recibir?"
+        ]
+      }
     }
   ]
 }

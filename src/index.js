@@ -29,15 +29,19 @@ import * as videosApi from './api/videos.js';
 import * as alumnoApi from './api/alumno.js';
 import * as comprobantesApi from './api/comprobantes.js';
 import * as trabajoApi from './api/trabajo.js';
+import * as eventosApi from './api/eventos.js';
+import * as certificacionesApi from './api/certificaciones.js';
+import * as asesoriasApi from './api/asesorias.js';
 import { ver } from './lib/ver.js';
 import { matriculaWeb } from './lib/matricula-web.js';
+import { eventosWeb } from './lib/eventos-web.js';
 import { isCentralApi, centralModuleOf, centralApi, centralPage, centralAsset, centralPublic } from './lib/central.js';
 import { CENTRALES } from './lib/modules.js';
 
 const router = new Router();
 // platform va primero. Agrega aquí cada módulo nuevo de src/api/ (y su entrada en modulos.app.json).
 // Los horizontales (Finanzas, Marketing…) no van aquí: se piden en modulos.app.json → "centrales" y viven en Diwilo Modulos.
-const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi, videosApi, alumnoApi, comprobantesApi, trabajoApi];
+const MODULE_APIS = [academiaApi, estudiantesApi, profesionalesApi, materialApi, cursosApi, matriculasApi, cuotasApi, reposicionesApi, videosApi, alumnoApi, comprobantesApi, trabajoApi, eventosApi, certificacionesApi, asesoriasApi];
 for (const mod of [platformApi, platformModulesApi, authApi, meApi, settingsApi, mcpApi, teamApi, ...MODULE_APIS]) if (typeof mod.routes === 'function') mod.routes(router);
 
 const SECURITY_HEADERS = {
@@ -110,6 +114,9 @@ const worker = {
       // Página pública de matrícula de un negocio: /<negocio>/matricula (GET la página, POST el interés)
       const mw = /^\/([a-z0-9][a-z0-9-]{0,39})\/matricula\/?$/.exec(url.pathname);
       if (mw && ['GET', 'POST'].includes(req.method) && !RESERVADAS.has(mw[1])) return matriculaWeb(req, env, url, mw[1]);
+      // Página pública de eventos: /<negocio>/eventos (solo si el módulo Eventos está activo)
+      const ew = /^\/([a-z0-9][a-z0-9-]{0,39})\/eventos\/?$/.exec(url.pathname);
+      if (ew && ['GET', 'POST'].includes(req.method) && !RESERVADAS.has(ew[1])) return eventosWeb(req, env, url, ew[1]);
       // /<dirección del negocio>: el panel (con sesión de ese negocio) o el ingreso.
       const seg = url.pathname.replace(/^\/|\/$/g, '');
       if (req.method === 'GET' && SLUG.test(seg) && !RESERVADAS.has(seg)) {

@@ -32,6 +32,8 @@ Publica sola con Workers Builds al hacer push a `main` (aplica migraciones). Rep
 
 - Matrícula pública y embudo (Marketing): `/<negocio>/matricula` (`src/lib/matricula-web.js`, sin sesión; GET página con los cursos abiertos, POST interés → RPC `MODULOS.lead`). Las campañas de la academia nacen con un link `/l/<slug>` a `/matricula` (central.js lo resuelve a `/<negocio>/matricula?ref=<slug>`); al matricular (`matriculadoMarketing`) el lead pasa a cliente. Requiere Diwilo Modulos ≥ marketing 1.7.0 (migración 0017): desplegar ese primero.
 
+- Eventos, Certificaciones y Asesorías (migración 0021; `src/api/{eventos,certificaciones,asesorias}.js`, páginas `/staff/<modulo>.html`): módulos propios para todos los negocios. **Certificaciones** = exámenes oficiales externos (ÖSD, DELE…; reglas configurables: partes, máximos y mínimos por grupo; ligadas al curso que prepara cada examen) y NO las evaluaciones de clase de Cursos. **Asesorías** = procesos por pasos con plantillas (`ac_asesoria_tipos`; el proceso copia los pasos). **Eventos** tiene página pública `/<negocio>/eventos` (`lib/eventos-web.js`, solo con el módulo activo; la inscripción también crea lead en Marketing). Los tres cobran con `lib/cobros.js` (`ac_cobros`, ref `academia:cobro:<id>` → recibo en Finanzas vía `reciboExterno`); «ya pagado» exige nota, no genera recibo y admite comprobante (R2 privado, `lib/archivos.js`). UI de cobros común: `public/js/pages/cobros-ui.js`.
+
 ## Comandos
 - `npm run db:migrate:local && npm test` → "Todo bien".
 

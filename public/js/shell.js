@@ -5,7 +5,7 @@
 // y espera a DW.ready (Promise con /api/me) para cargar sus datos.
 (function () {
   const { api, esc, changePassword } = window.App;
-  // Colores de la app (paleta cerrada): se cambian desde el menú de usuario; el logo y el resto de la marca, en Marketing → Tarjetas → Marca
+  // Colores de la app (paleta cerrada): se cambian desde el menú de usuario; el logo y el resto de la marca, en Marca
   const TEMAS = [['violeta', 'Violeta', '#6d28d9'], ['azul', 'Azul', '#1d4ed8'], ['indigo', 'Índigo', '#4338ca'], ['rosa', 'Rosa', '#be185d'], ['rojo', 'Rojo', '#b91c1c'], ['naranja', 'Naranja', '#c2410c'], ['verde', 'Verde', '#15803d'], ['turquesa', 'Turquesa', '#0f766e'], ['grafito', 'Grafito', '#374151']];
   const ROLE = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' };
   const RANK = { staff: 1, admin: 2, owner: 3 };

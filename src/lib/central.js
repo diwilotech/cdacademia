@@ -152,7 +152,7 @@ export async function centralPage(env, req, id) {
     .replace(/<main class="dw-main"[\s\S]*?<\/main>/, `<!-- Módulo «${id}» de Diwilo Modulos (Worker central) -->\n${main.body.trim()}`)
     .replace(/<title>[^<·]*·/, `<title>${titulo} ·`)
     .replace(/<script src="\/js\/pages\/[^"]+\.js"><\/script>/, id === 'marca'
-      ? '<script>window.DW_MARCA_PROPIA=1</script><script src="/js/pages/academia-comun.js"></script><script src="/js/pages/marca-academia.js"></script><script src="/m/marca.js"></script>'
+      ? '<script src="/js/pages/academia-comun.js"></script><script src="/js/pages/marca-academia.js"></script><script src="/m/marca.js"></script>'
       : `<script src="/m/${id}.js"></script>`);
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
 }
@@ -174,7 +174,8 @@ export async function centralPublic(env, url, req) {
     await env.MODULOS.click(APP.id, l.id);
     // Destino de la propia app (/matricula): va a la página de ese negocio
     let destino = l.url;
-    if (destino.startsWith('/')) {
+    if (destino.startsWith('/c/')) destino = `${url.origin}${destino}`;   // una tarjeta: está en la raíz del dominio, no bajo el negocio
+    else if (destino.startsWith('/')) {
       const b = await env.DB.prepare('SELECT slug FROM businesses WHERE id = ?').bind(l.business_id).first();
       destino = `${url.origin}/${b?.slug || ''}${destino}`;
     }

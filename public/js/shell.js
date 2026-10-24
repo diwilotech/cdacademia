@@ -47,10 +47,10 @@
   const link = (m) => `<li class="${inBottom.has(m.id) ? 'dw-in-bottom' : ''}"><a data-mod="${esc(m.id)}" href="${esc(m.ruta)}" class="${isActive(m) ? 'active' : ''}" ${isActive(m) ? 'aria-current="page"' : ''} title="${esc(m.nombre)}"><i class="bi ${esc(m.icono || 'bi-grid')}"></i><span>${esc(m.nombre)}</span></a></li>`;
 
   function render(me) {
-    // «IA» (reemplaza a Configuración) va abajo, junto a Equipo; «marca» es un servicio sin pantalla propia (se edita en Marketing → Tarjetas)
+    // «IA» va abajo, junto a Equipo; «Marca» tiene su propia pantalla en el menú (módulo central de Diwilo Modulos)
     const iaMod = me.modules.find((m) => m.id === 'ai');
     const FOOT = [...BASE_END, ...(iaMod ? [iaMod] : [])];
-    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && !['ai', 'marca'].includes(m.id)).sort((a, b) => a.orden - b.orden), ...FOOT];
+    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && m.id !== 'ai').sort((a, b) => a.orden - b.orden), ...FOOT];
     const initials = (me.user.name || me.user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const logo = me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : esc(me.business.name.trim()[0] || 'D').toUpperCase();
     const canManage = RANK[me.role] >= RANK.admin;

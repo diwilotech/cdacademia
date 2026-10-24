@@ -394,11 +394,11 @@
     },
     {
       "id": "academia",
-      "nombre": "Academia",
-      "icono": "bi-building",
+      "nombre": "Configuración",
+      "icono": "bi-gear",
       "menu": {
         "ruta": "/staff/academia.html",
-        "orden": 90
+        "orden": 99
       },
       "permisos": {
         "ver": "admin",

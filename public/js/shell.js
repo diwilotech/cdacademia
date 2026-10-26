@@ -6,7 +6,6 @@
 (function () {
   const { api, esc, changePassword } = window.App;
   // Colores de la app (paleta cerrada): se cambian desde el menú de usuario; el logo y el resto de la marca, en Marca
-  const TEMAS = [['violeta', 'Violeta', '#6d28d9'], ['azul', 'Azul', '#1d4ed8'], ['indigo', 'Índigo', '#4338ca'], ['rosa', 'Rosa', '#be185d'], ['rojo', 'Rojo', '#b91c1c'], ['naranja', 'Naranja', '#c2410c'], ['verde', 'Verde', '#15803d'], ['turquesa', 'Turquesa', '#0f766e'], ['grafito', 'Grafito', '#374151']];
   const ROLE = { owner: 'Propietario', admin: 'Administrador', staff: 'Personal' };
   const RANK = { staff: 1, admin: 2, owner: 3 };
   const main = document.querySelector('main.dw-main');
@@ -50,7 +49,7 @@
     // «IA» va abajo, junto a Equipo; «Marca» tiene su propia pantalla en el menú (módulo central de Diwilo Modulos)
     const iaMod = me.modules.find((m) => m.id === 'ai');
     const FOOT = [...BASE_END, ...(iaMod ? [iaMod] : [])];
-    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && m.id !== 'ai').sort((a, b) => a.orden - b.orden), ...FOOT];
+    const mods = [...BASE_START, ...me.modules.filter((m) => !m.oculto && m.id !== 'ai' && m.id !== 'dashboard').sort((a, b) => a.orden - b.orden), ...FOOT];
     const initials = (me.user.name || me.user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const logo = me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : esc(me.business.name.trim()[0] || 'D').toUpperCase();
     const canManage = RANK[me.role] >= RANK.admin;
@@ -68,9 +67,9 @@
         <span class="dw-top__title" data-top-title>${esc(page.titulo)}</span>
         <span class="dw-top__spacer"></span>
         <div class="dropdown">
-          <button class="dw-iconbtn" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notificaciones"><i class="bi bi-bell"></i>${me.business.readOnly ? '<span class="dw-dot"></span>' : ''}</button>
+          <button class="dw-iconbtn" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notificaciones"><i class="bi bi-bell"></i><span class="dw-dot" data-bell-dot ${me.business.readOnly ? '' : 'hidden'}></span></button>
           <div class="dropdown-menu dropdown-menu-end p-0" style="width:300px"><div class="px-3 py-2 fw-semibold border-bottom">Notificaciones</div>
-            ${me.business.readOnly ? `<div class="px-3 py-2 small"><i class="bi bi-lock-fill text-danger me-1"></i>La suscripción venció: la app quedó en solo lectura. Escríbele a Diwilo para reactivarla.</div>` : '<div class="px-3 py-3 small text-body-secondary text-center">No tienes notificaciones.</div>'}</div>
+            ${me.business.readOnly ? `<div class="px-3 py-2 small"><i class="bi bi-lock-fill text-danger me-1"></i>La suscripción venció: la app quedó en solo lectura. Escríbele a Diwilo para reactivarla.</div>` : ''}<div data-notifs><div class="px-3 py-3 small text-body-secondary text-center">No tienes notificaciones.</div></div></div>
         </div>
         <div class="dropdown">
           <button class="dw-user" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Menú de usuario"><span class="dw-avatar">${esc(initials)}</span><i class="bi bi-chevron-down small d-none d-sm-inline"></i></button>
@@ -78,7 +77,7 @@
             <li class="px-3 py-2"><div class="fw-semibold">${esc(me.user.name || me.user.email)}</div><div class="small text-body-secondary">${esc(me.user.email)} · ${ROLE[me.role] || esc(me.role)}</div></li>
             <li><hr class="dropdown-divider"></li>
             ${me.businesses.length > 1 ? `<li><h6 class="dropdown-header">Cambiar de negocio</h6></li>${me.businesses.map((b) => `<li><button class="dropdown-item ${b.id === me.business.id ? 'active' : ''}" data-biz="${esc(b.id)}"><i class="bi bi-shop me-2"></i>${esc(b.name)}</button></li>`).join('')}<li><hr class="dropdown-divider"></li>` : ''}
-            ${canManage ? `<li><h6 class="dropdown-header">Apariencia</h6></li><li class="px-3 pb-2"><div class="d-flex flex-wrap gap-2" data-temas>${TEMAS.map(([id, n, hex]) => `<button type="button" class="dw-tdot ${me.settings.tema === id ? 'active' : ''}" data-tema="${id}" style="background:${hex}" title="${n}" aria-label="${n}"></button>`).join('')}</div><div class="btn-group btn-group-sm w-100 mt-2" role="group"><button type="button" class="btn btn-outline-primary ${me.settings.modo === 'light' ? 'active' : ''}" data-modo="light"><i class="bi bi-sun me-1"></i>Claro</button><button type="button" class="btn btn-outline-primary ${me.settings.modo === 'dark' ? 'active' : ''}" data-modo="dark"><i class="bi bi-moon me-1"></i>Oscuro</button></div></li>` : ''}
+            ${canManage && me.modules.some((m) => m.id === 'marca') ? `<li><a class="dropdown-item" data-mod="marca" href="/staff/marca.html"><i class="bi bi-palette me-2"></i>Color y marca</a></li>` : ''}
             <li><button class="dropdown-item" data-pass><i class="bi bi-key me-2"></i>Cambiar contraseña</button></li>
             <li><a class="dropdown-item" href="/privacidad" target="_blank" rel="noopener"><i class="bi bi-shield-check me-2"></i>Política de datos</a></li>
             <li><hr class="dropdown-divider"></li>
@@ -107,18 +106,7 @@
         try { localStorage.setItem('dw_mini', document.body.classList.contains('dw-mini') ? '1' : '0'); } catch (_) {}
       };
       document.querySelector('[data-pass]').onclick = changePassword;
-      // Apariencia (solo propietario y administrador): se guarda al tocar y vale para todo el equipo
-      const guardarApariencia = async (cambio) => {
-        try {
-          const nuevo = { ...me.settings, ...cambio };
-          const r = await api('/api/settings/apariencia', { method: 'PUT', body: { tema: nuevo.tema, modo: nuevo.modo } });
-          me.settings = { ...me.settings, ...r }; applyTheme(me.settings);
-          document.querySelectorAll('[data-tema]').forEach((b) => b.classList.toggle('active', b.dataset.tema === me.settings.tema));
-          document.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('active', b.dataset.modo === me.settings.modo));
-        } catch (_) { /* sin permiso o sin conexión: queda como estaba */ }
-      };
-      document.querySelectorAll('[data-tema]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); guardarApariencia({ tema: b.dataset.tema }); }));
-      document.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); guardarApariencia({ modo: b.dataset.modo }); }));
+      // El color y el modo ya no se eligen aquí: los maneja Marca → Color y letra (guarda para todo el equipo y este panel los toma por mensaje)
       document.querySelector('[data-logout]').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.replace('/'); };
       document.querySelectorAll('[data-biz]').forEach((b) => (b.onclick = async () => {
         await api('/api/auth/business', { method: 'POST', body: { businessId: b.dataset.biz } });
@@ -134,7 +122,7 @@
       return false;
     }
     if (EMBED) { document.body.classList.add('dw-embed'); notificar(); }
-    if (PANEL) iniciarPanel();
+    if (PANEL) { iniciarPanel(); bienvenida(me); }
     return true;
   }
 
@@ -142,6 +130,29 @@
   function notificar() {
     document.body.classList.add('dw-embed');
     window.parent.postMessage({ dw: 'page', modulo: page.modulo || 'inicio', titulo: page.titulo, url: location.pathname + location.search + location.hash }, location.origin);
+  }
+
+  // Bienvenida con la marca (logo, nombre y lema): una vez por sesión, breve, se cierra sola o al tocarla
+  async function bienvenida(me) {
+    try { if (sessionStorage.getItem('dw_splash') === '1') return; sessionStorage.setItem('dw_splash', '1'); } catch (_) {}
+    const el = document.createElement('div');
+    el.id = 'dw-splash'; el.setAttribute('role', 'status'); el.setAttribute('aria-label', 'Bienvenida');
+    el.innerHTML = `<div class="dw-splash__logo">${me.settings.logo ? `<img src="${esc(me.settings.logo)}" alt="">` : `<span>${esc((me.business.name.trim()[0] || 'D').toUpperCase())}</span>`}</div><div class="dw-splash__name">${esc(me.business.name)}</div><div class="dw-splash__lema" data-splash-lema></div>`;
+    document.body.appendChild(el);
+    const cerrar = () => { el.classList.add('out'); setTimeout(() => el.remove(), 450); };
+    el.addEventListener('click', cerrar);
+    const t0 = Date.now();
+    const lema = await Promise.race([api('/api/marca').then((d) => d.marca?.lema || '').catch(() => ''), new Promise((r) => setTimeout(() => r(''), 900))]);
+    const l = el.querySelector('[data-splash-lema]'); if (l) l.textContent = lema;
+    setTimeout(cerrar, Math.max(500, 1200 - (Date.now() - t0)));
+  }
+
+  // Campana: avisos de las pantallas (alertas del Dashboard) además del aviso de suscripción vencida
+  function setNotifs(list) {
+    const box = document.querySelector('[data-notifs]'); if (!box) return;
+    box.innerHTML = list.length ? list.map((n) => `<a class="dropdown-item d-flex gap-2 align-items-start py-2 text-wrap" ${n.ruta ? `data-go="${esc(n.ruta)}"` : ''} href="${esc(n.ruta || '#')}"><i class="bi ${esc(n.icono || 'bi-bell')} text-primary mt-1"></i><span class="small">${esc(n.texto)}</span></a>`).join('')
+      : '<div class="px-3 py-3 small text-body-secondary text-center">No tienes notificaciones.</div>';
+    const dot = document.querySelector('[data-bell-dot]'); if (dot) dot.hidden = !list.length && !DW.me?.business?.readOnly;
   }
 
   function iniciarPanel() {
@@ -161,6 +172,10 @@
     };
     window.addEventListener('message', (e) => {
       if (e.origin === location.origin && e.source === frame.contentWindow && e.data?.dw === 'tema') { applyTheme(e.data); return; }
+      if (e.origin === location.origin && e.source === frame.contentWindow && e.data?.dw === 'avisos' && Array.isArray(e.data.alertas)) {
+        setNotifs(e.data.alertas.slice(0, 6).map((a) => ({ icono: String(a.icono || ''), texto: String(a.texto || '').slice(0, 200), ruta: /^[a-z]+$/.test(a.mod || '') ? `/staff/${a.mod}.html` : null })));
+        return;
+      }
       if (e.origin !== location.origin || e.source !== frame.contentWindow || e.data?.dw !== 'page') return;
       panel.modulo = e.data.modulo; panel.titulo = e.data.titulo || '';
       const t = document.querySelector('[data-top-title]'); if (t) t.textContent = panel.titulo;
@@ -169,6 +184,8 @@
       try { if (OK.test(e.data.url)) sessionStorage.setItem('dw_ultimo', e.data.url); } catch (_) {}
     });
     document.addEventListener('click', (e) => {
+      const g = e.target.closest('a[data-go]');
+      if (g && /^\/staff\/[\w\-.]+$/.test(g.dataset.go)) { e.preventDefault(); frame.src = g.dataset.go; return; }
       const a = e.target.closest('a[data-mod]');
       if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
       e.preventDefault();

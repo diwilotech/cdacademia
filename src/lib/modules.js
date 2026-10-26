@@ -12,7 +12,7 @@ import { todayBogota } from './auth.js';
 
 export const APP = { id: appManifest.app, nombre: appManifest.nombre, tema: appManifest.tema || 'violeta' };
 export const CENTRALES = appManifest.centrales || [];
-export const BASE_CENTRALES = CENTRALES.filter((id) => ['marca', 'ai'].includes(id));
+export const BASE_CENTRALES = CENTRALES.filter((id) => ['marca', 'ai', 'dashboard'].includes(id));
 const OWN = (appManifest.modulos || []).map((m) => ({ ...m, tipo: 'propio' }));
 export const OWN_IDS = OWN.map((m) => m.id);
 const byOrder = (a, b) => (a.menu?.orden ?? 99) - (b.menu?.orden ?? 99);

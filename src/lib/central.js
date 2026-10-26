@@ -151,6 +151,7 @@ export async function centralPage(env, req, id) {
   const html = shell
     .replace(/<main class="dw-main"[\s\S]*?<\/main>/, `<!-- Módulo «${id}» de Diwilo Modulos (Worker central) -->\n${main.body.trim()}`)
     .replace(/<title>[^<·]*·/, `<title>${titulo} ·`)
+    .replace(/<script src="\/js\/pages\/inicio\.js"><\/script>\s*<script src="\/m\/dashboard\.js"><\/script>/, '')
     .replace(/<script src="\/js\/pages\/[^"]+\.js"><\/script>/, id === 'marca'
       ? '<script src="/js/pages/academia-comun.js"></script><script src="/js/pages/marca-academia.js"></script><script src="/m/marca.js"></script>'
       : `<script src="/m/${id}.js"></script>`);

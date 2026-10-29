@@ -2,6 +2,7 @@
 // Aquí se registra lo PROPIO de la academia: a la izquierda el Asistente IA (abre el chat) y a su lado una tarjeta pequeña por módulo
 // (dos filas de cuatro, bajan si son más). Al tocar un módulo, tenga agente o no, se ven sus estadísticas y gráficas; luego va el calendario.
 window.DwSinFigura = true;    // sin «Así funciona tu negocio»
+window.DwSinComoVa = true;    // sin las tarjetas de «Cómo va»
 window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
 (window.DwDashboard = window.DwDashboard || []).push({
   id: 'academia',
@@ -16,17 +17,23 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     const TILES = { estudiantes: ['estudiantes', 'matriculas'], cursos: ['cursos', 'clases_hoy', 'asistencia', 'riesgo', 'notas'], reposiciones: ['reposiciones'], cuotas: ['recaudo', 'por_cobrar', 'vencido'] };
     const mods = me.modules.filter((m) => m.ruta && !m.oculto && !BASES.has(m.id)).map((m, i) => ({ ...m, color: COLORES[i % COLORES.length] }));
     const ia = me.modules.find((m) => m.id === 'ai');
+    // gráficas por módulo (claves de /api/academia/graficas): serie = columnas de 6 meses, rank = barras por grupo
+    const GRAFICAS = {
+      estudiantes: [{ k: 'estudiantes_mes', t: 'Estudiantes nuevos', s: 'Últimos 6 meses' }, { k: 'matriculas_mes', t: 'Matrículas nuevas', s: 'Últimos 6 meses' }, { k: 'matriculas_estado', t: 'Matrículas por estado', s: 'Todas', tipo: 'rank' }],
+      cursos: [{ k: 'asistencia_mes', t: 'Asistencia', s: 'Por mes', fmt: 'pct' }, { k: 'clases_mes', t: 'Clases programadas', s: 'Por mes' }, { k: 'por_curso', t: 'Estudiantes por curso', s: 'Matrículas activas', tipo: 'rank' }, { k: 'notas_curso', t: 'Promedio de notas', s: 'Por curso', tipo: 'rank' }],
+      reposiciones: [{ k: 'repos_estado', t: 'Reposiciones por estado', s: 'Todas', tipo: 'rank' }],
+      cuotas: [{ k: 'recaudo_mes', t: 'Recaudo', s: 'Últimos 6 meses', fmt: 'money' }, { k: 'cartera_estado', t: 'Por cobrar', s: 'Vencida y por vencer', tipo: 'rank', fmt: 'money' }, { k: 'cartera_curso', t: 'Por cobrar por curso', s: 'Mayores saldos', tipo: 'rank', fmt: 'money' }],
+    };
     const ir = (ruta) => { if (ruta) location.href = ruta; };
-    let sel = null, met = { tiles: [], serie: [] }, wid = [];
+    let sel = null, met = { tiles: [], serie: [] }, wid = [], gr = {};
 
     host.innerHTML = `<style>
-        .ac-top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:16px}
-        @media (min-width:992px){.ac-top{grid-template-columns:minmax(0,4fr) minmax(0,8fr)}}
+        .ac-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+        .ac-core{grid-column:1/-1}
+        @media (min-width:992px){.ac-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.ac-core{grid-column:span 2;grid-row:span 2}}
         .ac-core{--c:#A78BFA;display:flex;flex-direction:column;gap:10px;text-align:left;width:100%;padding:20px;border-radius:16px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);background:linear-gradient(160deg,color-mix(in srgb,var(--c) 16%,var(--bs-body-bg)),var(--bs-body-bg) 65%);color:inherit;cursor:pointer;transition:transform .12s}
         .ac-core:hover{transform:translateY(-2px)}
         .ac-core .ic{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;font-size:2rem;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}
-        .ac-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start}
-        @media (min-width:768px){.ac-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
         .ac-mod{--c:var(--dw-p,#6d28d9);display:flex;flex-direction:column;gap:2px;text-align:left;width:100%;padding:12px;border-radius:14px;border:1px solid var(--bs-border-color);background:var(--bs-body-bg);color:inherit;cursor:pointer;transition:transform .12s,border-color .12s,opacity .12s}
         .ac-mod:hover{transform:translateY(-2px);border-color:var(--c)}.ac-mod.on{border-color:var(--c);box-shadow:0 0 0 1px var(--c)}.ac-grid.sel .ac-mod:not(.on){opacity:.5}
         .ac-mod .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:1.15rem;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);margin-bottom:6px}
@@ -35,10 +42,14 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
         .ac-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
         .ac-kpi{display:block;padding:14px;border-radius:14px;border:1px solid var(--bs-border-color);border-top:3px solid var(--c);background:var(--bs-body-bg);color:inherit;text-decoration:none}
         .ac-kpi .v{font-size:1.7rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}.ac-kpi .l{font-size:.85rem;color:var(--bs-secondary-color)}.ac-kpi .d{font-size:.78rem;color:var(--bs-secondary-color)}
+        .ac-charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+        .ac-ch{padding:14px;border-radius:14px;border:1px solid var(--bs-border-color)}
+        .ac-cols{display:flex;align-items:flex-end;gap:8px;height:130px}.ac-cols>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
+        .ac-cols i{display:block;width:100%;max-width:36px;border-radius:6px 6px 3px 3px;background:var(--c)}.ac-cols small{font-size:.7rem;color:var(--bs-secondary-color);white-space:nowrap}
+        .ac-ch .progress-bar{background:var(--c)}
         @media (prefers-reduced-motion:reduce){.ac-core,.ac-mod{transition:none}}
       </style>
-      <div class="ac-top"><div>${ia ? `<button type="button" class="ac-core h-100" data-ia><span class="ic"><i class="bi bi-cpu"></i></span><span><span class="d-block small fw-bold" style="color:var(--c);letter-spacing:.12em">ASISTENTE IA</span><span class="d-block h4 fw-bold mb-1">Pregúntale a tu academia</span><span class="d-block text-body-secondary small">Abre el chat: te responde con los datos de todos tus módulos y hace tareas por ti.</span></span><span class="mt-auto small fw-semibold" style="color:var(--c)">Abrir el chat <i class="bi bi-arrow-right"></i></span></button>` : ''}</div>
-        <div class="ac-grid" data-mods></div></div>
+      <div class="ac-grid" data-mods>${ia ? `<button type="button" class="ac-core" data-ia><span class="ic"><i class="bi bi-cpu"></i></span><span><span class="d-block small fw-bold" style="color:var(--c);letter-spacing:.12em">ASISTENTE IA</span><span class="d-block h4 fw-bold mb-1">Pregúntale a tu academia</span><span class="d-block text-body-secondary small">Abre el chat: te responde con los datos de todos tus módulos y hace tareas por ti.</span></span><span class="mt-auto small fw-semibold" style="color:var(--c)">Abrir el chat <i class="bi bi-arrow-right"></i></span></button>` : ''}</div>
       <div data-det></div>
       <section class="mt-4" data-sec-semana hidden><h2 class="h6 mb-3">Esta semana</h2><div data-semana></div></section>`;
     const $ = (s) => host.querySelector(s);
@@ -52,22 +63,26 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
 
     function pintar() {
       $('[data-mods]').classList.toggle('sel', !!sel);
-      $('[data-mods]').innerHTML = mods.map((m) => {
+      $('[data-mods]').querySelectorAll('.ac-mod').forEach((e) => e.remove());
+      $('[data-mods]').insertAdjacentHTML('beforeend', mods.map((m) => {
         const p = indicadores(m)[0];
         return `<button type="button" class="ac-mod ${sel === m ? 'on' : ''}" style="--c:${m.color}" data-mod="${esc(m.id)}" aria-pressed="${sel === m}"><span class="ic"><i class="bi ${esc(m.icono || 'bi-grid')}"></i></span><span class="n">${esc(m.nombre)}</span><span class="v">${p ? `${esc((FMT[p.fmt] || String)(p.valor))} · ${esc(String(p.titulo).toLowerCase())}` : 'Ver estadísticas'}</span></button>`;
-      }).join('');
+      }).join(''));
 
       const det = $('[data-det]');
-      if (!sel) det.innerHTML = '';
-      else {
-        const ks = indicadores(sel);
-        const serie = sel.id === 'cuotas' || sel.id === 'estudiantes' ? met.serie : null, verSerie = serie?.some((x) => x.matriculas || x.recaudo);
-        det.innerHTML = `<div class="dw-card ac-det" style="--c:${sel.color}"><div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h2 class="h6 mb-0 flex-grow-1">Estadísticas · <span style="color:var(--c)">${esc(sel.nombre)}</span></h2><button type="button" class="btn btn-sm btn-outline-secondary" data-abrir>Abrir módulo <i class="bi bi-arrow-right"></i></button></div>
-          ${ks.length ? `<div class="ac-kpis">${ks.map(kpi).join('')}</div>` : '<div class="text-body-secondary small">Este módulo aún no tiene indicadores en el Inicio.</div>'}
-          ${verSerie ? `<h3 class="h6 mt-4 mb-2">${sel.id === 'cuotas' ? 'Recaudo y matrículas · últimos 6 meses' : 'Matrículas nuevas · últimos 6 meses'}</h3><div data-serie></div>` : ''}</div>`;
-        if (verSerie) C.bars(det.querySelector('[data-serie]'), serie.map((x) => ({ label: new Date(`${x.mes}-01T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short' }), recaudo: x.recaudo, matriculas: x.matriculas })),
-          { a: 'recaudo', b: 'matriculas', la: 'Recaudo', lb: 'Matrículas nuevas', fmt: (v) => (v >= 1000 ? C.money(v) : String(v)), separate: true });
-      }
+      if (!sel) { det.innerHTML = ''; return; }
+      const ks = indicadores(sel), gs = (GRAFICAS[sel.id] || []).filter((g) => gr[g.k]?.some?.((x) => x.n)), mes = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short' });
+      det.innerHTML = `<div class="dw-card ac-det" style="--c:${sel.color}"><div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h2 class="h6 mb-0 flex-grow-1">Estadísticas · <span style="color:var(--c)">${esc(sel.nombre)}</span></h2><button type="button" class="btn btn-sm btn-outline-secondary" data-abrir>Abrir módulo <i class="bi bi-arrow-right"></i></button></div>
+        ${ks.length ? `<div class="ac-kpis">${ks.map(kpi).join('')}</div>` : '<div class="text-body-secondary small">Este módulo aún no tiene indicadores en el Inicio.</div>'}
+        ${gs.length ? `<div class="ac-charts">${gs.map((g, n) => `<div class="ac-ch"><div class="fw-semibold small">${esc(g.t)}</div><div class="small text-body-secondary mb-2">${esc(g.s)}</div><div data-g="${n}"></div></div>`).join('')}</div>` : ''}</div>`;
+      gs.forEach((g, n) => {
+        const el = det.querySelector(`[data-g="${n}"]`), f = g.fmt === 'money' ? C.money : g.fmt === 'pct' ? (v) => `${v}%` : C.num;
+        if (g.tipo === 'rank') C.rank(el, gr[g.k], f);
+        else {
+          const rows = gr[g.k], max = Math.max(1, ...rows.map((x) => x.n));
+          el.innerHTML = `<div class="ac-cols" role="img" aria-label="${esc(g.t)}">${rows.map((x) => `<div title="${esc(mes(x.mes))}: ${esc(f(x.n))}"><small>${esc(f(x.n))}</small><i style="height:${Math.max(3, x.n / max * 90)}px"></i><small>${esc(mes(x.mes))}</small></div>`).join('')}</div>`;
+        }
+      });
     }
 
     host.addEventListener('click', (e) => {
@@ -81,8 +96,9 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     });
 
     pintar();
-    const [m1, w1] = await Promise.all([api('/api/academia/metricas').catch(() => null), api('/api/dashboard').catch(() => null)]);
+    const [m1, w1, g1] = await Promise.all([api('/api/academia/metricas').catch(() => null), api('/api/dashboard').catch(() => null), api('/api/academia/graficas').catch(() => null)]);
     if (m1) met = m1;
+    if (g1) gr = g1;
     if (w1) wid = w1.widgets || [];
     pintar();
 

@@ -3,6 +3,7 @@
 //   GET /api/academia/config   ·  PUT /api/academia/config
 //   GET /api/academia/areas-lista  (para los selectores de los demás módulos)
 //   CRUD /api/academia/areas
+//   GET /api/academia/graficas  (Inicio) series de 6 meses y reparticiones del módulo elegido
 //   GET /api/academia/metricas  (Inicio) indicadores propios de la academia, según los módulos activos y el rol
 import { json, readJson, HttpError } from '../lib/http.js';
 import { crud, all, one, now, today } from '../lib/crud.js';
@@ -76,6 +77,38 @@ export function routes(r) {
       serie = meses.map((m) => ({ mes: m, matriculas: mm.find((x) => x.mes === m)?.n || 0, recaudo: pp.find((x) => x.mes === m)?.v || 0 }));
     }
     return json({ tiles, serie });
+  });
+  // Gráficas de Inicio al elegir un módulo: series de 6 meses y reparticiones. Lo de dinero solo para propietario/administrador.
+  r.get('/api/academia/graficas', 'tenant', async (c) => {
+    const act = new Set(await activeModuleIds(c.env, c.businessId)), money = ['owner', 'admin'].includes(c.role), B = c.businessId;
+    const hoy = today(), mes = hoy.slice(0, 7);
+    const meses = Array.from({ length: 6 }, (_, i) => { const x = new Date(`${mes}-01T12:00:00Z`); x.setUTCMonth(x.getUTCMonth() - (5 - i)); return x.toISOString().slice(0, 7); });
+    const desde = `${meses[0]}-01`, desdeMs = Date.parse(`${desde}T05:00:00Z`), out = {};
+    const serie = (rows, key = 'n') => meses.map((m) => ({ mes: m, n: rows.find((x) => x.mes === m)?.[key] || 0 }));
+    if (act.has('estudiantes')) {
+      out.estudiantes_mes = serie(await all(c.env, "SELECT strftime('%Y-%m', created_at / 1000, 'unixepoch', '-5 hours') AS mes, COUNT(*) AS n FROM ac_estudiantes WHERE business_id = ? AND created_at >= ? GROUP BY 1", B, desdeMs));
+      out.matriculas_mes = serie(await all(c.env, 'SELECT substr(fecha, 1, 7) AS mes, COUNT(*) AS n FROM ac_inscripciones WHERE business_id = ? AND fecha >= ? GROUP BY 1', B, desde));
+      out.matriculas_estado = await all(c.env, 'SELECT estado AS k, COUNT(*) AS n FROM ac_inscripciones WHERE business_id = ? GROUP BY estado ORDER BY n DESC', B);
+    }
+    if (act.has('cursos')) {
+      out.por_curso = await all(c.env, "SELECT k.nombre AS k, COUNT(*) AS n FROM ac_inscripciones i JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE i.business_id = ? AND i.estado = 'activa' GROUP BY k.id ORDER BY n DESC LIMIT 6", B);
+      out.asistencia_mes = serie(await all(c.env, `SELECT substr(cl.fecha, 1, 7) AS mes, ROUND(100.0 * SUM(CASE WHEN a.estado IN ('P', 'T') THEN 1 ELSE 0 END) / COUNT(*)) AS n FROM ac_asistencia a
+        JOIN ac_inscripciones i ON i.id = a.inscripcion_id AND i.business_id = a.business_id JOIN ac_clases cl ON cl.curso_id = i.curso_id AND cl.n = a.clase_n AND cl.business_id = a.business_id
+        WHERE a.business_id = ? AND a.estado <> '' AND cl.fecha >= ? GROUP BY 1`, B, desde));
+      out.clases_mes = serie(await all(c.env, 'SELECT substr(fecha, 1, 7) AS mes, COUNT(*) AS n FROM ac_clases WHERE business_id = ? AND fecha >= ? GROUP BY 1', B, desde));
+      out.notas_curso = (await all(c.env, 'SELECT k.nombre AS k, ROUND(AVG(n.nota), 1) AS n FROM ac_notas n JOIN ac_inscripciones i ON i.id = n.inscripcion_id AND i.business_id = n.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id WHERE n.business_id = ? AND n.nota IS NOT NULL GROUP BY k.id ORDER BY n DESC LIMIT 6', B).catch(() => []));
+    }
+    if (act.has('reposiciones')) {
+      const f = await fallas(c), cuenta = (e) => f.filter((x) => x.estado === e).length;
+      out.repos_estado = [{ k: 'Pendientes', n: cuenta('pendiente') }, { k: 'Agendadas', n: cuenta('agendada') }, { k: 'Hechas', n: cuenta('hecha') }];
+    }
+    if (act.has('cuotas') && money) {
+      out.recaudo_mes = serie(await all(c.env, 'SELECT substr(fecha, 1, 7) AS mes, SUM(valor) AS v FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND fecha >= ? GROUP BY 1', B, desde), 'v');
+      const rows = await cartera(c), suma = (f) => rows.filter(f).reduce((t, q) => t + q.falta, 0);
+      out.cartera_estado = [{ k: 'Vencida', n: suma((q) => q.estado === 'vencida') }, { k: 'Por vencer', n: suma((q) => q.estado !== 'vencida' && q.falta > 0) }];
+      out.cartera_curso = Object.entries(rows.filter((q) => q.falta > 0).reduce((m, q) => ({ ...m, [q.curso]: (m[q.curso] || 0) + q.falta }), {})).map(([k, n]) => ({ k, n })).sort((a, b) => b.n - a.n).slice(0, 6);
+    }
+    return json(out);
   });
   r.get('/api/academia/areas-lista', 'tenant', async (c) => json({ areas: await all(c.env, 'SELECT id, nombre, color FROM ac_areas WHERE business_id = ? ORDER BY nombre', c.businessId) }));
   r.put('/api/academia/config', `manager:${MOD}`, async (c) => {

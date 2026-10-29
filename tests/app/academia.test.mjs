@@ -196,6 +196,8 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const metS = (await S.app('/api/academia/metricas')).data.tiles.map((t) => t.id);
   check('Inicio: el personal no ve matrículas ni dinero pero sí lo académico', metS.includes('cursos') && metS.includes('asistencia') && !['matriculas', 'recaudo', 'por_cobrar', 'vencido'].some((x) => metS.includes(x)), JSON.stringify(metS));
   check('Inicio: B no ve los datos de A', (await B.app('/api/academia/metricas')).data.tiles.find((t) => t.id === 'estudiantes')?.valor === 0);
+  const gA = await A.app('/api/academia/graficas');
+  check('Inicio: gráficas por módulo (6 meses) y B no ve las de A', gA.status === 200 && gA.data.recaudo_mes?.length === 6 && gA.data.asistencia_mes?.length === 6 && Array.isArray(gA.data.por_curso) && (await B.app('/api/academia/graficas')).data.por_curso?.length === 0, JSON.stringify(gA.data).slice(0, 300));
   check('Inicio: /api/me marca los módulos propios y los compartidos', (await A.app('/api/me')).data.modules.find((x) => x.id === 'cursos')?.tipo === 'propio' && (await A.app('/api/me')).data.modules.find((x) => x.id === 'finanzas')?.tipo === 'compartido');
 
   // Notas y asistencia en matriz: el detalle trae la cédula de cada inscrito, y la asistencia se corrige clase por clase

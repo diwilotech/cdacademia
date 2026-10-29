@@ -122,7 +122,7 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     host.addEventListener('click', (e) => {
       const cr = e.target.closest('[data-crear]'); if (cr) return crearAgente(cr);
       const co = e.target.closest('[data-correr]'); if (co) return correrAgente(co);
-      if (e.target.closest('[data-ia]')) return ir(ia.ruta);
+      if (e.target.closest('[data-ia]')) { const f = (() => { for (const w of [window.parent, window.top]) { try { if (w.DwIA?.open) return w.DwIA; } catch (_) { /* otro origen */ } } return null; })(); return f ? f.open() : ir(ia.ruta); }
       if (e.target.closest('[data-abrir]')) return ir(sel?.ruta);
       const b = e.target.closest('[data-mod]');
       if (!b) return;

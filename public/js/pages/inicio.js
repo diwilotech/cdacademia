@@ -25,7 +25,10 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
       cuotas: [{ k: 'recaudo_mes', t: 'Recaudo', s: 'Últimos 6 meses', fmt: 'money' }, { k: 'cartera_estado', t: 'Por cobrar', s: 'Vencida y por vencer', tipo: 'rank', fmt: 'money' }, { k: 'cartera_curso', t: 'Por cobrar por curso', s: 'Mayores saldos', tipo: 'rank', fmt: 'money' }],
     };
     const ir = (ruta) => { if (ruta) location.href = ruta; };
-    let sel = null, met = { tiles: [], serie: [] }, wid = [], gr = {};
+    let sel = null, met = { tiles: [], serie: [] }, wid = [], gr = {}, AG = { agentes: [] };
+    const puedeCrear = me.role === 'owner' || me.role === 'admin';
+    const hace = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+    const agenteDe = (m) => AG.agentes.find((a) => a.herramientas.length && a.herramientas.filter((n) => n.startsWith(`${m.id}.`)).length * 2 > a.herramientas.length) || null;
 
     host.innerHTML = `<style>
         .ac-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
@@ -46,6 +49,8 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
         .ac-ch{padding:14px;border-radius:14px;border:1px solid var(--bs-border-color)}
         .ac-cols{display:flex;align-items:flex-end;gap:8px;height:130px}.ac-cols>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
         .ac-cols i{display:block;width:100%;max-width:36px;border-radius:6px 6px 3px 3px;background:var(--c)}.ac-cols small{font-size:.7rem;color:var(--bs-secondary-color);white-space:nowrap}
+        .ac-ag{padding:14px;border-radius:14px;border:1px solid var(--bs-border-color);background:color-mix(in srgb,var(--c) 6%,transparent)}
+        .ac-ag .pt{width:9px;height:9px;border-radius:50%;background:#34D399;display:inline-block}.ac-ag .pt.pend{background:#f59e0b}.ac-ag .pt.error{background:#dc3545}
         .ac-ch .progress-bar{background:var(--c)}
         @media (prefers-reduced-motion:reduce){.ac-core,.ac-mod{transition:none}}
       </style>
@@ -61,18 +66,47 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     };
     const kpi = (t) => `<${t.ruta ? 'a' : 'div'} class="ac-kpi" ${t.ruta ? `href="${esc(t.ruta)}"` : ''}><div class="l"><i class="bi ${esc(t.icono || 'bi-graph-up')} me-1"></i>${esc(t.titulo)}</div><div class="v">${esc((FMT[t.fmt] || String)(t.valor))}</div>${t.detalle ? `<div class="d">${esc(t.detalle)}</div>` : ''}</${t.ruta ? 'a' : 'div'}>`;
 
+    function agenteHtml(m) {
+      const a = agenteDe(m);
+      if (!a) return `<div class="ac-ag mb-3 d-flex flex-wrap align-items-center gap-2"><i class="bi bi-robot fs-4" style="color:var(--c)"></i><div class="flex-grow-1"><div class="fw-semibold">Aún sin agente</div><div class="small text-body-secondary">Un agente revisa ${esc(m.nombre)} por ti y te propone qué hacer.</div></div>${puedeCrear ? `<button type="button" class="btn btn-sm btn-primary" data-crear="${esc(m.id)}"><i class="bi bi-plus-lg"></i> Crear agente</button>` : ''}</div>`;
+      const mx = Math.max(...a.semana, 1);
+      return `<div class="ac-ag mb-3"><div class="d-flex flex-wrap align-items-center gap-2"><span class="pt ${a.pendientes ? 'pend' : a.estado === 'error' ? 'error' : ''}"></span><div class="flex-grow-1"><div class="fw-semibold">${esc(a.nombre)} <span class="badge text-bg-success">Funcionando</span></div><div class="small text-body-secondary">${a.autonomia === 'ejecutar' ? 'Actúa solo' : 'Tú apruebas'}${a.programacion !== 'manual' ? ` · ${esc(a.programacion)}` : ''} · ${a.total} ejecuciones · ${a.hechas} acciones · ${a.pendientes} por aprobar · ${a.errores} con error</div></div>
+        <button type="button" class="btn btn-sm btn-primary" data-correr="${a.id}"><i class="bi bi-play-fill"></i> Ejecutar ahora</button>${ia ? '<button type="button" class="btn btn-sm btn-outline-secondary" data-ia>Abrir en IA</button>' : ''}</div>
+        <div class="ac-cols mt-3" style="height:90px">${a.semana.map((v, k) => `<div title="${v}"><small>${v || ''}</small><i style="height:${Math.max(3, v / mx * 50)}px"></i><small>${['D', 'L', 'M', 'X', 'J', 'V', 'S'][new Date(`${a.dias[k]}T12:00:00Z`).getUTCDay()]}</small></div>`).join('')}</div>
+        ${a.recientes.length ? `<ul class="list-unstyled small mt-2 mb-0">${a.recientes.map((r) => `<li class="d-flex justify-content-between gap-2 py-1 border-top"><span>${esc(r.texto || (r.estado === 'error' ? 'No pudo terminar' : r.estado === 'en_curso' ? 'Trabajando…' : 'Terminó sin novedades'))}</span><span class="text-body-secondary text-nowrap">${hace(r.cuando)}</span></li>`).join('')}</ul>` : '<div class="small text-body-secondary mt-2">Aún no ha trabajado esta semana. Pulsa «Ejecutar ahora».</div>'}</div>`;
+    }
+    async function cargarAgentes() { AG = await api('/api/dashboard/agentes').catch(() => ({ agentes: [] })); }
+    async function crearAgente(btn) {
+      const m = mods.find((x) => x.id === btn.dataset.crear);
+      btn.disabled = true;
+      try {
+        const { herramientas } = await api('/api/ai/herramientas');
+        const h = herramientas.filter((t) => t.modulo === m.id).map((t) => t.name);
+        if (!h.length) throw new Error('Este módulo aún no tiene herramientas para un agente');
+        await api('/api/ai/agentes', { method: 'POST', body: { nombre: `Agente de ${m.nombre}`.slice(0, 80), instrucciones: `Eres el agente de ${m.nombre}. Revisa ${m.nombre} del negocio con las herramientas de este módulo, resume lo importante y propón las acciones que haya que tomar. No inventes cifras. Si no hay nada por hacer, dilo en una línea.`, herramientas: h, programacion: 'manual', autonomia: 'proponer', activo: true } });
+        window.App.toast?.(`Agente de ${m.nombre} creado`);
+        await cargarAgentes(); pintar();
+      } catch (x) { btn.disabled = false; window.App.toast?.(x.message, false); }
+    }
+    async function correrAgente(btn) {
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Trabajando…';
+      try { await api(`/api/ai/agentes/${btn.dataset.correr}/ejecutar`, { method: 'POST', body: {} }); } catch (x) { window.App.toast?.(x.message, false); }
+      await cargarAgentes(); pintar();
+    }
+
     function pintar() {
       $('[data-mods]').classList.toggle('sel', !!sel);
       $('[data-mods]').querySelectorAll('.ac-mod').forEach((e) => e.remove());
       $('[data-mods]').insertAdjacentHTML('beforeend', mods.map((m) => {
         const p = indicadores(m)[0];
-        return `<button type="button" class="ac-mod ${sel === m ? 'on' : ''}" style="--c:${m.color}" data-mod="${esc(m.id)}" aria-pressed="${sel === m}"><span class="ic"><i class="bi ${esc(m.icono || 'bi-grid')}"></i></span><span class="n">${esc(m.nombre)}</span><span class="v">${p ? `${esc((FMT[p.fmt] || String)(p.valor))} · ${esc(String(p.titulo).toLowerCase())}` : 'Ver estadísticas'}</span></button>`;
+        return `<button type="button" class="ac-mod ${sel === m ? 'on' : ''}" style="--c:${m.color}" data-mod="${esc(m.id)}" aria-pressed="${sel === m}"><span class="ic"><i class="bi ${esc(m.icono || 'bi-grid')}"></i></span><span class="n">${esc(m.nombre)}</span><span class="v">${p ? `${esc((FMT[p.fmt] || String)(p.valor))} · ${esc(String(p.titulo).toLowerCase())}` : 'Ver estadísticas'}</span><span class="v"><i class="bi bi-circle-fill ${agenteDe(m) ? 'text-success' : 'text-secondary'}" style="font-size:.5rem"></i> ${agenteDe(m) ? `Agente activo · ${agenteDe(m).total} ${agenteDe(m).total === 1 ? 'tarea' : 'tareas'}` : 'Sin agente'}</span></button>`;
       }).join(''));
 
       const det = $('[data-det]');
       if (!sel) { det.innerHTML = ''; return; }
       const ks = indicadores(sel), gs = (GRAFICAS[sel.id] || []).filter((g) => gr[g.k]?.some?.((x) => x.n)), mes = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short' });
       det.innerHTML = `<div class="dw-card ac-det" style="--c:${sel.color}"><div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h2 class="h6 mb-0 flex-grow-1">Estadísticas · <span style="color:var(--c)">${esc(sel.nombre)}</span></h2><button type="button" class="btn btn-sm btn-outline-secondary" data-abrir>Abrir módulo <i class="bi bi-arrow-right"></i></button></div>
+        ${agenteHtml(sel)}
         ${ks.length ? `<div class="ac-kpis">${ks.map(kpi).join('')}</div>` : '<div class="text-body-secondary small">Este módulo aún no tiene indicadores en el Inicio.</div>'}
         ${gs.length ? `<div class="ac-charts">${gs.map((g, n) => `<div class="ac-ch"><div class="fw-semibold small">${esc(g.t)}</div><div class="small text-body-secondary mb-2">${esc(g.s)}</div><div data-g="${n}"></div></div>`).join('')}</div>` : ''}</div>`;
       gs.forEach((g, n) => {
@@ -86,6 +120,8 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     }
 
     host.addEventListener('click', (e) => {
+      const cr = e.target.closest('[data-crear]'); if (cr) return crearAgente(cr);
+      const co = e.target.closest('[data-correr]'); if (co) return correrAgente(co);
       if (e.target.closest('[data-ia]')) return ir(ia.ruta);
       if (e.target.closest('[data-abrir]')) return ir(sel?.ruta);
       const b = e.target.closest('[data-mod]');
@@ -99,6 +135,7 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     const [m1, w1, g1] = await Promise.all([api('/api/academia/metricas').catch(() => null), api('/api/dashboard').catch(() => null), api('/api/academia/graficas').catch(() => null)]);
     if (m1) met = m1;
     if (g1) gr = g1;
+    await cargarAgentes();
     if (w1) wid = w1.widgets || [];
     pintar();
 

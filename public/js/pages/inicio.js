@@ -1,6 +1,6 @@
 // Inicio = el módulo Dashboard de Diwilo Modulos (saludo con la marca, alertas, resúmenes de Finanzas, Marketing…, accesos directos).
 // Aquí se registra lo PROPIO de la academia: a la izquierda el Asistente IA (abre el chat) y a su lado una tarjeta pequeña por módulo
-// (dos filas de cuatro, bajan si son más). Al tocar un módulo, tenga agente o no, se ven sus estadísticas y gráficas; luego va el calendario.
+// (dos filas de cuatro, bajan si son más). Al tocar un módulo se ve SU AGENTE: ejecutarlo, preguntarle con texto, sus ejecuciones y aprobar lo que propone; luego va el calendario.
 window.DwSinFigura = true;    // sin «Así funciona tu negocio»
 window.DwSinComoVa = true;    // sin las tarjetas de «Cómo va»
 window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
@@ -10,22 +10,12 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
   async mount(host, { me }) {
     const { api, esc } = window.App;
     const C = window.App.Crud;
-    const FMT = { money: (v) => C.money(v), num: (v) => C.num(v), pct: (v) => (v == null ? '—' : `${v}%`), nota: (v) => (v == null ? '—' : Number(v).toFixed(1)) };
     const BASES = new Set(['dashboard', 'inicio', 'ai', 'marca', 'academia']);
     const COLORES = ['#22D3EE', '#A78BFA', '#34D399', '#FBBF24', '#F472B6', '#FB7185', '#60A5FA', '#A3E635'];
-    // indicadores propios (ids de /api/academia/metricas) que corresponden a cada módulo
-    const TILES = { estudiantes: ['estudiantes', 'matriculas'], cursos: ['cursos', 'clases_hoy', 'asistencia', 'riesgo', 'notas'], reposiciones: ['reposiciones'], cuotas: ['recaudo', 'por_cobrar', 'vencido'] };
     const mods = me.modules.filter((m) => m.ruta && !m.oculto && !BASES.has(m.id)).map((m, i) => ({ ...m, color: COLORES[i % COLORES.length] }));
     const ia = me.modules.find((m) => m.id === 'ai');
-    // gráficas por módulo (claves de /api/academia/graficas): serie = columnas de 6 meses, rank = barras por grupo
-    const GRAFICAS = {
-      estudiantes: [{ k: 'estudiantes_mes', t: 'Estudiantes nuevos', s: 'Últimos 6 meses' }, { k: 'matriculas_mes', t: 'Matrículas nuevas', s: 'Últimos 6 meses' }, { k: 'matriculas_estado', t: 'Matrículas por estado', s: 'Todas', tipo: 'rank' }],
-      cursos: [{ k: 'asistencia_mes', t: 'Asistencia', s: 'Por mes', fmt: 'pct' }, { k: 'clases_mes', t: 'Clases programadas', s: 'Por mes' }, { k: 'por_curso', t: 'Estudiantes por curso', s: 'Matrículas activas', tipo: 'rank' }, { k: 'notas_curso', t: 'Promedio de notas', s: 'Por curso', tipo: 'rank' }],
-      reposiciones: [{ k: 'repos_estado', t: 'Reposiciones por estado', s: 'Todas', tipo: 'rank' }],
-      cuotas: [{ k: 'recaudo_mes', t: 'Recaudo', s: 'Últimos 6 meses', fmt: 'money' }, { k: 'cartera_estado', t: 'Por cobrar', s: 'Vencida y por vencer', tipo: 'rank', fmt: 'money' }, { k: 'cartera_curso', t: 'Por cobrar por curso', s: 'Mayores saldos', tipo: 'rank', fmt: 'money' }],
-    };
     const ir = (ruta) => { if (ruta) location.href = ruta; };
-    let sel = null, met = { tiles: [], serie: [] }, wid = [], gr = {}, AG = { agentes: [] };
+    let sel = null, AG = { agentes: [] };
     const hace = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
     const agenteDe = (m) => AG.agentes.find((a) => a.modulo === m.id) || AG.agentes.find((a) => !a.modulo && a.herramientas.length && a.herramientas.filter((n) => n.startsWith(`${m.id}.`)).length * 2 > a.herramientas.length) || null;   // el de módulo (exacto) y, si no, un agente libre que use sobre todo sus herramientas
 
@@ -58,26 +48,34 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
       <section class="mt-4" data-sec-semana hidden><h2 class="h6 mb-3">Esta semana</h2><div data-semana></div></section>`;
     const $ = (s) => host.querySelector(s);
 
-    const indicadores = (m) => {
-      const ids = TILES[m.id];
-      const propios = ids ? met.tiles.filter((t) => ids.includes(t.id)) : [];
-      return propios.length ? propios : wid.filter((w) => w.modulo === m.id).map((w) => ({ titulo: w.titulo, valor: w.valor, detalle: w.detalle, icono: w.icono, ruta: w.ruta }));
-    };
-    const kpi = (t) => `<${t.ruta ? 'a' : 'div'} class="ac-kpi" ${t.ruta ? `href="${esc(t.ruta)}"` : ''}><div class="l"><i class="bi ${esc(t.icono || 'bi-graph-up')} me-1"></i>${esc(t.titulo)}</div><div class="v">${esc((FMT[t.fmt] || String)(t.valor))}</div>${t.detalle ? `<div class="d">${esc(t.detalle)}</div>` : ''}</${t.ruta ? 'a' : 'div'}>`;
-
+    // El agente del módulo es lo primero: estado, ejecutar, preguntarle con texto y sus ejecuciones (lo que hizo y lo que propone)
+    const ESTADO_EJ = { ok: ['success', 'Listo'], error: ['danger', 'Con error'], en_curso: ['secondary', 'Trabajando…'] };
+    const PASO = { hecha: 'Hecho', consultada: 'Consultó', propuesta: 'Propone', rechazada: 'Rechazada', error: 'Error' };
     function agenteHtml(m) {
       const a = agenteDe(m);
-      if (!a) return `<div class="ac-ag mb-3 d-flex flex-wrap align-items-center gap-2"><i class="bi bi-robot fs-4" style="color:var(--c)"></i><div class="flex-grow-1"><div class="fw-semibold">Preparando el agente</div><div class="small text-body-secondary">Cada módulo tiene su agente: aparece aquí en cuanto el módulo tenga herramientas para ${esc(m.nombre)}.</div></div></div>`;
-      const mx = Math.max(...a.semana, 1);
-      return `<div class="ac-ag mb-3"><div class="d-flex flex-wrap align-items-center gap-2"><span class="pt ${a.pendientes ? 'pend' : a.estado === 'error' ? 'error' : ''}"></span><div class="flex-grow-1"><div class="fw-semibold">${esc(a.nombre)} <span class="badge text-bg-success">Funcionando</span></div><div class="small text-body-secondary">${a.autonomia === 'ejecutar' ? 'Actúa solo' : 'Tú apruebas'}${a.programacion !== 'manual' ? ` · ${esc(a.programacion)}` : ''} · ${a.total} ejecuciones · ${a.hechas} acciones · ${a.pendientes} por aprobar · ${a.errores} con error</div></div>
-        <button type="button" class="btn btn-sm btn-primary" data-correr="${a.id}"><i class="bi bi-play-fill"></i> Ejecutar ahora</button>${ia ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(ia.ruta)}#agentes">Historial y estrategia</a>` : ''}</div>
-        <div class="ac-cols mt-3" style="height:90px">${a.semana.map((v, k) => `<div title="${v}"><small>${v || ''}</small><i style="height:${Math.max(3, v / mx * 50)}px"></i><small>${['D', 'L', 'M', 'X', 'J', 'V', 'S'][new Date(`${a.dias[k]}T12:00:00Z`).getUTCDay()]}</small></div>`).join('')}</div>
-        ${a.recientes.length ? `<ul class="list-unstyled small mt-2 mb-0">${a.recientes.map((r) => `<li class="d-flex justify-content-between gap-2 py-1 border-top"><span>${esc(r.texto || (r.estado === 'error' ? 'No pudo terminar' : r.estado === 'en_curso' ? 'Trabajando…' : 'Terminó sin novedades'))}</span><span class="text-body-secondary text-nowrap">${hace(r.cuando)}</span></li>`).join('')}</ul>` : '<div class="small text-body-secondary mt-2">Aún no ha trabajado esta semana. Pulsa «Ejecutar ahora».</div>'}</div>`;
+      if (!a) return `<div class="ac-ag d-flex flex-wrap align-items-center gap-2"><i class="bi bi-robot fs-4" style="color:var(--c)"></i><div class="flex-grow-1"><div class="fw-semibold">Preparando el agente</div><div class="small text-body-secondary">Cada módulo tiene su agente: aparece aquí en cuanto el módulo tenga herramientas para ${esc(m.nombre)}.</div></div></div>`;
+      return `<div class="ac-ag" data-ag="${a.id}"><div class="d-flex flex-wrap align-items-center gap-2"><span class="pt ${a.pendientes ? 'pend' : a.estado === 'error' ? 'error' : ''}"></span><div class="flex-grow-1"><div class="fw-semibold">${esc(a.nombre)}</div>
+          <div class="small text-body-secondary">${a.autonomia === 'ejecutar' ? 'Actúa solo' : 'Tú apruebas lo que cambie datos'}${a.programacion !== 'manual' ? ` · ${esc(a.programacion)}` : ''} · ${a.total} ${a.total === 1 ? 'ejecución' : 'ejecuciones'} esta semana</div></div>
+          <button type="button" class="btn btn-sm btn-primary" data-correr="${a.id}"><i class="bi bi-play-fill"></i> Ejecutar ahora</button>
+          <a class="btn btn-sm btn-outline-secondary" href="${esc(m.ruta)}">Abrir ${esc(m.nombre)}</a>${ia ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(ia.ruta)}#agentes" title="Escribe lo que debe vigilar y proponer">Estrategia</a>` : ''}</div>
+        <form class="d-flex gap-2 mt-3" data-pregunta><input class="form-control" name="pedido" maxlength="500" placeholder="Pregúntale o pídele algo: ¿qué has hecho?, ¿qué está pendiente?, revisa lo vencido…" aria-label="Pregúntale al agente"><button class="btn btn-primary" type="submit"><i class="bi bi-send"></i></button></form>
+        <div class="mt-3" data-ejec><div class="small text-body-secondary">Cargando ejecuciones…</div></div></div>`;
+    }
+    // Ejecuciones del agente: qué hizo (resumen), sus pasos y, si propone cambios, aprobar o rechazar
+    async function cargarEjecuciones(id) {
+      const box = host.querySelector('[data-ejec]'); if (!box) return;
+      let rows = []; try { rows = (await api(`/api/ai/ejecuciones?agente=${id}`)).rows.slice(0, 8); } catch (x) { box.innerHTML = `<div class="small text-danger">${esc(x.message)}</div>`; return; }
+      if (!rows.length) { box.innerHTML = '<div class="small text-body-secondary">Aún no ha trabajado. Pulsa «Ejecutar ahora» o pregúntale algo.</div>'; return; }
+      box.innerHTML = rows.map((e) => `<div class="border-top pt-2 pb-2"><div class="d-flex flex-wrap align-items-center gap-2 small"><span class="badge text-bg-${(ESTADO_EJ[e.estado] || ESTADO_EJ.ok)[0]}">${(ESTADO_EJ[e.estado] || ESTADO_EJ.ok)[1]}</span><b>${hace(e.created_at)}</b><span class="text-body-secondary">${e.disparador === 'programado' ? 'programada' : e.disparador === 'manual' ? 'manual' : esc(e.disparador)}${e.por ? ` · ${esc(e.por)}` : ''}</span>${e.pendientes ? `<span class="badge text-bg-warning">${e.pendientes} por aprobar</span>` : ''}</div>
+        <div class="mt-1" style="white-space:pre-wrap">${esc(e.resumen || (e.estado === 'en_curso' ? 'Trabajando…' : 'Terminó sin novedades.'))}</div>
+        ${(e.pasos || []).filter((p) => p.tipo === 'escritura' || p.estado === 'error').map((p, i) => `<div class="small d-flex flex-wrap align-items-center gap-2 mt-1"><span class="badge text-bg-light">${PASO[p.estado] || esc(p.estado)}</span><code>${esc(p.herramienta)}</code><span class="text-body-secondary text-truncate" style="max-width:340px">${esc(JSON.stringify(p.args || {}))}</span>${p.estado === 'propuesta' ? `<button class="btn btn-sm btn-primary py-0" data-ap="${e.id}:${e.pasos.indexOf(p)}">Aprobar</button><button class="btn btn-sm btn-light py-0" data-re="${e.id}:${e.pasos.indexOf(p)}">Rechazar</button>` : ''}</div>`).join('')}</div>`).join('');
     }
     async function cargarAgentes() { AG = await api('/api/dashboard/agentes').catch(() => ({ agentes: [] })); }
-    async function correrAgente(btn) {
-      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Trabajando…';
-      try { await api(`/api/ai/agentes/${btn.dataset.correr}/ejecutar`, { method: 'POST', body: {} }); } catch (x) { window.App.toast?.(x.message, false); }
+    // Ejecutar ahora (sin pedido) o preguntarle con texto (pedido puntual); al terminar se ve su respuesta en la lista
+    async function correrAgente(id, pedido, btn) {
+      const marca = btn?.innerHTML; if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Trabajando…'; }
+      try { await api(`/api/ai/agentes/${id}/ejecutar`, { method: 'POST', body: pedido ? { pedido } : {} }); } catch (x) { window.App.toast?.(x.message, false); }
+      if (btn) { btn.disabled = false; btn.innerHTML = marca; }
       await cargarAgentes(); pintar();
     }
 
@@ -85,29 +83,26 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
       $('[data-mods]').classList.toggle('sel', !!sel);
       $('[data-mods]').querySelectorAll('.ac-mod').forEach((e) => e.remove());
       $('[data-mods]').insertAdjacentHTML('beforeend', mods.map((m) => {
-        const p = indicadores(m)[0];
-        return `<button type="button" class="ac-mod ${sel === m ? 'on' : ''}" style="--c:${m.color}" data-mod="${esc(m.id)}" aria-pressed="${sel === m}"><span class="ic"><i class="bi ${esc(m.icono || 'bi-grid')}"></i></span><span class="n">${esc(m.nombre)}</span><span class="v">${p ? `${esc((FMT[p.fmt] || String)(p.valor))} · ${esc(String(p.titulo).toLowerCase())}` : 'Ver estadísticas'}</span><span class="v"><i class="bi bi-circle-fill ${agenteDe(m) ? 'text-success' : 'text-secondary'}" style="font-size:.5rem"></i> ${agenteDe(m) ? `Agente activo · ${agenteDe(m).total} ${agenteDe(m).total === 1 ? 'tarea' : 'tareas'}` : 'Sin agente'}</span></button>`;
+        const g = agenteDe(m);
+        return `<button type="button" class="ac-mod ${sel === m ? 'on' : ''}" style="--c:${m.color}" data-mod="${esc(m.id)}" aria-pressed="${sel === m}"><span class="ic"><i class="bi ${esc(m.icono || 'bi-grid')}"></i></span><span class="n">${esc(m.nombre)}</span><span class="v"><i class="bi bi-circle-fill ${agenteDe(m) ? 'text-success' : 'text-secondary'}" style="font-size:.5rem"></i> ${agenteDe(m) ? `Agente activo · ${agenteDe(m).total} ${agenteDe(m).total === 1 ? 'tarea' : 'tareas'}` : 'Sin agente'}</span></button>`;
       }).join(''));
 
       const det = $('[data-det]');
       if (!sel) { det.innerHTML = ''; return; }
-      const ks = indicadores(sel), gs = (GRAFICAS[sel.id] || []).filter((g) => gr[g.k]?.some?.((x) => x.n)), mes = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short' });
-      det.innerHTML = `<div class="dw-card ac-det" style="--c:${sel.color}"><div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h2 class="h6 mb-0 flex-grow-1">Estadísticas · <span style="color:var(--c)">${esc(sel.nombre)}</span></h2><button type="button" class="btn btn-sm btn-outline-secondary" data-abrir>Abrir módulo <i class="bi bi-arrow-right"></i></button></div>
-        ${agenteHtml(sel)}
-        ${ks.length ? `<div class="ac-kpis">${ks.map(kpi).join('')}</div>` : '<div class="text-body-secondary small">Este módulo aún no tiene indicadores en el Inicio.</div>'}
-        ${gs.length ? `<div class="ac-charts">${gs.map((g, n) => `<div class="ac-ch"><div class="fw-semibold small">${esc(g.t)}</div><div class="small text-body-secondary mb-2">${esc(g.s)}</div><div data-g="${n}"></div></div>`).join('')}</div>` : ''}</div>`;
-      gs.forEach((g, n) => {
-        const el = det.querySelector(`[data-g="${n}"]`), f = g.fmt === 'money' ? C.money : g.fmt === 'pct' ? (v) => `${v}%` : C.num;
-        if (g.tipo === 'rank') C.rank(el, gr[g.k], f);
-        else {
-          const rows = gr[g.k], max = Math.max(1, ...rows.map((x) => x.n));
-          el.innerHTML = `<div class="ac-cols" role="img" aria-label="${esc(g.t)}">${rows.map((x) => `<div title="${esc(mes(x.mes))}: ${esc(f(x.n))}"><small>${esc(f(x.n))}</small><i style="height:${Math.max(3, x.n / max * 90)}px"></i><small>${esc(mes(x.mes))}</small></div>`).join('')}</div>`;
-        }
-      });
+      det.innerHTML = `<div class="dw-card ac-det" style="--c:${sel.color}"><div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h2 class="h6 mb-0 flex-grow-1">Agente · <span style="color:var(--c)">${esc(sel.nombre)}</span></h2><button type="button" class="btn btn-sm btn-outline-secondary" data-cerrar aria-label="Cerrar"><i class="bi bi-x-lg"></i></button></div>${agenteHtml(sel)}</div>`;
+      const ag = agenteDe(sel); if (ag) cargarEjecuciones(ag.id);
     }
 
+    host.addEventListener('submit', (e) => {
+      const f = e.target.closest('[data-pregunta]'); if (!f) return; e.preventDefault();
+      const pedido = f.pedido.value.trim(); if (pedido) correrAgente(f.closest('[data-ag]').dataset.ag, pedido, f.querySelector('button'));
+    });
+
     host.addEventListener('click', (e) => {
-      const co = e.target.closest('[data-correr]'); if (co) return correrAgente(co);
+      const co = e.target.closest('[data-correr]'); if (co) return correrAgente(co.dataset.correr, '', co);
+      if (e.target.closest('[data-cerrar]')) { sel = null; return pintar(); }
+      const ar = e.target.closest('[data-ap],[data-re]'); if (ar) { const [id, indice] = (ar.dataset.ap || ar.dataset.re).split(':'); ar.disabled = true;
+        return api(`/api/ai/ejecuciones/${id}/aprobar`, { method: 'POST', body: { indice: Number(indice), aprobar: !!ar.dataset.ap } }).then(() => window.App.toast?.(ar.dataset.ap ? 'Aprobada y ejecutada' : 'Rechazada')).catch((x) => window.App.toast?.(x.message, false)).finally(() => cargarEjecuciones(agenteDe(sel).id)); }
       if (e.target.closest('[data-ia]')) { const f = (() => { for (const w of [window.parent, window.top]) { try { if (w.DwIA?.open) return w.DwIA; } catch (_) { /* otro origen */ } } return null; })(); return f ? f.open() : ir(ia.ruta); }
       if (e.target.closest('[data-abrir]')) return ir(sel?.ruta);
       const b = e.target.closest('[data-mod]');
@@ -118,11 +113,7 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     });
 
     pintar();
-    const [m1, w1, g1] = await Promise.all([api('/api/academia/metricas').catch(() => null), api('/api/dashboard').catch(() => null), api('/api/academia/graficas').catch(() => null)]);
-    if (m1) met = m1;
-    if (g1) gr = g1;
     await cargarAgentes();
-    if (w1) wid = w1.widgets || [];
     pintar();
 
     // calendario de la semana (necesita el módulo Cursos)

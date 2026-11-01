@@ -5,6 +5,7 @@
 window.AC.reposiciones = function (me, cursoId) {
   const { api, esc, toast, modal, table, empty } = window.App;
   const C = window.App.Crud;
+  const cabeceraAgente = async (el, modulo, tiles) => { if (!window.DwAgenteMod) await new Promise((ok) => { const s = document.createElement('script'); s.src = '/m/agentemod.js'; s.onload = s.onerror = ok; document.head.appendChild(s); }); return window.DwAgenteMod ? window.DwAgenteMod.montar(el, { modulo, stats: tiles }) : C.kpis(el, tiles); };
   const RO = me.business.readOnly;
   const EST = { pendiente: ['soon', 'Por agendar'], agendada: ['free', 'Agendada'], hecha: ['ok', 'Hecha'] };
   const MARCA = { A: 'Ausente', J: 'Con excusa' };
@@ -99,8 +100,10 @@ window.AC.reposiciones = function (me, cursoId) {
     let d;
     const load = async () => {
       d = await api(`/api/reposiciones?estado=${view.querySelector('[data-f]').value}${cq}`);
-      C.kpis(view.querySelector('[data-kpis]'), [['Por agendar', C.num(d.totales.pendiente), '', 'bi-hourglass-split'], ['Agendadas', C.num(d.totales.agendada), '', 'bi-calendar-check'], ['Hechas', C.num(d.totales.hecha), '', 'bi-check2-circle'],
-        ['Valor por reposición', d.valor ? C.money(d.valor) : 'Sin cobro', d.valorVirtual ? `virtual ${C.money(d.valorVirtual)}` : '', 'bi-cash-coin']]);
+      const tiles = [['Por agendar', C.num(d.totales.pendiente), '', 'bi-hourglass-split'], ['Agendadas', C.num(d.totales.agendada), '', 'bi-calendar-check'], ['Hechas', C.num(d.totales.hecha), '', 'bi-check2-circle'],
+        ['Valor por reposición', d.valor ? C.money(d.valor) : 'Sin cobro', d.valorVirtual ? `virtual ${C.money(d.valorVirtual)}` : '', 'bi-cash-coin']];
+      // En su propia página: el agente del módulo + estadísticas en líneas; dentro de Cursos (pestaña) quedan las tarjetas
+      if (document.querySelector('main[data-modulo]')?.dataset.modulo === 'reposiciones') cabeceraAgente(view.querySelector('[data-kpis]'), 'reposiciones', tiles); else C.kpis(view.querySelector('[data-kpis]'), tiles);
       view.querySelector('[data-lista]').innerHTML = d.rows.length ? table([
         { label: 'Estudiante', main: true, html: (r) => `${esc(r.estudiante)}<div class="small text-body-secondary fw-normal">${esc(r.curso)}</div>` },
         { label: 'Clase', html: (r) => `Clase ${r.clase_n}${r.clase_fecha ? ` · ${C.day(r.clase_fecha)}` : ''}<div class="small text-body-secondary">${esc(MARCA[r.marca])}${r.tema ? ` · ${esc(r.tema)}` : ''}</div>` },

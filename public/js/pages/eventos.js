@@ -3,6 +3,8 @@ DW.ready.then(async (me) => {
   if (!me.pageAllowed) return;
   const { api, esc, toast, modal } = window.App;
   const C = window.App.Crud;
+  // Cabecera del módulo: el agente, las estadísticas en líneas pequeñas y el chat (si no carga, tarjetas como antes)
+  const cabeceraAgente = async (el, modulo, tiles) => { if (!window.DwAgenteMod) await new Promise((ok) => { const s = document.createElement('script'); s.src = '/m/agentemod.js'; s.onload = s.onerror = ok; document.head.appendChild(s); }); return window.DwAgenteMod ? window.DwAgenteMod.montar(el, { modulo, stats: tiles }) : C.kpis(el, tiles); };
   const view = document.querySelector('[data-view]');
   const RO = me.business.readOnly;
   const [cursos, estudiantes] = await Promise.all([AC.listas.cursos(), AC.listas.estudiantes()]);
@@ -89,7 +91,7 @@ DW.ready.then(async (me) => {
   }
 
   view.innerHTML = '<div data-kpis class="row g-2 mb-3"></div><div data-calendario></div>';
-  const resumen = () => api('/api/eventos/resumen').then((r) => C.kpis(view.querySelector('[data-kpis]'), [
+  const resumen = () => api('/api/eventos/resumen').then((r) => cabeceraAgente(view.querySelector('[data-kpis]'), 'eventos', [
     ['Eventos próximos', r.eventos_proximos, '', 'bi-calendar-event'], ['Inscritos próximos', r.inscritos_proximos, '', 'bi-people'],
     ['Asistencias del mes', r.asistencias_mes, '', 'bi-check2-circle'], ['En lista de espera', r.en_espera, '', 'bi-hourglass-split']])).catch(() => {});
   resumen();

@@ -207,4 +207,19 @@
   });
 
   window.DW = { ready, applyTheme };
+
+  // Cabecera de agente en los módulos propios que no traen tarjetas de estadísticas: su agente, estadísticas en líneas pequeñas y el chat.
+  // (Eventos y Reposiciones la montan ellos mismos con sus tarjetas.) Las estadísticas salen de /api/academia/metricas.
+  const CAB = { estudiantes: ['estudiantes', 'matriculas'], cursos: ['cursos', 'clases_hoy', 'asistencia', 'riesgo', 'notas'], cuotas: ['recaudo', 'por_cobrar', 'vencido'], certificaciones: [], asesorias: [], material: [], profesionales: [] };
+  ready.then(async (me) => {
+    const main = document.querySelector('main[data-modulo]'), id = main?.dataset.modulo;
+    if (!id || !CAB[id] || !me?.pageAllowed) return;
+    const C = window.App.Crud, FMT = { money: C.money, num: C.num, pct: (v) => (v == null ? '—' : `${v}%`), nota: (v) => (v == null ? '—' : Number(v).toFixed(1)) };
+    const host = document.createElement('div');
+    (main.querySelector('.dw-page-head') || main.firstElementChild).after(host);
+    const [met] = await Promise.all([CAB[id].length ? window.App.api('/api/academia/metricas').catch(() => null) : null,
+      window.DwAgenteMod ? 0 : new Promise((ok) => { const s = document.createElement('script'); s.src = '/m/agentemod.js'; s.onload = s.onerror = ok; document.head.appendChild(s); })]);
+    const stats = (met?.tiles || []).filter((t) => CAB[id].includes(t.id)).map((t) => [t.titulo, (FMT[t.fmt] || String)(t.valor), t.detalle || '', t.icono]);
+    if (window.DwAgenteMod) window.DwAgenteMod.montar(host, { modulo: id, stats }); else host.remove();
+  }).catch(() => {});
 })();

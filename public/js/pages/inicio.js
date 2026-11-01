@@ -26,9 +26,8 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     };
     const ir = (ruta) => { if (ruta) location.href = ruta; };
     let sel = null, met = { tiles: [], serie: [] }, wid = [], gr = {}, AG = { agentes: [] };
-    const puedeCrear = me.role === 'owner' || me.role === 'admin';
     const hace = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
-    const agenteDe = (m) => AG.agentes.find((a) => a.herramientas.length && a.herramientas.filter((n) => n.startsWith(`${m.id}.`)).length * 2 > a.herramientas.length) || null;
+    const agenteDe = (m) => AG.agentes.find((a) => a.modulo === m.id) || AG.agentes.find((a) => !a.modulo && a.herramientas.length && a.herramientas.filter((n) => n.startsWith(`${m.id}.`)).length * 2 > a.herramientas.length) || null;   // el de módulo (exacto) y, si no, un agente libre que use sobre todo sus herramientas
 
     host.innerHTML = `<style>
         .ac-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
@@ -68,26 +67,14 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
 
     function agenteHtml(m) {
       const a = agenteDe(m);
-      if (!a) return `<div class="ac-ag mb-3 d-flex flex-wrap align-items-center gap-2"><i class="bi bi-robot fs-4" style="color:var(--c)"></i><div class="flex-grow-1"><div class="fw-semibold">Aún sin agente</div><div class="small text-body-secondary">Un agente revisa ${esc(m.nombre)} por ti y te propone qué hacer.</div></div>${puedeCrear ? `<button type="button" class="btn btn-sm btn-primary" data-crear="${esc(m.id)}"><i class="bi bi-plus-lg"></i> Crear agente</button>` : ''}</div>`;
+      if (!a) return `<div class="ac-ag mb-3 d-flex flex-wrap align-items-center gap-2"><i class="bi bi-robot fs-4" style="color:var(--c)"></i><div class="flex-grow-1"><div class="fw-semibold">Preparando el agente</div><div class="small text-body-secondary">Cada módulo tiene su agente: aparece aquí en cuanto el módulo tenga herramientas para ${esc(m.nombre)}.</div></div></div>`;
       const mx = Math.max(...a.semana, 1);
       return `<div class="ac-ag mb-3"><div class="d-flex flex-wrap align-items-center gap-2"><span class="pt ${a.pendientes ? 'pend' : a.estado === 'error' ? 'error' : ''}"></span><div class="flex-grow-1"><div class="fw-semibold">${esc(a.nombre)} <span class="badge text-bg-success">Funcionando</span></div><div class="small text-body-secondary">${a.autonomia === 'ejecutar' ? 'Actúa solo' : 'Tú apruebas'}${a.programacion !== 'manual' ? ` · ${esc(a.programacion)}` : ''} · ${a.total} ejecuciones · ${a.hechas} acciones · ${a.pendientes} por aprobar · ${a.errores} con error</div></div>
-        <button type="button" class="btn btn-sm btn-primary" data-correr="${a.id}"><i class="bi bi-play-fill"></i> Ejecutar ahora</button>${ia ? '<button type="button" class="btn btn-sm btn-outline-secondary" data-ia>Abrir en IA</button>' : ''}</div>
+        <button type="button" class="btn btn-sm btn-primary" data-correr="${a.id}"><i class="bi bi-play-fill"></i> Ejecutar ahora</button>${ia ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(ia.ruta)}#agentes">Historial y estrategia</a>` : ''}</div>
         <div class="ac-cols mt-3" style="height:90px">${a.semana.map((v, k) => `<div title="${v}"><small>${v || ''}</small><i style="height:${Math.max(3, v / mx * 50)}px"></i><small>${['D', 'L', 'M', 'X', 'J', 'V', 'S'][new Date(`${a.dias[k]}T12:00:00Z`).getUTCDay()]}</small></div>`).join('')}</div>
         ${a.recientes.length ? `<ul class="list-unstyled small mt-2 mb-0">${a.recientes.map((r) => `<li class="d-flex justify-content-between gap-2 py-1 border-top"><span>${esc(r.texto || (r.estado === 'error' ? 'No pudo terminar' : r.estado === 'en_curso' ? 'Trabajando…' : 'Terminó sin novedades'))}</span><span class="text-body-secondary text-nowrap">${hace(r.cuando)}</span></li>`).join('')}</ul>` : '<div class="small text-body-secondary mt-2">Aún no ha trabajado esta semana. Pulsa «Ejecutar ahora».</div>'}</div>`;
     }
     async function cargarAgentes() { AG = await api('/api/dashboard/agentes').catch(() => ({ agentes: [] })); }
-    async function crearAgente(btn) {
-      const m = mods.find((x) => x.id === btn.dataset.crear);
-      btn.disabled = true;
-      try {
-        const { herramientas } = await api('/api/ai/herramientas');
-        const h = herramientas.filter((t) => t.modulo === m.id).map((t) => t.name);
-        if (!h.length) throw new Error('Este módulo aún no tiene herramientas para un agente');
-        await api('/api/ai/agentes', { method: 'POST', body: { nombre: `Agente de ${m.nombre}`.slice(0, 80), instrucciones: `Eres el agente de ${m.nombre}. Revisa ${m.nombre} del negocio con las herramientas de este módulo, resume lo importante y propón las acciones que haya que tomar. No inventes cifras. Si no hay nada por hacer, dilo en una línea.`, herramientas: h, programacion: 'manual', autonomia: 'proponer', activo: true } });
-        window.App.toast?.(`Agente de ${m.nombre} creado`);
-        await cargarAgentes(); pintar();
-      } catch (x) { btn.disabled = false; window.App.toast?.(x.message, false); }
-    }
     async function correrAgente(btn) {
       btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Trabajando…';
       try { await api(`/api/ai/agentes/${btn.dataset.correr}/ejecutar`, { method: 'POST', body: {} }); } catch (x) { window.App.toast?.(x.message, false); }
@@ -120,7 +107,6 @@ window.DwSinAgentes = true;   // la sección de agentes la pinta este archivo
     }
 
     host.addEventListener('click', (e) => {
-      const cr = e.target.closest('[data-crear]'); if (cr) return crearAgente(cr);
       const co = e.target.closest('[data-correr]'); if (co) return correrAgente(co);
       if (e.target.closest('[data-ia]')) { const f = (() => { for (const w of [window.parent, window.top]) { try { if (w.DwIA?.open) return w.DwIA; } catch (_) { /* otro origen */ } } return null; })(); return f ? f.open() : ir(ia.ruta); }
       if (e.target.closest('[data-abrir]')) return ir(sel?.ruta);

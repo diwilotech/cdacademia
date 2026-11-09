@@ -3,7 +3,7 @@
 import { json, HttpError, readJson, email as emailOk } from '../lib/http.js';
 import { db, uuid } from '../lib/db.js';
 import { createInvite, invitePath } from '../lib/auth.js';
-import { crud, all, one } from '../lib/crud.js';
+import { crud, all, one, today } from '../lib/crud.js';
 import { cartera } from './cuotas.js';
 import { moraDe } from './cursos.js';
 import { getConfig, resumenAsis, resumenNotas, estadoAcad, estadoCuotas, estadosAcceso } from '../lib/academia.js';
@@ -78,7 +78,15 @@ export async function fichaEstudiante(c, id) {
   const pagos = await all(c.env, `SELECT p.num, p.fecha, p.valor, p.metodo, p.concepto, p.tipo, p.anulado, k.nombre AS curso FROM ac_pagos p
     JOIN ac_inscripciones i ON i.id = p.inscripcion_id AND i.business_id = p.business_id JOIN ac_cursos k ON k.id = i.curso_id AND k.business_id = i.business_id
     WHERE p.business_id = ? AND i.estudiante_id = ? ORDER BY p.fecha DESC, p.num DESC`, c.businessId, id);
-  return { estudiante: e, matriculas: out, pagos };
+  // Historia en un solo hilo (lo último primero); los valores de dinero solo viajan a quien puede verlos
+  const dinero = ['owner', 'admin'].includes(c.role);
+  const eventos = [
+    { fecha: String(e.created_at ? new Date(e.created_at).toISOString() : '').slice(0, 10), titulo: 'Se registró', icono: 'bi-person-plus' },
+    ...out.map((m) => ({ fecha: m.fecha, titulo: `Se matriculó en ${m.curso}`, detalle: m.estado === 'activa' ? '' : m.estado === 'terminada' ? 'Curso terminado' : 'Se retiró', icono: 'bi-journal-check', tono: m.estado === 'retirada' ? 'mal' : 'ok' })),
+    ...out.filter((m) => m.vencido > 0).map((m) => ({ fecha: today(), titulo: `En mora en ${m.curso}`, detalle: dinero ? `Debe ${m.vencido.toLocaleString('es-CO')} vencido` : 'Tiene cuotas vencidas', icono: 'bi-exclamation-triangle', tono: 'mal' })),
+    ...(dinero ? pagos.map((p) => ({ fecha: p.fecha, titulo: `${p.anulado ? 'Pago anulado' : 'Pagó'} · ${p.curso}`, detalle: [p.metodo, p.concepto].filter(Boolean).join(' · '), valor: p.valor, icono: p.anulado ? 'bi-x-circle' : 'bi-cash-coin', tono: p.anulado ? 'mal' : 'ok' })) : []),
+  ].filter((x) => x.fecha).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 40);
+  return { estudiante: e, matriculas: out, pagos, eventos };
 }
 
 export function routes(r) {

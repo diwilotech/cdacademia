@@ -38,7 +38,7 @@ DW.ready.then(async (me) => {
     const k = t.kpis, money = C.money, mes = (m) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString('es-CO', { month: 'short', timeZone: 'UTC' }).replace('.', '');
     if (!k.estudiantes) { V.vacio(host, { icono: 'bi-people', titulo: `Tu tablero empieza con el primer ${S}`, texto: 'Registra tus estudiantes y matricúlalos: aquí verás matrículas, recaudo y cartera.' }); return; }
     host.innerHTML = `${t.sugerencia ? `<div class="alert alert-warning d-flex gap-2 align-items-center py-2"><i class="bi bi-stars"></i><span>${esc(t.sugerencia)}</span></div>` : ''}
-      <div data-k></div><div class="dv-g"><div data-a></div><div data-b></div></div><div class="dv-g"><div data-c></div><div data-d></div></div>`;
+      <div data-k></div><div class="dv-g"><div data-a></div><div data-b></div></div><div class="dv-g"><div data-c></div><div data-d></div></div><div class="dv-g"><div data-e></div></div>`;
     V.kpis(host.querySelector('[data-k]'), [
       { titulo: `${AC.cap(cfg.termP)} activos`, valor: String(k.activos), icono: 'bi-people', detalle: `${k.matriculas_activas} matrículas en 6 meses`, delta: V.variacion(k.nuevas_mes, k.nuevas_anterior), serie: t.meses.map((m) => m.matriculas) },
       { titulo: 'Recaudo del mes', valor: money(k.recaudo_mes), icono: 'bi-cash-coin', tono: 'ok', delta: V.variacion(k.recaudo_mes, k.recaudo_anterior), serie: t.meses.map((m) => m.recaudo) },
@@ -48,6 +48,7 @@ DW.ready.then(async (me) => {
     V.barras(box('a', 'Recaudo por mes', 'Pagos registrados, sin los anulados'), { etiquetas: t.meses.map((m) => mes(m.mes)), series: [{ nombre: 'Recaudo', datos: t.meses.map((m) => m.recaudo), color: '#34D399' }], fmt: money });
     V.barras(box('b', 'Matrículas nuevas', 'Últimos 6 meses'), { etiquetas: t.meses.map((m) => mes(m.mes)), series: [{ nombre: 'Matrículas', datos: t.meses.map((m) => m.matriculas) }], fmt: (n) => String(n) });
     V.dona(box('c', 'Cartera por antigüedad', 'Lo que falta por cobrar'), t.cartera.map((x, i) => ({ nombre: `${x.nombre} (${x.cuotas})`, valor: x.valor, color: ['#34D399', '#FBBF24', '#FB923C', '#FB7185'][i] })), { fmt: money, centro: 'Por cobrar' });
+    if (t.cursos.length) V.ranking(box('e', 'Cursos con más gente', 'Matrículas activas por curso'), t.cursos.map((x) => ({ nombre: x.nombre, valor: x.activos })), { fmt: (n) => `${n} ${n === 1 ? 'persona' : 'personas'}` });
     const w = box('d', 'Quién debe más', 'Toca para ver la ficha');
     if (!t.morosos.length) V.vacio(w, { icono: 'bi-emoji-smile', titulo: 'Nadie en mora', texto: 'Todas las cuotas vencidas están pagadas.' });
     else { w.innerHTML = t.morosos.map((m) => `<button type="button" class="btn w-100 text-start d-flex align-items-center gap-2 py-2 border-bottom rounded-0" data-est="${m.id}"><i class="bi bi-person"></i><span class="flex-grow-1 text-truncate"><b>${esc(m.nombre)}</b><span class="d-block small text-body-secondary">${esc(m.curso)} · ${m.cuotas} ${m.cuotas === 1 ? 'cuota' : 'cuotas'} · ${m.dias} días</span></span><b class="text-danger">${money(m.valor)}</b></button>`).join('');

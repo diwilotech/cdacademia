@@ -146,10 +146,23 @@ window.AC = (function () {
           ${dinero ? `<div class="col-6 col-md-3">Pagado<br><b>${C.money(m.pagado)}</b> de ${C.money(m.total)}</div><div class="col-6 col-md-3">Saldo<br><b class="${m.vencido ? 'text-danger' : ''}">${C.money(m.saldo)}</b>${m.vencido ? ` · vencido ${C.money(m.vencido)}` : ''}</div>` : ''}</div>
           ${dinero && me.modules.some((x) => x.id === 'cuotas') ? `<button type="button" class="btn btn-sm btn-outline-primary mt-2" data-pagos="${m.id}" data-curso="${esc(m.curso)}"><i class="bi bi-receipt me-1"></i>Ver pagos y recibos</button>` : ''}</div>`).join('')
         : '<p class="text-body-secondary small">Aún no está matriculado en ningún curso.</p>'}
+        <div class="row g-3 mt-1"><div class="col-12" data-fkpis></div><div class="col-12"><h3 class="h6">Historia</h3><div data-fhist></div></div></div>
         ${e.notas ? `<h3 class="h6 mt-3">Notas</h3><p class="small mb-0" style="white-space:pre-wrap">${esc(e.notas)}</p>` : ''}
         ${me.canManage ? '<h3 class="h6 mt-3">Acceso a la app</h3><div data-acceso class="small text-body-secondary">Cargando…</div>' : ''}
       </div>`, { size: 'modal-lg' });
     if (me.canManage) accesoApp(fichaEl.querySelector('[data-acceso]'), e);
+    // Resumen y línea de tiempo con el kit visual común (si no carga, la ficha queda como antes)
+    (async () => {
+      if (!window.DwViz) await new Promise((ok) => { const j = document.createElement('script'); j.src = '/m/dwviz.js'; j.onload = j.onerror = () => ok(); document.head.appendChild(j); });
+      const V = window.DwViz; if (!V) return;
+      const act = f.matriculas.filter((m) => m.estado === 'activa'), prom = act.map((m) => m.notas.prom).filter((n) => n != null), asis = act.map((m) => m.asistencia.pct).filter((n) => n != null);
+      const kp = [{ titulo: 'Cursos activos', valor: String(act.length), icono: 'bi-journal-check' },
+        { titulo: 'Asistencia', valor: asis.length ? `${Math.round(asis.reduce((a, b) => a + b, 0) / asis.length)}%` : '—', icono: 'bi-calendar-check' },
+        { titulo: 'Promedio', valor: prom.length ? (prom.reduce((a, b) => a + b, 0) / prom.length).toFixed(1) : '—', icono: 'bi-star' }];
+      if (dinero) kp.push({ titulo: 'Saldo', valor: C.money(f.matriculas.reduce((t, m) => t + m.saldo, 0)), icono: 'bi-wallet2', tono: f.matriculas.some((m) => m.vencido) ? 'mal' : 'ok', detalle: f.matriculas.some((m) => m.vencido) ? 'Tiene mora' : 'Al día' });
+      V.kpis(fichaEl.querySelector('[data-fkpis]'), kp);
+      V.linea_de_tiempo(fichaEl.querySelector('[data-fhist]'), (f.eventos || []).map((x) => ({ ...x, fecha: x.fecha ? C.day(x.fecha) : '' })), { fmt: C.money });
+    })();
     fichaEl.addEventListener('click', (ev) => { const b = ev.target.closest('[data-pagos]'); if (b) verPagos({ id: b.dataset.pagos, estudiante: e.nombre, curso: b.dataset.curso }); });
   }
 

@@ -117,6 +117,8 @@ export default async function ({ check, diwilo, newBusiness, newMember, mcp }) {
   const tab = await A.app('/api/academia/tablero');
   check('Academia: el tablero trae 6 meses, cartera por antigüedad y morosos', tab.status === 200 && tab.data.meses.length === 6 && tab.data.cartera.length === 4 && Array.isArray(tab.data.morosos) && tab.data.kpis.estudiantes >= 1);
   check('Academia: el personal sin Matrículas no ve el tablero (403) y B ve el suyo vacío', (await S.app('/api/academia/tablero')).status === 403 && (await B.app('/api/academia/tablero')).data.kpis.estudiantes === 0);
+  const fh = (await A.app(`/api/estudiantes/${e1.data.id}/ficha`)).data;
+  check('Academia: la ficha del estudiante trae su historia en orden (matrícula y pagos)', Array.isArray(fh.eventos) && fh.eventos.some((x) => x.titulo.startsWith('Se matriculó')) && fh.eventos.some((x) => x.titulo.startsWith('Pagó')) && fh.eventos.every((x, i, l) => !i || String(l[i - 1].fecha) >= String(x.fecha)));
   check('Personal: no ve cuotas (403)', (await S.app('/api/cuotas/cartera')).status === 403);
   const mS = await S.app('/api/matriculas');
   check('Personal: ve quién está matriculado, pero sin valores', mS.status === 200 && mS.data.sin_valores === true && mS.data.rows.every((x) => !('valor' in x) && !('total' in x) && !('pagado' in x)));

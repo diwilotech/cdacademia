@@ -58,6 +58,7 @@ DW.ready.then(async (me) => {
           <div class="col-md-4">${lbl('precio', 'Precio')}<input class="form-control" id="k_precio" name="precio" type="number" min="0" step="1000" value="${c.precio ?? 0}"></div>
           <div class="col-md-4">${lbl('inicial', 'Cuota inicial')}<input class="form-control" id="k_inicial" name="inicial" type="number" min="0" step="1000" value="${c.inicial || 0}"><div class="form-text">Se propone al matricular; puede ser 0.</div></div>
           <div class="col-md-4">${lbl('jornada', 'Jornada')}<select class="form-select" id="k_jornada" name="jornada"><option value="">—</option>${['Mañana', 'Tarde', 'Noche', 'Sabatina', 'Dominical'].map((j) => `<option ${c.jornada === j ? 'selected' : ''}>${j}</option>`).join('')}</select></div>
+          <div class="col-md-4">${lbl('cupo', 'Cupo máximo')}<input class="form-control" id="k_cupo" name="cupo" type="number" min="0" max="5000" value="${c.cupo || 0}"><div class="form-text">0 = sin tope.</div></div>
           <div class="col-md-8">${lbl('profesional_id', 'Profesional')}${sel('profesional_id', profs.filter((p) => p.activo || p.id === c.profesional_id), c.profesional_id, 'Sin asignar')}</div>
           <div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="k_activo" name="activo" ${c.activo ? 'checked' : ''}><label class="form-check-label small" for="k_activo">Curso activo</label></div></div>
         </div></section>
@@ -183,7 +184,7 @@ DW.ready.then(async (me) => {
 
     f.onsubmit = async (e) => {
       e.preventDefault(); err.textContent = '';
-      const body = { nombre: f.nombre.value, area_id: f.area_id.value, nivel: f.nivel.value, profesional_id: f.profesional_id.value, precio: f.precio.value, inicial: f.inicial.value, jornada: f.jornada.value,
+      const body = { nombre: f.nombre.value, area_id: f.area_id.value, nivel: f.nivel.value, profesional_id: f.profesional_id.value, precio: f.precio.value, inicial: f.inicial.value, jornada: f.jornada.value, cupo: f.cupo.value,
         num_clases: f.num_clases.value, inicio: f.inicio.value, festivos: f.festivos.checked, activo: f.activo.checked, descripcion: f.descripcion.value, horario: getH() };
       const vacios = ver('clases') ? modulos.filter((r) => !r.material_id) : [];
       if (vacios.length) { err.textContent = 'Elige el módulo de cada fila o quita las filas vacías.'; return; }
@@ -223,8 +224,29 @@ DW.ready.then(async (me) => {
     if (MANAGE) $('[data-acciones]').innerHTML = '<button class="btn btn-primary" data-nuevo><i class="bi bi-plus-lg me-1"></i>Nuevo curso</button>';
     $('[data-nuevo]')?.addEventListener('click', () => editarCurso(null, (nid) => { location.href = `/staff/cursos.html?id=${nid}`; }));
     const REPO = me.modules.some((x) => x.id === 'reposiciones');
-    AC.vistas([['cursos', 'Cursos', 'bi-mortarboard'], ['calendario', 'Calendario', 'bi-calendar-week'], ...(REPO ? [['reposiciones', 'Reposiciones', 'bi-arrow-repeat']] : [])], async (k, view) => {
+  // Cupos: cuánta gente tiene cada curso frente a su cupo máximo, qué cursos están llenos y cuáles necesitan más inscritos
+  async function cupos(view) {
+    document.querySelector('[data-acciones]').innerHTML = '';
+    await new Promise((ok) => { if (window.DwViz) return ok(); const j = document.createElement('script'); j.src = '/m/dwviz.js'; j.onload = j.onerror = () => ok(); document.head.appendChild(j); });
+    const V = window.DwViz; if (!V) return;
+    V.esqueleto(view, 3);
+    let rows; try { rows = (await api('/api/cursos/tarjetas?activo=1')).rows.filter((k) => k.estado !== 'Finalizado'); } catch (x) { view.innerHTML = `<p class="text-danger">${esc(x.message)}</p>`; return; }
+    if (!rows.length) { V.vacio(view, { icono: 'bi-mortarboard', titulo: 'Aún no hay cursos abiertos', texto: 'Crea un curso con su cupo máximo y aquí verás qué tan lleno está.' }); return; }
+    const con = rows.filter((k) => k.cupo > 0), llenos = con.filter((k) => k.inscritos >= k.cupo), libres = con.reduce((t, k) => t + Math.max(0, k.cupo - k.inscritos), 0);
+    const bajos = con.filter((k) => k.inscritos < k.cupo * 0.4 && k.estado !== 'En curso'), sin = rows.filter((k) => !k.cupo);
+    const tono = (k) => (k.inscritos >= k.cupo ? '#F87171' : k.inscritos >= k.cupo * 0.8 ? '#FBBF24' : '#34D399');
+    view.innerHTML = `<div data-k></div>${sin.length ? `<div class="alert alert-light border small mt-3"><i class="bi bi-info-circle me-1"></i>${sin.length} ${sin.length === 1 ? 'curso no tiene' : 'cursos no tienen'} cupo definido (${sin.slice(0, 4).map((k) => esc(k.nombre)).join(', ')}${sin.length > 4 ? '…' : ''}). Edítalos para medir su ocupación.</div>` : ''}
+      <div class="dw-card mt-3"><h3 class="h6 mb-3">Ocupación por curso</h3>${con.length ? con.sort((a, b) => b.inscritos / b.cupo - a.inscritos / a.cupo).map((k) => { const pct = Math.min(100, Math.round(k.inscritos / k.cupo * 100)); return `<a class="d-block text-decoration-none text-reset py-2 border-bottom" href="/staff/cursos.html?id=${k.id}"><div class="d-flex justify-content-between small"><b>${esc(k.nombre)}</b><span>${k.inscritos}/${k.cupo} · ${pct}%${k.inscritos >= k.cupo ? ' · <span class="text-danger">lleno</span>' : ` · quedan ${k.cupo - k.inscritos}`}</span></div><div class="progress mt-1" style="height:10px" role="progressbar" aria-label="Ocupación de ${esc(k.nombre)}" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:${pct}%;background:${tono(k)}"></div></div><div class="small text-body-secondary mt-1">${esc(k.estado)}${k.inicio ? ` · inicia ${C.day(k.inicio)}` : ''}${k.profesional ? ` · ${esc(k.profesional)}` : ''}</div></a>`; }).join('') : V.vacio ? '<div class="text-body-secondary small">Ningún curso tiene cupo definido todavía.</div>' : ''}</div>`;
+    V.kpis(view.querySelector('[data-k]'), [
+      { titulo: 'Cursos abiertos', valor: String(rows.length), icono: 'bi-mortarboard' },
+      { titulo: 'Cursos llenos', valor: String(llenos.length), icono: 'bi-check-circle', tono: llenos.length ? 'ok' : undefined, detalle: `de ${con.length} con cupo definido` },
+      { titulo: 'Cupos libres', valor: C.num(libres), icono: 'bi-person-plus', detalle: 'para vender' },
+      { titulo: 'Por llenar', valor: String(bajos.length), icono: 'bi-megaphone', tono: bajos.length ? 'aviso' : undefined, detalle: 'menos del 40 % y aún no empiezan' }]);
+  }
+
+    AC.vistas([['cursos', 'Cursos', 'bi-mortarboard'], ['cupos', 'Cupos', 'bi-speedometer2'], ['calendario', 'Calendario', 'bi-calendar-week'], ...(REPO ? [['reposiciones', 'Reposiciones', 'bi-arrow-repeat']] : [])], async (k, view) => {
       if (k === 'calendario') return calendario(view);
+      if (k === 'cupos') return cupos(view);
       if (k === 'reposiciones') return AC.reposiciones(me).todo(view);
       view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-3"><input class="form-control" data-q placeholder="Buscar curso…" style="max-width:240px" aria-label="Buscar">
         <select class="form-select w-auto" data-act aria-label="Estado"><option value="1">Activos</option><option value="0">Inactivos</option><option value="">Todos</option></select></div><div class="dw-grid" data-lista></div>`;
@@ -243,7 +265,7 @@ DW.ready.then(async (me) => {
             <div class="small d-grid gap-1 mb-3 flex-grow-1">
               <span><i class="bi bi-clock me-1" style="color:var(--dw-p)"></i>${esc(AC.horario(c.horario))}</span>
               <span><i class="bi bi-calendar-range me-1" style="color:var(--dw-p)"></i>${c.inicio ? `${C.day(c.inicio)}${c.fin ? ` → ${C.day(c.fin)}` : ''}` : 'Fechas por definir'}</span>
-              <span><i class="bi bi-people me-1" style="color:var(--dw-p)"></i>${c.inscritos} ${c.inscritos === 1 ? S : P} · ${N} clases</span></div>
+              <span><i class="bi bi-people me-1" style="color:var(--dw-p)"></i>${c.inscritos}${c.cupo ? `/${c.cupo}` : ''} ${c.inscritos === 1 && !c.cupo ? S : P} · ${N} clases${c.cupo && c.inscritos >= c.cupo ? ' <span class="badge text-bg-danger">Lleno</span>' : ''}</span></div>
             <div class="d-flex justify-content-between small text-body-secondary mb-1"><span>${esc(c.estado)}</span><span>${c.dictadas}/${N} clases</span></div>
             ${C.meter(c.dictadas, N)}
             <div class="d-flex gap-2 mt-3"><a class="btn btn-sm btn-primary flex-grow-1" href="/staff/cursos.html?id=${c.id}">Abrir curso</a>

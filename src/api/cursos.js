@@ -23,6 +23,7 @@ const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function validarCurso(row) {
   if ('nivel' in row && row.nivel && !NIVELES.includes(row.nivel)) throw new HttpError(400, 'Nivel no válido');
+  if ('cupo' in row && row.cupo != null && (row.cupo < 0 || row.cupo > 5000)) throw new HttpError(400, 'Cupo no válido (0 a 5000; 0 = sin tope)');
   if ('num_clases' in row && row.num_clases != null && (row.num_clases < 0 || row.num_clases > 300)) throw new HttpError(400, 'Número de clases no válido (0 a 300)');
   if ('horario' in row && row.horario) {
     row.horario = JSON.stringify(row.horario.slice(0, 40).map((h) => {
@@ -54,7 +55,7 @@ export async function regenerarClases(c, cursoId) {
 export const ENTITIES = {
   cursos: { table: 'ac_cursos', label: 'el curso', title: 'nombre', search: ['nombre', 'descripcion'], order: "activo DESC, COALESCE(inicio, '9999') DESC, nombre", crear: 'manager',
     fields: { nombre: 'text!', area_id: 'int', nivel: 'text', precio: 'money', inicial: 'money', descripcion: 'long', activo: 'bool+', profesional_id: 'int', jornada: 'text',
-      inicio: 'date', num_clases: 'int', festivos: 'bool+', horario: 'json', plan: 'json' },
+      inicio: 'date', cupo: 'int', num_clases: 'int', festivos: 'bool+', horario: 'json', plan: 'json' },
     refs: { area_id: 'ac_areas', profesional_id: 'ac_profesionales' },
     beforeCreate(c, row) { validarCurso(row); },
     beforeUpdate(c, row) { validarCurso(row); },

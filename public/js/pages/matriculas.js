@@ -199,8 +199,35 @@ window.AC.matriculasVista = async (me) => {
     await load();
   };
 
+  // Embudo: las matrículas por estado (activa · terminada · retirada), filtradas por curso; arrastrar cambia el estado
+  const embudo = async (view) => {
+    document.querySelector('[data-acciones]').innerHTML = '';
+    await new Promise((ok) => { if (window.DwViz) return ok(); const j = document.createElement('script'); j.src = '/m/dwviz.js'; j.onload = j.onerror = () => ok(); document.head.appendChild(j); });
+    const V = window.DwViz; if (!V) return;
+    let curso = new URLSearchParams(location.search).get('curso') || '';
+    view.innerHTML = `<div class="d-flex flex-wrap gap-2 mb-3 align-items-center"><select class="form-select w-auto" data-curso aria-label="Curso"><option value="">Todos los cursos</option>${cursos.map((k) => `<option value="${k.id}" ${String(k.id) === curso ? 'selected' : ''}>${esc(k.nombre)}</option>`).join('')}</select>
+      <span class="small text-body-secondary">${RO ? '' : 'Arrastra una matrícula para marcarla terminada, retirada o activa. '}Toca una para ver sus cuotas.</span></div><div data-kb></div>`;
+    const COLS = [['activa', 'Activas', '#34D399'], ['terminada', 'Terminadas', '#60A5FA'], ['retirada', 'Retiradas', '#F87171']];
+    const cargar = async () => {
+      V.esqueleto(view.querySelector('[data-kb]'), 3);
+      let rows; try { rows = (await api(`/api/matriculas${curso ? `?curso_id=${curso}` : ''}`)).rows; } catch (x) { view.querySelector('[data-kb]').innerHTML = `<p class="text-danger">${esc(x.message)}</p>`; return; }
+      if (!rows.length) { V.vacio(view.querySelector('[data-kb]'), { icono: 'bi-person-plus', titulo: 'Sin matrículas', texto: `Aún no hay matrículas${curso ? ' en este curso' : ''}.` }); return; }
+      const pintar = () => V.kanban(view.querySelector('[data-kb]'), {
+        fmt: C.money,
+        columnas: COLS.map(([id, titulo, color]) => ({ id, titulo, color, items: rows.filter((r) => r.estado === id).map((r) => ({ id: r.id, titulo: r.estudiante, detalle: `${r.curso}${r.vencido ? ` · vencido ${C.money(r.vencido)}` : ''}`, valor: SV ? 0 : r.saldo, etiqueta: SV ? '' : r.saldo > 0 ? 'con saldo' : 'al día' })) })),
+        abrir: (id) => { location.hash = 'matriculas'; location.search = `?curso=${rows.find((r) => String(r.id) === String(id))?.curso_id || ''}`; },
+        mover: RO || SV ? undefined : async (id, desde, hasta) => {
+          const r = rows.find((x) => String(x.id) === String(id)); if (!r) return;
+          try { await api(`/api/matriculas/${r.id}`, { method: 'PATCH', body: { estado: hasta } }); r.estado = hasta; toast('Matrícula actualizada'); pintar(); } catch (x) { toast(x.message, false); }
+        } });
+      pintar();
+    };
+    view.querySelector('[data-curso]').onchange = (e) => { curso = e.target.value; cargar(); };
+    await cargar();
+  };
+
   const verCompr = me.modules.some((m) => m.id === 'cuotas');
   const pend = verCompr ? await api('/api/cuotas/comprobantes?estado=pendiente').then((d) => d.pendientes).catch(() => 0) : 0;
-  return [['matriculas', 'Matrículas', 'bi-person-plus'], ...(verCompr ? [['comprobantes', pend ? `Comprobantes (${pend})` : 'Comprobantes', 'bi-receipt']] : [])]
-    .map(([k, l, ic]) => [k, l, ic, k === 'comprobantes' ? comprobantes : montar]);
+  return [['matriculas', 'Matrículas', 'bi-person-plus'], ['embudo', 'Embudo', 'bi-kanban'], ...(verCompr ? [['comprobantes', pend ? `Comprobantes (${pend})` : 'Comprobantes', 'bi-receipt']] : [])]
+    .map(([k, l, ic]) => [k, l, ic, k === 'comprobantes' ? comprobantes : k === 'embudo' ? embudo : montar]);
 };

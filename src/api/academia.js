@@ -22,6 +22,30 @@ export const ENTITIES = {
 export function routes(r) {
   crud(r, { base: '/api/academia', modulo: MOD, entities: ENTITIES });
   r.get('/api/academia/config', 'tenant', async (c) => json({ ...(await getConfig(c.env, c.businessId)), rubros: RUBROS }));
+  // Tablero de la academia: matrículas y recaudo de 6 meses, cartera por antigüedad, quién debe más y qué cursos tienen más gente.
+  // Lleva valores: solo con el permiso de Matrículas (igual que la pestaña de Matrículas).
+  r.get('/api/academia/tablero', 'tenant:matriculas', async (c) => {
+    const org = c.businessId, hoy = today(), d = new Date(`${hoy}T12:00:00Z`);
+    const meses = []; for (let i = 5; i >= 0; i--) meses.push(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+    const [cart, ins, pagos, est, cursos] = await Promise.all([
+      cartera(c),
+      all(c.env, "SELECT substr(fecha,1,7) m, estado, COUNT(*) n FROM ac_inscripciones WHERE business_id = ? AND fecha >= ? GROUP BY m, estado", org, `${meses[0]}-01`),
+      all(c.env, "SELECT substr(fecha,1,7) m, COALESCE(SUM(valor),0) v FROM ac_pagos WHERE business_id = ? AND anulado = 0 AND fecha >= ? GROUP BY m", org, `${meses[0]}-01`),
+      one(c.env, 'SELECT COUNT(*) total, COALESCE(SUM(activo),0) activos FROM ac_estudiantes WHERE business_id = ?', org),
+      all(c.env, "SELECT k.id, k.nombre, COUNT(i.id) n FROM ac_cursos k LEFT JOIN ac_inscripciones i ON i.curso_id = k.id AND i.business_id = k.business_id AND i.estado = 'activa' WHERE k.business_id = ? AND k.activo = 1 GROUP BY k.id ORDER BY n DESC LIMIT 6", org),
+    ]);
+    const pend = cart.filter((q) => q.falta > 0), suma = (l) => l.reduce((t, q) => t + q.falta, 0);
+    const edad = (q) => q.dias_mora;
+    const aging = [['Al día', pend.filter((q) => q.estado !== 'vencida')], ['1–30 días', pend.filter((q) => q.estado === 'vencida' && edad(q) <= 30)], ['31–60 días', pend.filter((q) => q.estado === 'vencida' && edad(q) > 30 && edad(q) <= 60)], ['Más de 60', pend.filter((q) => q.estado === 'vencida' && edad(q) > 60)]].map(([nombre, l]) => ({ nombre, valor: suma(l), cuotas: l.length }));
+    const morosos = {}; for (const q of pend.filter((x) => x.estado === 'vencida')) { const m = (morosos[q.estudiante_id] ||= { id: q.estudiante_id, nombre: q.estudiante, valor: 0, cuotas: 0, dias: 0, curso: q.curso }); m.valor += q.falta; m.cuotas++; m.dias = Math.max(m.dias, q.dias_mora); }
+    const nuevas = (m) => ins.filter((x) => x.m === m).reduce((t, x) => t + x.n, 0);
+    return json({
+      kpis: { estudiantes: est?.total || 0, activos: est?.activos || 0, matriculas_activas: ins.filter((x) => x.estado === 'activa').reduce((t, x) => t + x.n, 0), pendiente: suma(pend), vencido: suma(pend.filter((q) => q.estado === 'vencida')), este_mes: suma(pend.filter((q) => q.vence.startsWith(hoy.slice(0, 7)))),
+        recaudo_mes: pagos.find((p) => p.m === hoy.slice(0, 7))?.v || 0, recaudo_anterior: pagos.find((p) => p.m === meses[4])?.v || 0, nuevas_mes: nuevas(meses[5]), nuevas_anterior: nuevas(meses[4]) },
+      meses: meses.map((m) => ({ mes: m, matriculas: nuevas(m), recaudo: pagos.find((p) => p.m === m)?.v || 0 })),
+      cartera: aging, morosos: Object.values(morosos).sort((a, b) => b.valor - a.valor).slice(0, 8), cursos: cursos.map((k) => ({ id: k.id, nombre: k.nombre, activos: k.n })),
+      sugerencia: Object.keys(morosos).length ? `${Object.keys(morosos).length} ${Object.keys(morosos).length === 1 ? 'persona está' : 'personas están'} en mora por ${suma(pend.filter((q) => q.estado === 'vencida')).toLocaleString('es-CO')} pesos: envía hoy el recordatorio por WhatsApp.` : null });
+  });
   // Indicadores de Inicio: solo de los módulos propios de la academia (los módulos compartidos traen sus propios widgets).
   // Lo de dinero solo lo ve propietario/administrador y solo si Cuotas está activo.
   r.get('/api/academia/metricas', 'tenant', async (c) => {
